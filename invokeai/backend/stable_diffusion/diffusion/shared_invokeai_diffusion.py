@@ -243,6 +243,7 @@ class InvokeAIDiffuserComponent:
         # fast batched path
         x_twice = torch.cat([x] * 2)
         sigma_twice = torch.cat([sigma] * 2)
+
         both_conditionings = torch.cat([unconditioning, conditioning])
         both_results = self.model_forward_callback(
             x_twice, sigma_twice, both_conditionings, **kwargs,
