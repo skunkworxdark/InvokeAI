@@ -1,61 +1,53 @@
-import { Box, Flex, Spinner, SystemStyleObject } from '@chakra-ui/react';
+import { Box, Flex, Spinner } from '@chakra-ui/react';
 import { createSelector } from '@reduxjs/toolkit';
 import { skipToken } from '@reduxjs/toolkit/dist/query';
-import {
-  TypesafeDraggableData,
-  TypesafeDroppableData,
-} from 'app/components/ImageDnd/typesafeDnd';
 import { stateSelector } from 'app/store/store';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
 import IAIDndImage from 'common/components/IAIDndImage';
+import {
+  TypesafeDraggableData,
+  TypesafeDroppableData,
+} from 'features/dnd/types';
 import { memo, useCallback, useMemo, useState } from 'react';
+import { FaUndo } from 'react-icons/fa';
 import { useGetImageDTOQuery } from 'services/api/endpoints/images';
 import { PostUploadAction } from 'services/api/types';
-import { controlNetImageChanged } from '../store/controlNetSlice';
+import IAIDndImageIcon from '../../../common/components/IAIDndImageIcon';
+import {
+  ControlNetConfig,
+  controlNetImageChanged,
+} from '../store/controlNetSlice';
 
 type Props = {
-  controlNetId: string;
-  height: SystemStyleObject['h'];
+  controlNet: ControlNetConfig;
+  isSmall?: boolean;
 };
 
-const ControlNetImagePreview = (props: Props) => {
-  const { height, controlNetId } = props;
+const selector = createSelector(
+  stateSelector,
+  ({ controlNet }) => {
+    const { pendingControlImages } = controlNet;
+
+    return {
+      pendingControlImages,
+    };
+  },
+  defaultSelectorOptions
+);
+
+const ControlNetImagePreview = ({ isSmall, controlNet }: Props) => {
+  const {
+    controlImage: controlImageName,
+    processedControlImage: processedControlImageName,
+    processorType,
+    isEnabled,
+    controlNetId,
+  } = controlNet;
+
   const dispatch = useAppDispatch();
 
-  const selector = useMemo(
-    () =>
-      createSelector(
-        stateSelector,
-        ({ controlNet }) => {
-          const { pendingControlImages } = controlNet;
-          const {
-            controlImage,
-            processedControlImage,
-            processorType,
-            isEnabled,
-          } = controlNet.controlNets[controlNetId];
-
-          return {
-            controlImageName: controlImage,
-            processedControlImageName: processedControlImage,
-            processorType,
-            isEnabled,
-            pendingControlImages,
-          };
-        },
-        defaultSelectorOptions
-      ),
-    [controlNetId]
-  );
-
-  const {
-    controlImageName,
-    processedControlImageName,
-    processorType,
-    pendingControlImages,
-    isEnabled,
-  } = useAppSelector(selector);
+  const { pendingControlImages } = useAppSelector(selector);
 
   const [isMouseOverImage, setIsMouseOverImage] = useState(false);
 
@@ -116,7 +108,7 @@ const ControlNetImagePreview = (props: Props) => {
       sx={{
         position: 'relative',
         w: 'full',
-        h: height,
+        h: isSmall ? 28 : 366, // magic no touch
         alignItems: 'center',
         justifyContent: 'center',
         pointerEvents: isEnabled ? 'auto' : 'none',
@@ -128,11 +120,15 @@ const ControlNetImagePreview = (props: Props) => {
         droppableData={droppableData}
         imageDTO={controlImage}
         isDropDisabled={shouldShowProcessedImage || !isEnabled}
-        onClickReset={handleResetControlImage}
         postUploadAction={postUploadAction}
-        resetTooltip="Reset Control Image"
-        withResetIcon={Boolean(controlImage)}
-      />
+      >
+        <IAIDndImageIcon
+          onClick={handleResetControlImage}
+          icon={controlImage ? <FaUndo /> : undefined}
+          tooltip="Reset Control Image"
+        />
+      </IAIDndImage>
+
       <Box
         sx={{
           position: 'absolute',
@@ -152,10 +148,13 @@ const ControlNetImagePreview = (props: Props) => {
           imageDTO={processedControlImage}
           isUploadDisabled={true}
           isDropDisabled={!isEnabled}
-          onClickReset={handleResetControlImage}
-          resetTooltip="Reset Control Image"
-          withResetIcon={Boolean(controlImage)}
-        />
+        >
+          <IAIDndImageIcon
+            onClick={handleResetControlImage}
+            icon={controlImage ? <FaUndo /> : undefined}
+            tooltip="Reset Control Image"
+          />
+        </IAIDndImage>
       </Box>
       {pendingControlImages.includes(controlNetId) && (
         <Flex

@@ -78,7 +78,7 @@ const ImageUploader = (props: ImageUploaderProps) => {
         image_category: 'user',
         is_intermediate: false,
         postUploadAction,
-        board_id: autoAddBoardId,
+        board_id: autoAddBoardId === 'none' ? undefined : autoAddBoardId,
       });
     },
     [autoAddBoardId, postUploadAction, uploadImage]
@@ -150,7 +150,9 @@ const ImageUploader = (props: ImageUploaderProps) => {
       {...getRootProps({ style: {} })}
       onKeyDown={(e: KeyboardEvent) => {
         // Bail out if user hits spacebar - do not open the uploader
-        if (e.key === ' ') return;
+        if (e.key === ' ') {
+          return;
+        }
       }}
     >
       <input {...getInputProps()} />

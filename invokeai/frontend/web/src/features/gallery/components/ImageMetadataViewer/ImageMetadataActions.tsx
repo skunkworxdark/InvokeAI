@@ -1,6 +1,6 @@
 import { useRecallParameters } from 'features/parameters/hooks/useRecallParameters';
-import { useCallback } from 'react';
-import { UnsafeImageMetadata } from 'services/api/endpoints/images';
+import { memo, useCallback } from 'react';
+import { UnsafeImageMetadata } from 'services/api/types';
 import ImageMetadataItem from './ImageMetadataItem';
 
 type Props = {
@@ -69,6 +69,9 @@ const ImageMetadataActions = (props: Props) => {
 
   return (
     <>
+      {metadata.created_by && (
+        <ImageMetadataItem label="Created By" value={metadata.created_by} />
+      )}
       {metadata.generation_mode && (
         <ImageMetadataItem
           label="Generation Mode"
@@ -206,4 +209,4 @@ const ImageMetadataActions = (props: Props) => {
   );
 };
 
-export default ImageMetadataActions;
+export default memo(ImageMetadataActions);

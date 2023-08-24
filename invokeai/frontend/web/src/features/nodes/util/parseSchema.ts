@@ -1,130 +1,168 @@
-import { filter, reduce } from 'lodash-es';
+import { logger } from 'app/logging/logger';
+import { parseify } from 'common/util/serialize';
+import { reduce } from 'lodash-es';
 import { OpenAPIV3 } from 'openapi-types';
-import { isSchemaObject } from '../types/typeGuards';
+import { AnyInvocationType } from 'services/events/types';
 import {
   InputFieldTemplate,
   InvocationSchemaObject,
   InvocationTemplate,
   OutputFieldTemplate,
+  isInvocationFieldSchema,
+  isInvocationOutputSchemaObject,
   isInvocationSchemaObject,
 } from '../types/types';
-import {
-  buildInputFieldTemplate,
-  buildOutputFieldTemplates,
-} from './fieldTemplateBuilders';
+import { buildInputFieldTemplate, getFieldType } from './fieldTemplateBuilders';
 
-const getReservedFieldNames = (type: string): string[] => {
-  if (type === 'l2i') {
-    return ['id', 'type', 'metadata'];
+const RESERVED_INPUT_FIELD_NAMES = ['id', 'type', 'metadata'];
+const RESERVED_OUTPUT_FIELD_NAMES = ['type'];
+
+const invocationDenylist: AnyInvocationType[] = [
+  'graph',
+  'metadata_accumulator',
+];
+
+const isAllowedInputField = (nodeType: string, fieldName: string) => {
+  if (RESERVED_INPUT_FIELD_NAMES.includes(fieldName)) {
+    return false;
   }
-  return ['id', 'type', 'is_intermediate', 'metadata'];
+  if (nodeType === 'collect' && fieldName === 'collection') {
+    return false;
+  }
+  if (nodeType === 'iterate' && fieldName === 'index') {
+    return false;
+  }
+  return true;
 };
 
-const invocationDenylist = [
-  'Graph',
-  'InvocationMeta',
-  'MetadataAccumulatorInvocation',
-];
+const isAllowedOutputField = (nodeType: string, fieldName: string) => {
+  if (RESERVED_OUTPUT_FIELD_NAMES.includes(fieldName)) {
+    return false;
+  }
+  return true;
+};
+
+const isNotInDenylist = (schema: InvocationSchemaObject) =>
+  !invocationDenylist.includes(schema.properties.type.default);
 
 export const parseSchema = (
   openAPI: OpenAPIV3.Document
 ): Record<string, InvocationTemplate> => {
-  const filteredSchemas = filter(
-    openAPI.components?.schemas,
-    (schema, key) =>
-      key.includes('Invocation') &&
-      !key.includes('InvocationOutput') &&
-      !invocationDenylist.some((denylistItem) => key.includes(denylistItem))
-  ) as (OpenAPIV3.ReferenceObject | InvocationSchemaObject)[];
+  const filteredSchemas = Object.values(openAPI.components?.schemas ?? {})
+    .filter(isInvocationSchemaObject)
+    .filter(isNotInDenylist);
 
   const invocations = filteredSchemas.reduce<
     Record<string, InvocationTemplate>
   >((acc, schema) => {
-    if (isInvocationSchemaObject(schema)) {
-      const type = schema.properties.type.default;
-      const RESERVED_FIELD_NAMES = getReservedFieldNames(type);
+    const type = schema.properties.type.default;
+    const title = schema.title.replace('Invocation', '');
+    const tags = schema.tags ?? [];
+    const description = schema.description ?? '';
 
-      const title = schema.ui?.title ?? schema.title.replace('Invocation', '');
-      const typeHints = schema.ui?.type_hints;
+    const inputs = reduce(
+      schema.properties,
+      (inputsAccumulator, property, propertyName) => {
+        if (!isAllowedInputField(type, propertyName)) {
+          logger('nodes').trace(
+            { type, propertyName, property: parseify(property) },
+            'Skipped reserved input field'
+          );
+          return inputsAccumulator;
+        }
 
-      const inputs: Record<string, InputFieldTemplate> = {};
+        if (!isInvocationFieldSchema(property)) {
+          logger('nodes').warn(
+            { type, propertyName, property: parseify(property) },
+            'Unhandled input property'
+          );
+          return inputsAccumulator;
+        }
 
-      if (type === 'collect') {
-        const itemProperty = schema.properties.item as InvocationSchemaObject;
-        inputs.item = {
-          type: 'item',
-          name: 'item',
-          description: itemProperty.description ?? '',
-          title: 'Collection Item',
-          inputKind: 'connection',
-          inputRequirement: 'always',
-          default: undefined,
-        };
-      } else if (type === 'iterate') {
-        const itemProperty = schema.properties
-          .collection as InvocationSchemaObject;
-        inputs.collection = {
-          type: 'array',
-          name: 'collection',
-          title: itemProperty.title ?? '',
-          default: [],
-          description: itemProperty.description ?? '',
-          inputRequirement: 'always',
-          inputKind: 'connection',
-        };
-      } else {
-        reduce(
-          schema.properties,
-          (inputsAccumulator, property, propertyName) => {
-            if (
-              !RESERVED_FIELD_NAMES.includes(propertyName) &&
-              isSchemaObject(property)
-            ) {
-              const field = buildInputFieldTemplate(
-                property,
-                propertyName,
-                typeHints
-              );
-              if (field) {
-                inputsAccumulator[propertyName] = field;
-              }
-            }
-            return inputsAccumulator;
-          },
-          inputs
-        );
-      }
+        const field = buildInputFieldTemplate(schema, property, propertyName);
 
-      const rawOutput = (schema as InvocationSchemaObject).output;
-      let outputs: Record<string, OutputFieldTemplate>;
+        if (field) {
+          inputsAccumulator[propertyName] = field;
+        }
 
-      if (type === 'iterate') {
-        const iterationOutput = openAPI.components?.schemas?.[
-          'IterateInvocationOutput'
-        ] as OpenAPIV3.SchemaObject;
-        outputs = {
-          item: {
-            name: 'item',
-            title: iterationOutput?.title ?? '',
-            description: iterationOutput?.description ?? '',
-            type: 'array',
-          },
-        };
-      } else {
-        outputs = buildOutputFieldTemplates(rawOutput, openAPI, typeHints);
-      }
+        return inputsAccumulator;
+      },
+      {} as Record<string, InputFieldTemplate>
+    );
 
-      const invocation: InvocationTemplate = {
-        title,
-        type,
-        tags: schema.ui?.tags ?? [],
-        description: schema.description ?? '',
-        inputs,
-        outputs,
-      };
+    const outputSchemaName = schema.output.$ref.split('/').pop();
 
-      Object.assign(acc, { [type]: invocation });
+    if (!outputSchemaName) {
+      logger('nodes').error(
+        { outputRefObject: parseify(schema.output) },
+        'No output schema name found in ref object'
+      );
+      throw 'No output schema name found in ref object';
     }
+
+    const outputSchema = openAPI.components?.schemas?.[outputSchemaName];
+    if (!outputSchema) {
+      logger('nodes').error({ outputSchemaName }, 'Output schema not found');
+      throw 'Output schema not found';
+    }
+
+    if (!isInvocationOutputSchemaObject(outputSchema)) {
+      logger('nodes').error(
+        { outputSchema: parseify(outputSchema) },
+        'Invalid output schema'
+      );
+      throw 'Invalid output schema';
+    }
+
+    const outputType = outputSchema.properties.type.default;
+
+    const outputs = reduce(
+      outputSchema.properties,
+      (outputsAccumulator, property, propertyName) => {
+        if (!isAllowedOutputField(type, propertyName)) {
+          logger('nodes').trace(
+            { type, propertyName, property: parseify(property) },
+            'Skipped reserved output field'
+          );
+          return outputsAccumulator;
+        }
+
+        if (!isInvocationFieldSchema(property)) {
+          logger('nodes').warn(
+            { type, propertyName, property: parseify(property) },
+            'Unhandled output property'
+          );
+          return outputsAccumulator;
+        }
+
+        const fieldType = getFieldType(property);
+        outputsAccumulator[propertyName] = {
+          fieldKind: 'output',
+          name: propertyName,
+          title: property.title ?? '',
+          description: property.description ?? '',
+          type: fieldType,
+          ui_hidden: property.ui_hidden ?? false,
+          ui_type: property.ui_type,
+          ui_order: property.ui_order,
+        };
+
+        return outputsAccumulator;
+      },
+      {} as Record<string, OutputFieldTemplate>
+    );
+
+    const invocation: InvocationTemplate = {
+      title,
+      type,
+      tags,
+      description,
+      inputs,
+      outputs,
+      outputType,
+    };
+
+    Object.assign(acc, { [type]: invocation });
 
     return acc;
   }, {});
