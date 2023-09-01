@@ -22,8 +22,10 @@ from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
     BaseInvocationOutput,
     InputField,
+    Input,
     OutputField,
     InvocationContext,
+    UIComponent,
     UIType,
     tags,
     title,
@@ -35,7 +37,7 @@ from invokeai.app.invocations.baseinvocation import (
 class FloastToStringsInvocation(BaseInvocation):
     """FloatsToStrings converts a float or collections of floats to a collection of strings"""
     type: Literal["floats_to_strings"] = "floats_to_strings"
-    floats: Union[float, list[float], None] = InputField(default=None, description="float or collection of floats", ui_type=UIType.FloatCollection)
+    floats: Union[float, list[float], None] = InputField(default=None, description="float or collection of floats", ui_type=UIType.Collection, input=Input.Connection)
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
         if self.floats is None:
@@ -60,7 +62,7 @@ class StringToFloatInvocation(BaseInvocation):
 class IntsToStringsInvocation(BaseInvocation):
     """IntsToStrings converts an int or collection of ints to a collection of strings"""
     type: Literal["ints_to_strings"] = "ints_to_strings"
-    ints: Union[int, list[int], None] = InputField(default=None, description="int or collection of ints", ui_type=UIType.IntegerCollection)
+    ints: Union[int, list[int], None] = InputField(default=None, description="int or collection of ints", ui_type=UIType.Collection, input=Input.Connection)
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
         if self.ints is None:
@@ -91,11 +93,34 @@ class XYCollectOutput(BaseInvocationOutput):
 class XYCollectInvocation(BaseInvocation):
     """XYCollect takes two string collections and outputs a collection that every combination of the inputs"""
     type: Literal["xy_collect"] = "xy_collect"
-    x_collection: list[str] = InputField(default=[], description="The X collection", ui_type=UIType.StringCollection)
-    y_collection: list[str] = InputField(default=[], description="The Y collection", ui_type=UIType.StringCollection)
+    x_collection: list[str] = InputField(default=[], description="The X collection", ui_type=UIType.Collection, input=Input.Connection)
+    y_collection: list[str] = InputField(default=[], description="The Y collection", ui_type=UIType.Collection, input=Input.Connection)
 
     def invoke(self, context: InvocationContext) -> XYCollectOutput:
         return XYCollectOutput(xy_collection=list(product(self.x_collection, self.y_collection)))
+
+@title("XY CSV to Strings")
+@tags("csv")       
+class XYCSVToStringsInvocation(BaseInvocation):
+    """XYCSVToStrings converts X and Y CSV Strings to a collection that every combination of X and Y"""
+    type: Literal["xy_csv_to_strings"] = "xy_csv_to_strings"
+    x: str = InputField(default='', description="x string", ui_component=UIComponent.Textarea)
+    y: str = InputField(default='', description="y string", ui_component=UIComponent.Textarea)
+
+    def invoke(self, context: InvocationContext) -> XYCollectOutput:
+        return XYCollectOutput(xy_collection=list(product(self.x.split(","), self.y.split(","))))
+
+
+@title("CSV To Strings")
+@tags("csv")       
+class CSVToStringsInvocation(BaseInvocation):
+    """CSVToStrings converts a CSV String to a collection of strings"""
+    type: Literal["csv_to_strings"] = "csv_to_strings"
+    csv: str = InputField(default='', description="csv string")
+
+    def invoke(self, context: InvocationContext) -> StringCollectionOutput:
+        return StringCollectionOutput(collection=self.csv.split(","))
+
 
 # Was going to try have a collection node that could remove the need for a To String Nodes.
 # Not working at the moment.
@@ -135,7 +160,7 @@ class XYExpandOutput(BaseInvocationOutput):
 class XYExpandInvocation(BaseInvocation):
     """XYExpand takes a collection of strings and outputs the first two elements and outputs as individual strings"""
     type: Literal["xy_expand"] = "xy_expand"
-    xy_collection: list[str] = InputField(default=[], description="The XY collection item", ui_type=UIType.StringCollection)
+    xy_collection: list[str] = InputField(default=[], description="The XY collection item", ui_type=UIType.Collection, input=Input.Connection)
 
     def invoke(self, context: InvocationContext) -> XYExpandOutput:
         return XYExpandOutput(x_item=self.xy_collection[0], y_item=self.xy_collection[1])
@@ -146,9 +171,9 @@ class XYExpandInvocation(BaseInvocation):
 class XYImageCollectInvocation(BaseInvocation):
     """XYImageCollect takes xItem, yItem and an Image and outputs it as an (x_item,y_item,image_name)array converted to json"""
     type: Literal["xyimage_collect"] = "xyimage_collect"
-    x_item: str = InputField(default='', description="The X item")
-    y_item: str = InputField(default='', description="The Y item")
-    image: ImageField = InputField(default=None, description="The image to turn into grids")
+    x_item: str = InputField(default='', description="The X item", input=Input.Connection)
+    y_item: str = InputField(default='', description="The Y item", input=Input.Connection)
+    image: ImageField = InputField(default=None, description="The image to turn into grids", input=Input.Connection)
 
     def invoke(self, context: InvocationContext) -> StringOutput:
         return StringOutput(value=json.dumps([self.y_item, self.x_item , self.image.image_name]))
@@ -159,7 +184,7 @@ class XYImageCollectInvocation(BaseInvocation):
 class XYImagesToGridInvocation(BaseInvocation):
     """Load a collection of xyimage types (json of (x_item,y_item,image_name)array) and create a gridimage of them"""
     type: Literal["xyimage_grid"] = "xyimage_grid"
-    xyimages: list[str] = InputField(default=[], description="The xyImage Collection")
+    xyimages: list[str] = InputField(default=[], description="The xyImage Collection", ui_type=UIType.Collection, input=Input.Connection)
     space: int = InputField(default=1, ge=0, description="The space to be added between images")
     scale_factor: Optional[float] = InputField(default=1.0, gt=0, description="The factor by which to scale the images")
     resample_mode:  PIL_RESAMPLING_MODES = InputField(default="bicubic", description="The resampling mode")
@@ -296,7 +321,7 @@ class XYImagesToGridInvocation(BaseInvocation):
 class ImagesToGridsInvocation(BaseInvocation):
     """Load a collection of images and creat grid images from it and output a collection of genereated grid images"""
     type: Literal["image_grid"] = "image_grid"
-    images: list[ImageField] = InputField(default=[], description="The image collection to turn into grids")
+    images: list[ImageField] = InputField(default=[], description="The image collection to turn into grids", ui_type=UIType.ImageCollection, input=Input.Connection)
     columns: int = InputField(default=1, ge=1, description="The number of columns in each grid")
     rows: int = InputField(default=1, ge=1, description="The nuber of rows to have in each grid")
     space: int = InputField(default=1, ge=0, description="The space to be added between images")
