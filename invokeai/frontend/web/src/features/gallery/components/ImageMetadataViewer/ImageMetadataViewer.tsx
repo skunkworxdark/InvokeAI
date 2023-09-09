@@ -15,6 +15,8 @@ import { useGetImageMetadataFromFileQuery } from 'services/api/endpoints/images'
 import { ImageDTO } from 'services/api/types';
 import DataViewer from './DataViewer';
 import ImageMetadataActions from './ImageMetadataActions';
+import { useAppSelector } from '../../../../app/store/storeHooks';
+import { configSelector } from '../../../system/store/configSelectors';
 
 type ImageMetadataViewerProps = {
   image: ImageDTO;
@@ -27,8 +29,10 @@ const ImageMetadataViewer = ({ image }: ImageMetadataViewerProps) => {
   //   dispatch(setShouldShowImageDetails(false));
   // });
 
+  const { shouldFetchMetadataFromApi } = useAppSelector(configSelector);
+
   const { metadata, workflow } = useGetImageMetadataFromFileQuery(
-    image.image_name,
+    { image, shouldFetchMetadataFromApi },
     {
       selectFromResult: (res) => ({
         metadata: res?.currentData?.metadata,

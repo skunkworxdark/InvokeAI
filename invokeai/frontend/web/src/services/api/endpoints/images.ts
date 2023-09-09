@@ -1,4 +1,5 @@
 import { EntityState, Update } from '@reduxjs/toolkit';
+import { fetchBaseQuery } from '@reduxjs/toolkit/dist/query';
 import { PatchCollection } from '@reduxjs/toolkit/dist/query/core/buildThunks';
 import {
   ASSETS_CATEGORIES,
@@ -6,9 +7,14 @@ import {
   IMAGE_CATEGORIES,
   IMAGE_LIMIT,
 } from 'features/gallery/store/types';
+import {
+  ImageMetadataAndWorkflow,
+  zCoreMetadata,
+} from 'features/nodes/types/types';
 import { getMetadataAndWorkflowFromImageBlob } from 'features/nodes/util/getMetadataAndWorkflowFromImageBlob';
 import { keyBy } from 'lodash-es';
 import { ApiFullTagDescription, LIST_TAG, api } from '..';
+import { $authToken, $projectId } from '../client';
 import { components, paths } from '../schema';
 import {
   DeleteBoardResult,
@@ -27,7 +33,6 @@ import {
   imagesSelectors,
 } from '../util';
 import { boardsApi } from './boards';
-import { ImageMetadataAndWorkflow } from 'features/nodes/types/types';
 
 export const imagesApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -115,18 +120,66 @@ export const imagesApi = api.injectEndpoints({
       ],
       keepUnusedDataFor: 86400, // 24 hours
     }),
-    getImageMetadataFromFile: build.query<ImageMetadataAndWorkflow, string>({
-      query: (image_name) => ({
-        url: `images/i/${image_name}/full`,
-        responseHandler: async (res) => {
-          return await res.blob();
-        },
-      }),
-      providesTags: (result, error, image_name) => [
-        { type: 'ImageMetadataFromFile', id: image_name },
+    getImageMetadataFromFile: build.query<
+      ImageMetadataAndWorkflow,
+      { image: ImageDTO; shouldFetchMetadataFromApi: boolean }
+    >({
+      queryFn: async (
+        args: { image: ImageDTO; shouldFetchMetadataFromApi: boolean },
+        api,
+        extraOptions,
+        fetchWithBaseQuery
+      ) => {
+        const authToken = $authToken.get();
+        const projectId = $projectId.get();
+        const customBaseQuery = fetchBaseQuery({
+          baseUrl: '',
+          prepareHeaders: (headers) => {
+            if (authToken) {
+              headers.set('Authorization', `Bearer ${authToken}`);
+            }
+            if (projectId) {
+              headers.set('project-id', projectId);
+            }
+
+            return headers;
+          },
+          responseHandler: async (res) => {
+            return await res.blob();
+          },
+        });
+
+        const response = await customBaseQuery(
+          args.image.image_url,
+          api,
+          extraOptions
+        );
+        const blobData = await getMetadataAndWorkflowFromImageBlob(
+          response.data as Blob
+        );
+
+        let metadata = blobData.metadata;
+
+        if (args.shouldFetchMetadataFromApi) {
+          const metadataResponse = await fetchWithBaseQuery(
+            `images/i/${args.image.image_name}/metadata`
+          );
+          if (metadataResponse.data) {
+            const metadataResult = zCoreMetadata.safeParse(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (metadataResponse.data as any)?.metadata
+            );
+            if (metadataResult.success) {
+              metadata = metadataResult.data;
+            }
+          }
+        }
+
+        return { data: { ...blobData, metadata } };
+      },
+      providesTags: (result, error, { image }) => [
+        { type: 'ImageMetadataFromFile', id: image.image_name },
       ],
-      transformResponse: (response: Blob) =>
-        getMetadataAndWorkflowFromImageBlob(response),
       keepUnusedDataFor: 86400, // 24 hours
     }),
     clearIntermediates: build.mutation<number, void>({
