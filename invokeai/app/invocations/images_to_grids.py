@@ -1,38 +1,43 @@
 # 2023 skunkworxdark (https://github.com/skunkworxdark)
 
-from typing import Literal, Optional, Union
-from PIL import Image, ImageDraw, ImageFont
-from itertools import product
-
 import json
 import re
+from itertools import product
+from typing import Optional, Union
 
-from invokeai.app.models.image import ImageCategory, ResourceOrigin
-from invokeai.app.invocations.image import PIL_RESAMPLING_MODES, PIL_RESAMPLING_MAP
-from invokeai.app.invocations.primitives import (
-    StringOutput,
-    StringCollectionOutput,
-    FloatOutput,
-    IntegerOutput,
-    ColorField,
-    ImageField,
-    ImageCollectionOutput,
-)
+from PIL import Image, ImageDraw, ImageFont
+
 from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
     BaseInvocationOutput,
     InputField,
-    Input,
-    OutputField,
     InvocationContext,
+    OutputField,
     UIComponent,
     UIType,
     invocation,
     invocation_output,
 )
+from invokeai.app.invocations.image import PIL_RESAMPLING_MAP, PIL_RESAMPLING_MODES
+from invokeai.app.invocations.primitives import (
+    ColorField,
+    FloatOutput,
+    ImageCollectionOutput,
+    ImageField,
+    IntegerOutput,
+    StringCollectionOutput,
+    StringOutput,
+)
+from invokeai.app.models.image import ImageCategory, ResourceOrigin
 
 
-@invocation("floats_to_strings", title="Floats To Strings", tags=["float", "string"], category="util", version="1.0.0")
+@invocation(
+    "floats_to_strings",
+    title="Floats To Strings",
+    tags=["float", "string"],
+    category="util",
+    version="1.0.0",
+)
 class FloatsToStringsInvocation(BaseInvocation):
     """FloatsToStrings converts a float or collections of floats to a collection of strings"""
 
@@ -40,14 +45,55 @@ class FloatsToStringsInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
         if self.floats is None:
-            raise Exception("No collection of floats provided")
-        if isinstance(self.floats, list):
-            return StringCollectionOutput(collection=[str(x) for x in self.floats])
-        else:
-            return StringCollectionOutput(collection=[str(self.floats)])
+            raise Exception("No float or collection of floats provided")
+        return StringCollectionOutput(
+            collection=[str(x) for x in self.floats] if isinstance(self.floats, list) else [str(self.floats)]
+        )
 
 
-@invocation("string_to_float", title="String To Float", tags=["float", "string"], category="util", version="1.0.0")
+@invocation(
+    "ints_to_strings",
+    title="Ints To String",
+    tags=["int", "string"],
+    category="util",
+    version="1.0.0",
+)
+class IntsToStringsInvocation(BaseInvocation):
+    """IntsToStrings converts an int or collection of ints to a collection of strings"""
+
+    ints: Union[int, list[int]] = InputField(default_factory=list, description="int or collection of ints")
+
+    def invoke(self, context: InvocationContext) -> StringCollectionOutput:
+        if self.ints is None:
+            raise Exception("No int or collection of ints provided")
+        return StringCollectionOutput(
+            collection=[str(x) for x in self.ints] if isinstance(self.ints, list) else [str(self.ints)]
+        )
+
+
+@invocation(
+    "csv_to_strings",
+    title="CSV To Strings",
+    tags=["xy", "grid", "csv"],
+    category="util",
+    version="1.0.0",
+)
+class CSVToStringsInvocation(BaseInvocation):
+    """CSVToStrings converts a CSV String to a collection of strings"""
+
+    csv: str = InputField(description="csv string")
+
+    def invoke(self, context: InvocationContext) -> StringCollectionOutput:
+        return StringCollectionOutput(collection=self.csv.split(","))
+
+
+@invocation(
+    "string_to_float",
+    title="String To Float",
+    tags=["float", "string"],
+    category="util",
+    version="1.0.0",
+)
 class StringToFloatInvocation(BaseInvocation):
     """StringToFloat converts a string to a float"""
 
@@ -57,22 +103,13 @@ class StringToFloatInvocation(BaseInvocation):
         return FloatOutput(value=float(self.float_string))
 
 
-@invocation("ints_to_strings", title="Ints To String", tags=["int", "string"], category="util", version="1.0.0")
-class IntsToStringsInvocation(BaseInvocation):
-    """IntsToStrings converts an int or collection of ints to a collection of strings"""
-
-    ints: Union[int, list[int]] = InputField(default_factory=list, description="int or collection of ints")
-
-    def invoke(self, context: InvocationContext) -> StringCollectionOutput:
-        if self.ints is None:
-            raise Exception("No collection of ints provided")
-        if isinstance(self.ints, list):
-            return StringCollectionOutput(collection=[str(x) for x in self.ints])
-        else:
-            return StringCollectionOutput(collection=[str(self.ints)])
-
-
-@invocation("string_to_int", title="String To Int", tags=["int"], category="util", version="1.0.0")
+@invocation(
+    "string_to_int",
+    title="String To Int",
+    tags=["int"],
+    category="util",
+    version="1.0.0",
+)
 class StringToIntInvocation(BaseInvocation):
     """StringToInt converts a string to an int"""
 
@@ -86,41 +123,49 @@ class StringToIntInvocation(BaseInvocation):
 class XYCollectOutput(BaseInvocationOutput):
     """XYCollectOutput a collection that contains every combination of the input collections"""
 
-    xy_collection: list[list[str]] = OutputField(description="The x y product collection", ui_type=UIType.Collection)
+    xy_collection: list[str] = OutputField(description="The x y product collection")
 
 
-@invocation("xy_collect", title="XY Collect", tags=["xy", "grid", "collect"], category="grid", version="1.0.0")
+@invocation(
+    "xy_collect",
+    title="XY Collect",
+    tags=["xy", "grid", "collect"],
+    category="grid",
+    version="1.0.0",
+)
 class XYCollectInvocation(BaseInvocation):
-    """XYCollect takes two string collections and outputs a collection that every combination of the inputs"""
+    """XYCollect takes an X and Y string collections and outputs a XY item collection with every combination of X and Y"""
 
     x_collection: list[str] = InputField(default_factory=list, description="The X collection")
     y_collection: list[str] = InputField(default_factory=list, description="The Y collection")
 
     def invoke(self, context: InvocationContext) -> XYCollectOutput:
-        return XYCollectOutput(xy_collection=list(product(self.x_collection, self.y_collection)))
+        combinations = list(product(self.x_collection, self.y_collection))
+        json_combinations = [json.dumps(list(comb)) for comb in combinations]
+
+        return XYCollectOutput(xy_collection=json_combinations)
 
 
 @invocation(
-    "xy_csv_to_strings", title="XY CSV to Strings", tags=["xy", "grid", "csv"], category="grid", version="1.0.0"
+    "xy_collect_csv",
+    title="XY Collect CSV",
+    tags=["xy", "grid", "csv"],
+    category="grid",
+    version="1.0.0",
 )
-class XYCSVToStringsInvocation(BaseInvocation):
-    """XYCSVToStrings converts X and Y CSV Strings to a collection that every combination of X and Y"""
+class XYCollectCSVInvocation(BaseInvocation):
+    """XYCollectCSV converts X and Y CSV Strings to an XY item collection with every combination of X and Y"""
 
     x: str = InputField(description="x string", ui_component=UIComponent.Textarea)
     y: str = InputField(description="y string", ui_component=UIComponent.Textarea)
 
     def invoke(self, context: InvocationContext) -> XYCollectOutput:
-        return XYCollectOutput(xy_collection=list(product(self.x.split(","), self.y.split(","))))
+        x_list = self.x.split(",")
+        y_list = self.y.split(",")
+        combinations = list(product(x_list, y_list))
+        json_combinations = [json.dumps(list(comb)) for comb in combinations]
 
-
-@invocation("csv_to_strings", title="CSV To Strings", tags=["xy", "grid", "csv"], category="grid", version="1.0.0")
-class CSVToStringsInvocation(BaseInvocation):
-    """CSVToStrings converts a CSV String to a collection of strings"""
-
-    csv: str = InputField(description="csv string")
-
-    def invoke(self, context: InvocationContext) -> StringCollectionOutput:
-        return StringCollectionOutput(collection=self.csv.split(","))
+        return XYCollectOutput(xy_collection=json_combinations)
 
 
 @invocation_output("xy_expand_output")
@@ -131,17 +176,32 @@ class XYExpandOutput(BaseInvocationOutput):
     y_item: str = OutputField(description="The y item")
 
 
-@invocation("xy_expand", title="XY Expand", tags=["xy", "grid"], category="grid", version="1.0.0")
+@invocation(
+    "xy_expand",
+    title="XY Expand",
+    tags=["xy", "grid"],
+    category="grid",
+    version="1.0.0",
+)
 class XYExpandInvocation(BaseInvocation):
-    """XYExpand takes a collection of strings and outputs the first two elements and outputs as individual strings"""
+    """XYExpand takes an XY item and outputs the X andY as individual strings"""
 
-    xy_item: list[str] = InputField(default_factory=list, description="The XY collection item")
+    xy_item: str = InputField(description="The XY collection item")
 
     def invoke(self, context: InvocationContext) -> XYExpandOutput:
-        return XYExpandOutput(x_item=self.xy_collection[0], y_item=self.xy_collection[1])
+        lst = json.loads(self.xy_item)
+        x_item = str(lst[0]) if len(lst) > 0 else ""
+        y_item = str(lst[1]) if len(lst) > 1 else ""
+        return XYExpandOutput(x_item=x_item, y_item=y_item)
 
 
-@invocation("xyimage_collect", title="XYImage Collect", tags=["xy", "grid", "image"], category="grid", version="1.0.0")
+@invocation(
+    "xyimage_collect",
+    title="XYImage Collect",
+    tags=["xy", "grid", "image"],
+    category="grid",
+    version="1.0.0",
+)
 class XYImageCollectInvocation(BaseInvocation):
     """XYImageCollect takes xItem, yItem and an Image and outputs it as an (x_item,y_item,image_name)array converted to json"""
 
@@ -153,7 +213,13 @@ class XYImageCollectInvocation(BaseInvocation):
         return StringOutput(value=json.dumps([self.y_item, self.x_item, self.image.image_name]))
 
 
-@invocation("xyimage_grid", title="XYImage To Grid", tags=["xy", "grid", "image"], category="grid", version="1.0.0")
+@invocation(
+    "xyimage_grid",
+    title="XYImage To Grid",
+    tags=["xy", "grid", "image"],
+    category="grid",
+    version="1.0.0",
+)
 class XYImagesToGridInvocation(BaseInvocation):
     """Load a collection of xyimage types (json of (x_item,y_item,image_name)array) and create a gridimage of them"""
 
@@ -282,7 +348,7 @@ class XYImagesToGridInvocation(BaseInvocation):
                 grid_images.append(ImageField(image_name=image_dto.image_name))
                 background = Image.new("RGBA", (background_width, background_height), self.background_color.tuple())
 
-        # if we are not on column and row 0 then we have a part done grid and neew to save it
+        # if we are not on column and row 0 then we have a part done grid and need to save it
         if column > 0 and row > 0:
             image_dto = context.services.images.create(
                 image=background,
@@ -297,7 +363,13 @@ class XYImagesToGridInvocation(BaseInvocation):
         return ImageCollectionOutput(collection=grid_images)
 
 
-@invocation("image_grid", title="Images To Grids", tags=["grid", "image"], category="grid", version="1.0.0")
+@invocation(
+    "image_grid",
+    title="Images To Grids",
+    tags=["grid", "image"],
+    category="grid",
+    version="1.0.0",
+)
 class ImagesToGridsInvocation(BaseInvocation):
     """Load a collection of images and creat grid images from it and output a collection of genereated grid images"""
 
@@ -363,7 +435,7 @@ class ImagesToGridsInvocation(BaseInvocation):
                 grid_images.append(ImageField(image_name=image_dto.image_name))
                 background = Image.new("RGBA", (background_width, background_height), self.background_color.tuple())
 
-        # if we are not on column and row 0 then we have a part done grid and neew to save it
+        # if we are not on column and row 0 then we have a part done grid and need to save it
         if column > 0 or row > 0:
             image_dto = context.services.images.create(
                 image=background,
