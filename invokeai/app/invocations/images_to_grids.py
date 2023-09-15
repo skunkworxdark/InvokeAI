@@ -18,7 +18,10 @@ from invokeai.app.invocations.baseinvocation import (
     invocation,
     invocation_output,
 )
-from invokeai.app.invocations.image import PIL_RESAMPLING_MAP, PIL_RESAMPLING_MODES
+from invokeai.app.invocations.image import (
+    PIL_RESAMPLING_MAP,
+    PIL_RESAMPLING_MODES,
+)
 from invokeai.app.invocations.primitives import (
     ColorField,
     FloatOutput,
@@ -28,7 +31,14 @@ from invokeai.app.invocations.primitives import (
     StringCollectionOutput,
     StringOutput,
 )
-from invokeai.app.models.image import ImageCategory, ResourceOrigin
+from invokeai.app.models.image import (
+    ImageCategory,
+    ResourceOrigin,
+)
+from invokeai.app.invocations.latent import (
+    SAMPLER_NAME_VALUES,
+    SchedulerOutput,
+)
 
 
 @invocation(
@@ -97,7 +107,7 @@ class CSVToStringsInvocation(BaseInvocation):
 class StringToFloatInvocation(BaseInvocation):
     """StringToFloat converts a string to a float"""
 
-    float_string: str = InputField(description="string containg a float to convert")
+    float_string: str = InputField(description="string containing a float to convert")
 
     def invoke(self, context: InvocationContext) -> FloatOutput:
         return FloatOutput(value=float(self.float_string))
@@ -117,6 +127,22 @@ class StringToIntInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> IntegerOutput:
         return IntegerOutput(value=int(self.int_string))
+
+
+@invocation(
+    "string_to_scheduler",
+    title="String To Scheduler",
+    tags=["scheduler"],
+    category="util",
+    version="1.0.0",
+)
+class StringToSchedulerInvocation(BaseInvocation):
+    """StringToScheduler converts a string to a scheduler"""
+# ddim,ddpm,deis,lms,lms_k,pndm,heun,heun_k,euler,euler_k,euler_a,kdpm_2,kdpm_2_a,dpmpp_2s,dpmpp_2s_k,dpmpp_2m,dpmpp_2m_k,dpmpp_2m_sde,dpmpp_2m_sde_k,dpmpp_sde,dpmpp_sde_k,unipc
+    scheduler_string: str = InputField(description="string containing a scheduler to convert")
+
+    def invoke(self, context: InvocationContext) -> SchedulerOutput:
+        return SchedulerOutput(scheduler=self.scheduler_string.strip().lower())
 
 
 @invocation_output("xy_collect_output")
