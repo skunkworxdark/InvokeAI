@@ -10,19 +10,17 @@ from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
     BaseInvocationOutput,
     FieldDescriptions,
+    Input,
     InputField,
     InvocationContext,
     OutputField,
     UIComponent,
+    UIType,
     invocation,
     invocation_output,
-    UIType,
-    Input,
 )
-
-from invokeai.app.invocations.primitives import StringOutput
-
 from invokeai.app.invocations.latent import SAMPLER_NAME_VALUES
+from invokeai.app.invocations.primitives import StringOutput
 
 
 @invocation_output("prompt_to_file_output")
