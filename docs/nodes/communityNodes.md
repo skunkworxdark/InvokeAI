@@ -122,18 +122,6 @@ To be imported, an .obj must use triangulated meshes, so make sure to enable tha
 ![depth from obj usage graph](https://raw.githubusercontent.com/dwringer/depth-from-obj-node/main/depth_from_obj_usage.jpg)
 
 --------------------------------
-### Enhance Image (simple adjustments)
-
-**Description:** Boost or reduce color saturation, contrast, brightness, sharpness, or invert colors of any image at any stage with this simple wrapper for pillow [PIL]'s ImageEnhance module.
-
-Color inversion is toggled with a simple switch, while each of the four enhancer modes are activated by entering a value other than 1 in each corresponding input field. Values less than 1 will reduce the corresponding property, while values greater than 1 will enhance it.
-
-**Node Link:** https://github.com/dwringer/image-enhance-node
-
-**Example Usage:**
-![enhance image usage graph](https://raw.githubusercontent.com/dwringer/image-enhance-node/main/image_enhance_usage.jpg)
-
---------------------------------
 ### Generative Grammar-Based Prompt Nodes
 
 **Description:** This set of 3 nodes generates prompts from simple user-defined grammar rules (loaded from custom files - examples provided below). The prompts are made by recursively expanding a special template string, replacing nonterminal "parts-of-speech" until no more nonterminal terms remain in the string.
@@ -153,16 +141,26 @@ This includes 3 Nodes:
 
 **Description:** This is a pack of nodes for composing masks and images, including a simple text mask creator and both image and latent offset nodes. The offsets wrap around, so these can be used in conjunction with the Seamless node to progressively generate centered on different parts of the seamless tiling.
 
-This includes 4 Nodes:
-- *Text Mask (simple 2D)* - create and position a white on black (or black on white) line of text using any font locally available to Invoke.
+This includes 14 Nodes:
+- *Adjust Image Hue Plus* - Rotate the hue of an image in one of several different color spaces.
+- *Blend Latents/Noise (Masked)* - Use a mask to blend part of one latents tensor [including Noise outputs] into another. Can be used to "renoise" sections during a multi-stage [masked] denoising process.
+- *Enhance Image* - Boost or reduce color saturation, contrast, brightness, sharpness, or invert colors of any image at any stage with this simple wrapper for pillow [PIL]'s ImageEnhance module.
+- *Equivalent Achromatic Lightness* - Calculates image lightness accounting for Helmholtz-Kohlrausch effect based on a method described by High, Green, and Nussbaum (2023).
+- *Text to Mask (Clipseg)* - Input a prompt and an image to generate a mask representing areas of the image matched by the prompt.
+- *Text to Mask Advanced (Clipseg)* - Output up to four prompt masks combined with logical "and", logical "or", or as separate channels of an RGBA image.
+- *Image Layer Blend* - Perform a layered blend of two images using alpha compositing. Opacity of top layer is selectable, with optional mask and several different blend modes/color spaces.
 - *Image Compositor* - Take a subject from an image with a flat backdrop and layer it on another image using a chroma key or flood select background removal.
+- *Image Dilate or Erode* - Dilate or expand a mask (or any image!). This is equivalent to an expand/contract operation.
+- *Image Value Thresholds* - Clip an image to pure black/white beyond specified thresholds.
 - *Offset Latents* - Offset a latents tensor in the vertical and/or horizontal dimensions, wrapping it around.
 - *Offset Image* - Offset an image in the vertical and/or horizontal dimensions, wrapping it around.
+- *Shadows/Highlights/Midtones* - Extract three masks (with adjustable hard or soft thresholds) representing shadows, midtones, and highlights regions of an image.
+- *Text Mask (simple 2D)* - create and position a white on black (or black on white) line of text using any font locally available to Invoke.
 
 **Node Link:** https://github.com/dwringer/composition-nodes
 
-**Example Usage:**
-![composition nodes usage graph](https://raw.githubusercontent.com/dwringer/composition-nodes/main/composition_nodes_usage.jpg)
+**Nodes and Output Examples:**
+![composition nodes usage graph](https://raw.githubusercontent.com/dwringer/composition-nodes/main/composition_pack_overview.jpg)
 
 --------------------------------
 ### Size Stepper Nodes
@@ -193,6 +191,40 @@ Results after using the depth controlnet
 ![9133eabb-bcda-4326-831e-1b641228b178](https://github.com/mickr777/InvokeAI/assets/115216705/915f1a53-968e-43eb-aa61-07cd8f1a733a)
 ![4f9a3fa8-9be9-4236-8a3e-fcec66decd2a](https://github.com/mickr777/InvokeAI/assets/115216705/821ef89e-8a60-44f5-b94e-471a9d8690cc)
 ![babd69c4-9d60-4a55-a834-5e8397f62610](https://github.com/mickr777/InvokeAI/assets/115216705/2befcb6d-49f4-4bfd-b5fc-1fee19274f89)
+
+--------------------------------
+
+### Prompt Tools 
+
+**Description:** A set of InvokeAI nodes that add general prompt manipulation tools.  These where written to accompany the PromptsFromFile node and other prompt generation nodes.
+
+1. PromptJoin - Joins to prompts into one.
+2. PromptReplace - performs a search and replace on a prompt. With the option of using regex.
+3. PromptSplitNeg - splits a prompt into positive and negative using the old V2 method of [] for negative.
+4. PromptToFile - saves a prompt or collection of prompts to a file. one per line. There is an append/overwrite option.
+5. PTFieldsCollect - Converts image generation fields into a Json format string that can be passed to Prompt to file. 
+6. PTFieldsExpand - Takes Json string and converts it to individual generation parameters This can be fed from the Prompts to file node.
+7. PromptJoinThree -  Joins 3 prompt together.
+8. PromptStrength - This take a string and float and outputs another string in the format of (string)strength like the weighted format of compel. 
+9. PromptStrengthCombine - This takes a collection of prompt strength strings and outputs a string in the .and() or .blend() format that can be fed into a proper prompt node.
+
+See full docs here: https://github.com/skunkworxdark/Prompt-tools-nodes/edit/main/README.md
+
+**Node Link:** https://github.com/skunkworxdark/Prompt-tools-nodes
+
+--------------------------------
+
+### XY Image to Grid and Images to Grids nodes
+
+**Description:** Image to grid nodes and supporting tools.
+
+1. "Images To Grids" node - Takes a collection of images and creates a grid(s) of images. If there are more images than the size of a single grid then mutilple grids will be created until it runs out of images.
+2. "XYImage To Grid" node - Converts a collection of XYImages into a labeled Grid of images.  The XYImages collection has to be built using the supporoting nodes. See example node setups for more details.
+   
+
+See full docs here: https://github.com/skunkworxdark/XYGrid_nodes/edit/main/README.md
+
+**Node Link:** https://github.com/skunkworxdark/XYGrid_nodes
 
 --------------------------------
 
