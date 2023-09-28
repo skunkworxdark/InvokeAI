@@ -1,25 +1,25 @@
-from typing import Literal
+import string
+from typing import Literal, Optional
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from invokeai.app.invocations.baseinvocation import BaseInvocation, InputField, InvocationContext, invocation
-from invokeai.app.invocations.primitives import ImageField, ImageOutput
+from invokeai.app.invocations.baseinvocation import BaseInvocation, Input, InputField, InvocationContext, invocation
+from invokeai.app.invocations.primitives import BoardField, ImageField, ImageOutput
 from invokeai.app.models.image import ImageCategory, ResourceOrigin
-
-import string
-
 
 COMPARISON_TYPES = Literal[
     "SAD",
     "MSE",
     "SSIM",
+    "LUMI",
 ]
 
 COMPARISON_TYPE_LABELS = dict(
     SAD="Sum of Absolute Differences (SAD)",
     MSE="Mean Squared Error (MSE)",
     SSIM="Structural Similarity (SSIM)",
+    LUMI="Average Luminance",
 )
 
 CHAR_RANGES = Literal[
@@ -34,6 +34,11 @@ CHAR_RANGES = Literal[
     "Hex",
     "Punctuation",
     "Printable",
+    "AH",
+    "AM",
+    "AL",
+    "Blocks",
+    "Binary",
 ]
 
 CHAR_RANGE_LABELS = dict(
@@ -48,6 +53,11 @@ CHAR_RANGE_LABELS = dict(
     Hex="Hex: 0-9 + a-f + A-F",
     Punctuation="All Punctuation",
     Printable="Letters + Numbers + Punctuation + space",
+    AH="AH: @$B%8WM#&*oahkbdpqwmZO0QLCJYXzcvunxrjft/\|()1{}[]?-+~<>i!lI;:,^'. ",
+    AM="AM: @%#*+=-:. ",
+    AL="AL: @#=-. ",
+    Blocks="Blocks: []|-",
+    Binary="Binary: 01",
 )
 
 CHAR_SETS = {
@@ -59,17 +69,23 @@ CHAR_SETS = {
     "Letters": string.ascii_letters + " ",
     "Lowercase": string.ascii_lowercase + " ",
     "Uppercase": string.ascii_uppercase + " ",
-    "HEX": string.hexdigits,
+    "Hex": string.hexdigits,
     "Punctuation": string.punctuation,
-    "Printable": string.digits + string.ascii_letters + string.punctuation + " "
+    "Printable": string.digits + string.ascii_letters + string.punctuation + " ",
+    "AH": "@$B%8WM#&*oahkbdpqwmZO0QLCJYXzcvunxrjft/\|()1{}[]?-+~<>i!lI;:,^'. ",
+    "AM": "@%#*+=-:. ",
+    "AL": "@#=-. ",
+    "Blocks": "[]|-",
+    "Binary": "01",
 }
+
 
 @invocation(
     "I2AA_AnyFont",
     title="Image to ASCII Art AnyFont",
     tags=["image", "ascii art"],
     category="image",
-    version="0.1.0",
+    version="0.2.0",
 )
 class ImageToAAInvocation(BaseInvocation):
     """Convert an Image to Ascii Art Image using any font or size
@@ -79,16 +95,20 @@ class ImageToAAInvocation(BaseInvocation):
     font_path: str = InputField(default="cour.ttf", description="Name of the font to use")
     font_size: int = InputField(default=6, description="Font size for the ASCII art characters")
     character_range: CHAR_RANGES = InputField(
-        default="Ascii", description="The character range to use",
+        default="Ascii",
+        description="The character range to use",
         ui_choice_labels=CHAR_RANGE_LABELS,
-
     )
     comparison_type: COMPARISON_TYPES = InputField(
         default="MSE",
         description="Choose the comparison type (Sum of Absolute Differences (SAD), Mean Squared Error (MSE), Structural Similarity Index (SSIM))",
         ui_choice_labels=COMPARISON_TYPE_LABELS,
     )
+    mono_comparison: bool = InputField(default=False, description="Convert input image to mono for comparison")
     color_mode: bool = InputField(default=False, description="Enable color mode (default: grayscale)")
+    board: Optional[BoardField] = InputField(
+        default=None, description="Pick Board to add output too", input=Input.Direct
+    )
 
     def get_font_chars(self, font_path, font_size, char_range):
         font = ImageFont.truetype(font_path, font_size)
@@ -109,11 +129,7 @@ class ImageToAAInvocation(BaseInvocation):
         err /= float(img1.shape[0] * img1.shape[1])
         return err
 
-    def ssim(self, img1, img2):
-        mu_img1 = np.mean(img1)
-        mu_img2 = np.mean(img2)
-        sigma_img1 = np.var(img1)
-        sigma_img2 = np.var(img2)
+    def ssim(self, img1, img2, mu_img1, mu_img2, sigma_img1, sigma_img2):
         sigma_img12 = np.cov(img1.flatten(), img2.flatten())[0, 1]
         k1, k2, L = 0.01, 0.03, 255
         C1 = (k1 * L) ** 2
@@ -123,19 +139,45 @@ class ImageToAAInvocation(BaseInvocation):
         )
         return ssim
 
+    def calculate_luminosities(self, char_images):
+        luminosities = {c: np.mean(np.array(img)) for c, img in char_images.items()}
+
+        # Normalize the luminosities to the range 0-255.
+        min_luminosity = min(luminosities.values())
+        max_luminosity = max(luminosities.values())
+        for c in char_images.keys():
+            luminosities[c] = 255 * (luminosities[c] - min_luminosity) / (max_luminosity - min_luminosity)
+
+        return luminosities
+
     def convert_image_to_mosaic_weighted(
         self,
         input_image: Image.Image,
         font_path: str,
         font_size: int,
         color_mode: bool,
-        comparison_method="mse",
-        char_range: str = "32-255",
+        comparison_method: str,
+        char_range: str,
+        mono_comparison: bool,
     ):
-        l_image = input_image.convert("L")  # grayscale for comparison
-        c_image = input_image.convert("RGB")  # full color for average check
+        if mono_comparison:
+            l_image = input_image.convert("1").convert("L")  # grayscale for comparison
+        else:
+            l_image = input_image.convert("L")  # grayscale for comparison
+        c_image = input_image.convert("RGB")  # full color for average color calculation
 
         char_images = self.get_font_chars(font_path, font_size, char_range)  # get the char images for comparison
+        if comparison_method == "SSIM":
+            char_images_mean = {c: np.mean(img) for c, img in char_images.items()}
+            char_images_variance = {c: np.var(img) for c, img in char_images.items()}
+        else:
+            char_images_mean = char_images_variance = None
+
+        if comparison_method == "LUMI":
+            char_lumi = self.calculate_luminosities(char_images)
+        else:
+            char_lumi = None
+
         mosaic_img = Image.new("RGB" if color_mode else "L", input_image.size)  # create a color or grayscale output
 
         draw = ImageDraw.Draw(mosaic_img)
@@ -151,7 +193,20 @@ class ImageToAAInvocation(BaseInvocation):
                 elif comparison_method == "MSE":  # Mean Squared Error (MSE)
                     comparisons = {c: self.mse(l_region_array, char_img) for c, char_img in char_images.items()}
                 elif comparison_method == "SSIM":  # Structural Similarity (SSIM)
-                    comparisons = {c: self.ssim(l_region_array, char_img) for c, char_img in char_images.items()}
+                    comparisons = {
+                        c: -self.ssim(
+                            l_region_array,
+                            char_img,
+                            np.mean(l_region_array),
+                            char_images_mean[c],
+                            np.var(l_region_array),
+                            char_images_variance[c],
+                        )
+                        for c, char_img in char_images.items()
+                    }
+                elif comparison_method == "LUMI":  # Average Luminance check
+                    avg_luminosity = np.mean(l_region_array)
+                    comparisons = {c: abs(avg_luminosity - char_lumi[c]) for c, char_img in char_images.items()}
 
                 # Pick the char with the smallest difference.
                 best_char = min(comparisons, key=comparisons.get)
@@ -177,6 +232,7 @@ class ImageToAAInvocation(BaseInvocation):
             self.color_mode,
             self.comparison_type,
             self.character_range,
+            self.mono_comparison,
         )
         image_dto = context.services.images.create(
             image=detailed_ascii_art_image,
