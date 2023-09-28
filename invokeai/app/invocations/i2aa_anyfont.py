@@ -101,10 +101,12 @@ class ImageToAAInvocation(BaseInvocation):
         description="The character range to use",
         ui_choice_labels=CHAR_RANGE_LABELS,
     )
-    custom_characters: str = InputField(default="█▓▒░ ", description="Custom Characters only used if Custom is selected from range")
+    custom_characters: str = InputField(
+        default="Custom. ", description="Custom characters. Used if Custom is selected from character range"
+    )
     comparison_type: COMPARISON_TYPES = InputField(
         default="MSE",
-        description="Choose the comparison type (Sum of Absolute Differences (SAD), Mean Squared Error (MSE), Structural Similarity Index (SSIM))",
+        description="Choose the comparison type (Sum of Absolute Differences, Mean Squared Error, Structural Similarity Index, Normalized Average Luminance)",
         ui_choice_labels=COMPARISON_TYPE_LABELS,
     )
     mono_comparison: bool = InputField(default=False, description="Convert input image to mono for comparison")
@@ -115,7 +117,7 @@ class ImageToAAInvocation(BaseInvocation):
 
     def get_font_chars(self, font_path, font_size, chars):
         font = ImageFont.truetype(font_path, font_size)
-        #chars = CHAR_SETS.get(char_range, [])
+        # chars = CHAR_SETS.get(char_range, [])
         char_images = {c: Image.new("L", (font_size, font_size)) for c in chars}
         for c, img in char_images.items():
             draw = ImageDraw.Draw(img)
@@ -162,7 +164,7 @@ class ImageToAAInvocation(BaseInvocation):
         comparison_method: str,
         char_range: str,
         mono_comparison: bool,
-        custom_chars:str,
+        custom_chars: str,
     ):
         if mono_comparison:
             l_image = input_image.convert("1").convert("L")  # grayscale for comparison
@@ -170,7 +172,7 @@ class ImageToAAInvocation(BaseInvocation):
             l_image = input_image.convert("L")  # grayscale for comparison
         c_image = input_image.convert("RGB")  # full color for average color calculation
 
-        #Check for custom char range selected
+        # Check for custom char range selected
         chars = custom_chars if char_range == "Custom" else CHAR_SETS.get(char_range, [])
 
         char_images = self.get_font_chars(font_path, font_size, chars)  # get the char images for comparison
