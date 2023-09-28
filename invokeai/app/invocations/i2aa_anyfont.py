@@ -16,10 +16,10 @@ COMPARISON_TYPES = Literal[
 ]
 
 COMPARISON_TYPE_LABELS = dict(
-    SAD="Sum of Absolute Differences (SAD)",
-    MSE="Mean Squared Error (MSE)",
-    SSIM="Structural Similarity (SSIM)",
-    LUMI="Average Luminance",
+    SAD="Sum of Absolute Differences",
+    MSE="Mean Squared Error",
+    SSIM="Structural Similarity",
+    LUMI="Normalized Average Luminance",
 )
 
 CHAR_RANGES = Literal[
@@ -39,6 +39,7 @@ CHAR_RANGES = Literal[
     "AL",
     "Blocks",
     "Binary",
+    "Custom",
 ]
 
 CHAR_RANGE_LABELS = dict(
@@ -58,6 +59,7 @@ CHAR_RANGE_LABELS = dict(
     AL="AL: @#=-. ",
     Blocks="Blocks: []|-",
     Binary="Binary: 01",
+    Custom="Custom: Chars entered in the custom field",
 )
 
 CHAR_SETS = {
@@ -99,6 +101,7 @@ class ImageToAAInvocation(BaseInvocation):
         description="The character range to use",
         ui_choice_labels=CHAR_RANGE_LABELS,
     )
+    custom_characters: str = InputField(default="█▓▒░ ", description="Custom Characters only used if Custom is selected from range")
     comparison_type: COMPARISON_TYPES = InputField(
         default="MSE",
         description="Choose the comparison type (Sum of Absolute Differences (SAD), Mean Squared Error (MSE), Structural Similarity Index (SSIM))",
@@ -110,9 +113,9 @@ class ImageToAAInvocation(BaseInvocation):
         default=None, description="Pick Board to add output too", input=Input.Direct
     )
 
-    def get_font_chars(self, font_path, font_size, char_range):
+    def get_font_chars(self, font_path, font_size, chars):
         font = ImageFont.truetype(font_path, font_size)
-        chars = CHAR_SETS.get(char_range, [])
+        #chars = CHAR_SETS.get(char_range, [])
         char_images = {c: Image.new("L", (font_size, font_size)) for c in chars}
         for c, img in char_images.items():
             draw = ImageDraw.Draw(img)
@@ -159,6 +162,7 @@ class ImageToAAInvocation(BaseInvocation):
         comparison_method: str,
         char_range: str,
         mono_comparison: bool,
+        custom_chars:str,
     ):
         if mono_comparison:
             l_image = input_image.convert("1").convert("L")  # grayscale for comparison
@@ -166,7 +170,10 @@ class ImageToAAInvocation(BaseInvocation):
             l_image = input_image.convert("L")  # grayscale for comparison
         c_image = input_image.convert("RGB")  # full color for average color calculation
 
-        char_images = self.get_font_chars(font_path, font_size, char_range)  # get the char images for comparison
+        #Check for custom char range selected
+        chars = custom_chars if char_range == "Custom" else CHAR_SETS.get(char_range, [])
+
+        char_images = self.get_font_chars(font_path, font_size, chars)  # get the char images for comparison
         if comparison_method == "SSIM":
             char_images_mean = {c: np.mean(img) for c, img in char_images.items()}
             char_images_variance = {c: np.var(img) for c, img in char_images.items()}
@@ -233,6 +240,7 @@ class ImageToAAInvocation(BaseInvocation):
             self.comparison_type,
             self.character_range,
             self.mono_comparison,
+            self.custom_characters,
         )
         image_dto = context.services.images.create(
             image=detailed_ascii_art_image,
