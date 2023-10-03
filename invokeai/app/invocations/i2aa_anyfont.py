@@ -1,12 +1,32 @@
+import os
 import string
 from typing import Literal, Optional
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+import requests
 
 from invokeai.app.invocations.baseinvocation import BaseInvocation, Input, InputField, InvocationContext, invocation
 from invokeai.app.invocations.primitives import BoardField, ImageField, ImageOutput
 from invokeai.app.models.image import ImageCategory, ResourceOrigin
+
+
+def list_local_fonts() -> list:
+    cache_dir = "font_cache"
+    if not os.path.exists(cache_dir):
+        return []
+    fonts = [f for f in os.listdir(cache_dir) if f.lower().endswith((".ttf", ".otf"))]
+    return sorted(fonts, key=lambda x: x.lower())
+
+
+available_fonts = list_local_fonts()
+
+if available_fonts:
+    fonts_str = ", ".join([repr(f) for f in available_fonts])
+    FontLiteral = eval(f'Literal["None", {fonts_str}]')
+else:
+    FontLiteral = Literal["None"]
+
 
 COMPARISON_TYPES = Literal[
     "SAD",
@@ -94,7 +114,14 @@ class ImageToAAInvocation(BaseInvocation):
     https://github.com/dernyn/256/tree/master this is a great font to use"""
 
     input_image: ImageField = InputField(description="Image to convert to ASCII art")
-    font_path: str = InputField(default="cour.ttf", description="Name of the font to use")
+    font_url: Optional[str] = InputField(
+        default="https://github.com/dernyn/256/raw/master/Dernyn's-256(baseline).ttf",
+        description="URL address of the font file to download",
+    )
+    local_font_path: Optional[str] = InputField(description="Local font file path (overrides font_url)")
+    local_font: Optional[FontLiteral] = InputField(
+        default=None, description="Name of the local font file to use from the font_cache folder"
+    )
     font_size: int = InputField(default=6, description="Font size for the ASCII art characters")
     character_range: CHAR_RANGES = InputField(
         default="Ascii",
@@ -114,7 +141,24 @@ class ImageToAAInvocation(BaseInvocation):
     board: Optional[BoardField] = InputField(
         default=None, description="Pick Board to add output too", input=Input.Direct
     )
+    def download_font(self, font_url: str) -> str:
+        font_filename = font_url.split("/")[-1]
+        cache_dir = "font_cache"
+        font_path = f"{cache_dir}/{font_filename}"
 
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+
+        if not os.path.isfile(font_path):
+            print("\033[1;31mFont not found in cache, downloading...\033[0m")
+            response = requests.get(font_url)
+            with open(font_path, "wb") as f:
+                f.write(response.content)
+        else:
+            print("\033[1;32mFont found in cache, using cached version.\033[0m")
+
+        return font_path
+    
     def get_font_chars(self, font_path, font_size, chars):
         font = ImageFont.truetype(font_path, font_size)
         # chars = CHAR_SETS.get(char_range, [])
@@ -234,9 +278,20 @@ class ImageToAAInvocation(BaseInvocation):
     def invoke(self, context: InvocationContext) -> ImageOutput:
         input_image = context.services.images.get_pil_image(self.input_image.image_name)
 
+        if self.local_font and self.local_font != "None":
+            font_path = os.path.join("font_cache", self.local_font)
+        elif self.local_font_path:
+            font_path = self.local_font_path
+        else:
+            font_path = self.download_font(self.font_url)
+
+        if not os.path.isfile(font_path):
+            print("\033[1;31mFont file not found. Please check the font file path.\033[0m")
+            return
+
         detailed_ascii_art_image = self.convert_image_to_mosaic_weighted(
             input_image,
-            self.font_path,
+            font_path,
             self.font_size,
             self.color_mode,
             self.comparison_type,
@@ -251,6 +306,7 @@ class ImageToAAInvocation(BaseInvocation):
             node_id=self.id,
             session_id=context.graph_execution_state_id,
             is_intermediate=self.is_intermediate,
+            workflow=self.workflow,
         )
 
         return ImageOutput(
