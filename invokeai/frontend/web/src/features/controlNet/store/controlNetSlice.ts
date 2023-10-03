@@ -6,7 +6,6 @@ import {
 import { cloneDeep, forEach } from 'lodash-es';
 import { imagesApi } from 'services/api/endpoints/images';
 import { components } from 'services/api/schema';
-import { ImageDTO } from 'services/api/types';
 import { appSocketInvocationError } from 'services/events/actions';
 import { controlNetImageProcessed } from './actions';
 import {
@@ -60,7 +59,7 @@ export type ControlNetConfig = {
 };
 
 export type IPAdapterConfig = {
-  adapterImage: ImageDTO | null;
+  adapterImage: string | null;
   model: IPAdapterModelParam | null;
   weight: number;
   beginStepPct: number;
@@ -98,6 +97,9 @@ export const controlNetSlice = createSlice({
     isControlNetEnabledToggled: (state) => {
       state.isEnabled = !state.isEnabled;
     },
+    controlNetEnabled: (state) => {
+      state.isEnabled = true;
+    },
     controlNetAdded: (
       state,
       action: PayloadAction<{
@@ -109,6 +111,12 @@ export const controlNetSlice = createSlice({
       state.controlNets[controlNetId] = {
         ...(controlNet ?? initialControlNet),
         controlNetId,
+      };
+    },
+    controlNetRecalled: (state, action: PayloadAction<ControlNetConfig>) => {
+      const controlNet = action.payload;
+      state.controlNets[controlNet.controlNetId] = {
+        ...controlNet,
       };
     },
     controlNetDuplicated: (
@@ -379,7 +387,10 @@ export const controlNetSlice = createSlice({
     isIPAdapterEnabledChanged: (state, action: PayloadAction<boolean>) => {
       state.isIPAdapterEnabled = action.payload;
     },
-    ipAdapterImageChanged: (state, action: PayloadAction<ImageDTO | null>) => {
+    ipAdapterRecalled: (state, action: PayloadAction<IPAdapterConfig>) => {
+      state.ipAdapterInfo = action.payload;
+    },
+    ipAdapterImageChanged: (state, action: PayloadAction<string | null>) => {
       state.ipAdapterInfo.adapterImage = action.payload;
     },
     ipAdapterWeightChanged: (state, action: PayloadAction<number>) => {
@@ -400,6 +411,9 @@ export const controlNetSlice = createSlice({
     ipAdapterStateReset: (state) => {
       state.isIPAdapterEnabled = false;
       state.ipAdapterInfo = { ...initialIPAdapterState };
+    },
+    clearPendingControlImages: (state) => {
+      state.pendingControlImages = [];
     },
   },
   extraReducers: (builder) => {
@@ -439,7 +453,9 @@ export const controlNetSlice = createSlice({
 
 export const {
   isControlNetEnabledToggled,
+  controlNetEnabled,
   controlNetAdded,
+  controlNetRecalled,
   controlNetDuplicated,
   controlNetAddedFromImage,
   controlNetRemoved,
@@ -457,12 +473,14 @@ export const {
   controlNetReset,
   controlNetAutoConfigToggled,
   isIPAdapterEnabledChanged,
+  ipAdapterRecalled,
   ipAdapterImageChanged,
   ipAdapterWeightChanged,
   ipAdapterModelChanged,
   ipAdapterBeginStepPctChanged,
   ipAdapterEndStepPctChanged,
   ipAdapterStateReset,
+  clearPendingControlImages,
 } = controlNetSlice.actions;
 
 export default controlNetSlice.reducer;
