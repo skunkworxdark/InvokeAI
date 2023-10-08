@@ -16,6 +16,7 @@ import { addSDXLLoRAsToGraph } from './addSDXLLoRAstoGraph';
 import { addSDXLRefinerToGraph } from './addSDXLRefinerToGraph';
 import { addSaveImageNode } from './addSaveImageNode';
 import { addSeamlessToLinearGraph } from './addSeamlessToLinearGraph';
+import { addT2IAdaptersToLinearGraph } from './addT2IAdapterToLinearGraph';
 import { addVAEToGraph } from './addVAEToGraph';
 import { addWatermarkerToGraph } from './addWatermarkerToGraph';
 import {
@@ -663,7 +664,8 @@ export const buildCanvasSDXLInpaintGraph = (
       graph,
       CANVAS_COHERENCE_DENOISE_LATENTS,
       modelLoaderNodeId,
-      canvasInitImage
+      canvasInitImage,
+      canvasMaskImage
     );
     if (seamlessXAxis || seamlessYAxis) {
       modelLoaderNodeId = SDXL_REFINER_SEAMLESS;
@@ -681,6 +683,7 @@ export const buildCanvasSDXLInpaintGraph = (
 
   // Add IP Adapter
   addIPAdapterToLinearGraph(state, graph, SDXL_DENOISE_LATENTS);
+  addT2IAdaptersToLinearGraph(state, graph, SDXL_DENOISE_LATENTS);
 
   // NSFW & watermark - must be last thing added to graph
   if (state.system.shouldUseNSFWChecker) {

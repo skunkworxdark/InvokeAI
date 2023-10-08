@@ -16,6 +16,8 @@ import SchedulerInputField from './inputs/SchedulerInputField';
 import StringInputField from './inputs/StringInputField';
 import VaeModelInputField from './inputs/VaeModelInputField';
 import IPAdapterModelInputField from './inputs/IPAdapterModelInputField';
+import T2IAdapterModelInputField from './inputs/T2IAdapterModelInputField';
+import BoardInputField from './inputs/BoardInputField';
 
 type InputFieldProps = {
   nodeId: string;
@@ -30,7 +32,11 @@ const InputFieldRenderer = ({ nodeId, fieldName }: InputFieldProps) => {
     return <Box p={2}>Output field in input: {field?.type}</Box>;
   }
 
-  if (field?.type === 'string' && fieldTemplate?.type === 'string') {
+  if (
+    (field?.type === 'string' && fieldTemplate?.type === 'string') ||
+    (field?.type === 'StringPolymorphic' &&
+      fieldTemplate?.type === 'StringPolymorphic')
+  ) {
     return (
       <StringInputField
         nodeId={nodeId}
@@ -40,7 +46,11 @@ const InputFieldRenderer = ({ nodeId, fieldName }: InputFieldProps) => {
     );
   }
 
-  if (field?.type === 'boolean' && fieldTemplate?.type === 'boolean') {
+  if (
+    (field?.type === 'boolean' && fieldTemplate?.type === 'boolean') ||
+    (field?.type === 'BooleanPolymorphic' &&
+      fieldTemplate?.type === 'BooleanPolymorphic')
+  ) {
     return (
       <BooleanInputField
         nodeId={nodeId}
@@ -52,7 +62,11 @@ const InputFieldRenderer = ({ nodeId, fieldName }: InputFieldProps) => {
 
   if (
     (field?.type === 'integer' && fieldTemplate?.type === 'integer') ||
-    (field?.type === 'float' && fieldTemplate?.type === 'float')
+    (field?.type === 'float' && fieldTemplate?.type === 'float') ||
+    (field?.type === 'FloatPolymorphic' &&
+      fieldTemplate?.type === 'FloatPolymorphic') ||
+    (field?.type === 'IntegerPolymorphic' &&
+      fieldTemplate?.type === 'IntegerPolymorphic')
   ) {
     return (
       <NumberInputField
@@ -73,9 +87,23 @@ const InputFieldRenderer = ({ nodeId, fieldName }: InputFieldProps) => {
     );
   }
 
-  if (field?.type === 'ImageField' && fieldTemplate?.type === 'ImageField') {
+  if (
+    (field?.type === 'ImageField' && fieldTemplate?.type === 'ImageField') ||
+    (field?.type === 'ImagePolymorphic' &&
+      fieldTemplate?.type === 'ImagePolymorphic')
+  ) {
     return (
       <ImageInputField
+        nodeId={nodeId}
+        field={field}
+        fieldTemplate={fieldTemplate}
+      />
+    );
+  }
+
+  if (field?.type === 'BoardField' && fieldTemplate?.type === 'BoardField') {
+    return (
+      <BoardInputField
         nodeId={nodeId}
         field={field}
         fieldTemplate={fieldTemplate}
@@ -161,6 +189,18 @@ const InputFieldRenderer = ({ nodeId, fieldName }: InputFieldProps) => {
     );
   }
 
+  if (
+    field?.type === 'T2IAdapterModelField' &&
+    fieldTemplate?.type === 'T2IAdapterModelField'
+  ) {
+    return (
+      <T2IAdapterModelInputField
+        nodeId={nodeId}
+        field={field}
+        fieldTemplate={fieldTemplate}
+      />
+    );
+  }
   if (field?.type === 'ColorField' && fieldTemplate?.type === 'ColorField') {
     return (
       <ColorInputField

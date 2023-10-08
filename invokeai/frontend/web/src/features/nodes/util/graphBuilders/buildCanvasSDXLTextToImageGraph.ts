@@ -12,6 +12,7 @@ import { addSDXLLoRAsToGraph } from './addSDXLLoRAstoGraph';
 import { addSDXLRefinerToGraph } from './addSDXLRefinerToGraph';
 import { addSaveImageNode } from './addSaveImageNode';
 import { addSeamlessToLinearGraph } from './addSeamlessToLinearGraph';
+import { addT2IAdaptersToLinearGraph } from './addT2IAdapterToLinearGraph';
 import { addVAEToGraph } from './addVAEToGraph';
 import { addWatermarkerToGraph } from './addWatermarkerToGraph';
 import {
@@ -46,7 +47,6 @@ export const buildCanvasSDXLTextToImageGraph = (
     seed,
     steps,
     vaePrecision,
-    clipSkip,
     shouldUseCpuNoise,
     seamlessXAxis,
     seamlessYAxis,
@@ -321,7 +321,8 @@ export const buildCanvasSDXLTextToImageGraph = (
     vae: undefined, // option; set in addVAEToGraph
     controlnets: [], // populated in addControlNetToLinearGraph
     loras: [], // populated in addLoRAsToGraph
-    clip_skip: clipSkip,
+    ipAdapters: [], // populated in addIPAdapterToLinearGraph
+    t2iAdapters: [],
   };
 
   graph.edges.push({
@@ -365,6 +366,7 @@ export const buildCanvasSDXLTextToImageGraph = (
 
   // Add IP Adapter
   addIPAdapterToLinearGraph(state, graph, SDXL_DENOISE_LATENTS);
+  addT2IAdaptersToLinearGraph(state, graph, SDXL_DENOISE_LATENTS);
 
   // NSFW & watermark - must be last thing added to graph
   if (state.system.shouldUseNSFWChecker) {

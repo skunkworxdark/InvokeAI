@@ -72,6 +72,7 @@ export type FieldUIConfig = {
 
 // TODO: Get this from the OpenAPI schema? may be tricky...
 export const zFieldType = z.enum([
+  'BoardField',
   'boolean',
   'BooleanCollection',
   'BooleanPolymorphic',
@@ -99,8 +100,10 @@ export const zFieldType = z.enum([
   'integer',
   'IntegerCollection',
   'IntegerPolymorphic',
+  'IPAdapterCollection',
   'IPAdapterField',
   'IPAdapterModelField',
+  'IPAdapterPolymorphic',
   'LatentsCollection',
   'LatentsField',
   'LatentsPolymorphic',
@@ -113,12 +116,20 @@ export const zFieldType = z.enum([
   'string',
   'StringCollection',
   'StringPolymorphic',
+  'T2IAdapterCollection',
+  'T2IAdapterField',
+  'T2IAdapterModelField',
+  'T2IAdapterPolymorphic',
   'UNetField',
   'VaeField',
   'VaeModelField',
 ]);
 
 export type FieldType = z.infer<typeof zFieldType>;
+export type FieldTypeMap = { [key in FieldType]?: FieldType };
+export type FieldTypeMapWithNumber = {
+  [key in FieldType | 'number']?: FieldType;
+};
 
 export const zReservedFieldType = z.enum([
   'WorkflowField',
@@ -187,6 +198,11 @@ export const zImageField = z.object({
 });
 export type ImageField = z.infer<typeof zImageField>;
 
+export const zBoardField = z.object({
+  board_id: z.string().trim().min(1),
+});
+export type BoardField = z.infer<typeof zBoardField>;
+
 export const zLatentsField = z.object({
   latents_name: z.string().trim().min(1),
   seed: z.number().int().optional(),
@@ -220,7 +236,7 @@ export type IntegerCollectionInputFieldValue = z.infer<
 
 export const zIntegerPolymorphicInputFieldValue = zInputFieldValueBase.extend({
   type: z.literal('IntegerPolymorphic'),
-  value: z.union([z.number().int(), z.array(z.number().int())]).optional(),
+  value: z.number().int().optional(),
 });
 export type IntegerPolymorphicInputFieldValue = z.infer<
   typeof zIntegerPolymorphicInputFieldValue
@@ -242,7 +258,7 @@ export type FloatCollectionInputFieldValue = z.infer<
 
 export const zFloatPolymorphicInputFieldValue = zInputFieldValueBase.extend({
   type: z.literal('FloatPolymorphic'),
-  value: z.union([z.number(), z.array(z.number())]).optional(),
+  value: z.number().optional(),
 });
 export type FloatPolymorphicInputFieldValue = z.infer<
   typeof zFloatPolymorphicInputFieldValue
@@ -264,7 +280,7 @@ export type StringCollectionInputFieldValue = z.infer<
 
 export const zStringPolymorphicInputFieldValue = zInputFieldValueBase.extend({
   type: z.literal('StringPolymorphic'),
-  value: z.union([z.string(), z.array(z.string())]).optional(),
+  value: z.string().optional(),
 });
 export type StringPolymorphicInputFieldValue = z.infer<
   typeof zStringPolymorphicInputFieldValue
@@ -286,7 +302,7 @@ export type BooleanCollectionInputFieldValue = z.infer<
 
 export const zBooleanPolymorphicInputFieldValue = zInputFieldValueBase.extend({
   type: z.literal('BooleanPolymorphic'),
-  value: z.union([z.boolean(), z.array(z.boolean())]).optional(),
+  value: z.boolean().optional(),
 });
 export type BooleanPolymorphicInputFieldValue = z.infer<
   typeof zBooleanPolymorphicInputFieldValue
@@ -402,8 +418,9 @@ export type IPAdapterModel = z.infer<typeof zIPAdapterModel>;
 export const zIPAdapterField = z.object({
   image: zImageField,
   ip_adapter_model: zIPAdapterModel,
-  image_encoder_model: z.string().trim().min(1),
   weight: z.number(),
+  begin_step_percent: z.number().optional(),
+  end_step_percent: z.number().optional(),
 });
 export type IPAdapterField = z.infer<typeof zIPAdapterField>;
 
@@ -413,6 +430,66 @@ export const zIPAdapterInputFieldValue = zInputFieldValueBase.extend({
 });
 export type IPAdapterInputFieldValue = z.infer<
   typeof zIPAdapterInputFieldValue
+>;
+
+export const zIPAdapterPolymorphicInputFieldValue = zInputFieldValueBase.extend(
+  {
+    type: z.literal('IPAdapterPolymorphic'),
+    value: z.union([zIPAdapterField, z.array(zIPAdapterField)]).optional(),
+  }
+);
+export type IPAdapterPolymorphicInputFieldValue = z.infer<
+  typeof zT2IAdapterPolymorphicInputFieldValue
+>;
+
+export const zIPAdapterCollectionInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('IPAdapterCollection'),
+  value: z.array(zIPAdapterField).optional(),
+});
+export type IPAdapterCollectionInputFieldValue = z.infer<
+  typeof zIPAdapterCollectionInputFieldValue
+>;
+
+export const zT2IAdapterModel = zModelIdentifier;
+export type T2IAdapterModel = z.infer<typeof zT2IAdapterModel>;
+
+export const zT2IAdapterField = z.object({
+  image: zImageField,
+  t2i_adapter_model: zT2IAdapterModel,
+  weight: z.union([z.number(), z.array(z.number())]).optional(),
+  begin_step_percent: z.number().optional(),
+  end_step_percent: z.number().optional(),
+  resize_mode: z
+    .enum(['just_resize', 'crop_resize', 'fill_resize', 'just_resize_simple'])
+    .optional(),
+});
+export type T2IAdapterField = z.infer<typeof zT2IAdapterField>;
+
+export const zT2IAdapterInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('T2IAdapterField'),
+  value: zT2IAdapterField.optional(),
+});
+export type T2IAdapterInputFieldValue = z.infer<
+  typeof zT2IAdapterInputFieldValue
+>;
+
+export const zT2IAdapterPolymorphicInputFieldValue =
+  zInputFieldValueBase.extend({
+    type: z.literal('T2IAdapterPolymorphic'),
+    value: z.union([zT2IAdapterField, z.array(zT2IAdapterField)]).optional(),
+  });
+export type T2IAdapterPolymorphicInputFieldValue = z.infer<
+  typeof zT2IAdapterPolymorphicInputFieldValue
+>;
+
+export const zT2IAdapterCollectionInputFieldValue = zInputFieldValueBase.extend(
+  {
+    type: z.literal('T2IAdapterCollection'),
+    value: z.array(zT2IAdapterField).optional(),
+  }
+);
+export type T2IAdapterCollectionInputFieldValue = z.infer<
+  typeof zT2IAdapterCollectionInputFieldValue
 >;
 
 export const zModelType = z.enum([
@@ -494,9 +571,15 @@ export const zImageInputFieldValue = zInputFieldValueBase.extend({
 });
 export type ImageInputFieldValue = z.infer<typeof zImageInputFieldValue>;
 
+export const zBoardInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('BoardField'),
+  value: zBoardField.optional(),
+});
+export type BoardInputFieldValue = z.infer<typeof zBoardInputFieldValue>;
+
 export const zImagePolymorphicInputFieldValue = zInputFieldValueBase.extend({
   type: z.literal('ImagePolymorphic'),
-  value: z.union([zImageField, z.array(zImageField)]).optional(),
+  value: zImageField.optional(),
 });
 export type ImagePolymorphicInputFieldValue = z.infer<
   typeof zImagePolymorphicInputFieldValue
@@ -575,6 +658,17 @@ export type IPAdapterModelInputFieldValue = z.infer<
   typeof zIPAdapterModelInputFieldValue
 >;
 
+export const zT2IAdapterModelField = zModelIdentifier;
+export type T2IAdapterModelField = z.infer<typeof zT2IAdapterModelField>;
+
+export const zT2IAdapterModelInputFieldValue = zInputFieldValueBase.extend({
+  type: z.literal('T2IAdapterModelField'),
+  value: zT2IAdapterModelField.optional(),
+});
+export type T2IAdapterModelInputFieldValue = z.infer<
+  typeof zT2IAdapterModelInputFieldValue
+>;
+
 export const zCollectionInputFieldValue = zInputFieldValueBase.extend({
   type: z.literal('Collection'),
   value: z.array(z.any()).optional(), // TODO: should this field ever have a value?
@@ -630,6 +724,7 @@ export type SchedulerInputFieldValue = z.infer<
 >;
 
 export const zInputFieldValue = z.discriminatedUnion('type', [
+  zBoardInputFieldValue,
   zBooleanCollectionInputFieldValue,
   zBooleanInputFieldValue,
   zBooleanPolymorphicInputFieldValue,
@@ -659,6 +754,8 @@ export const zInputFieldValue = z.discriminatedUnion('type', [
   zIntegerInputFieldValue,
   zIPAdapterInputFieldValue,
   zIPAdapterModelInputFieldValue,
+  zIPAdapterCollectionInputFieldValue,
+  zIPAdapterPolymorphicInputFieldValue,
   zLatentsInputFieldValue,
   zLatentsCollectionInputFieldValue,
   zLatentsPolymorphicInputFieldValue,
@@ -670,6 +767,10 @@ export const zInputFieldValue = z.discriminatedUnion('type', [
   zStringCollectionInputFieldValue,
   zStringPolymorphicInputFieldValue,
   zStringInputFieldValue,
+  zT2IAdapterInputFieldValue,
+  zT2IAdapterModelInputFieldValue,
+  zT2IAdapterCollectionInputFieldValue,
+  zT2IAdapterPolymorphicInputFieldValue,
   zUNetInputFieldValue,
   zVaeInputFieldValue,
   zVaeModelInputFieldValue,
@@ -770,6 +871,11 @@ export type BooleanPolymorphicInputFieldTemplate = Omit<
   type: 'BooleanPolymorphic';
 };
 
+export type BoardInputFieldTemplate = InputFieldTemplateBase & {
+  default: BoardField;
+  type: 'BoardField';
+};
+
 export type ImageInputFieldTemplate = InputFieldTemplateBase & {
   default: ImageField;
   type: 'ImageField';
@@ -866,6 +972,37 @@ export type IPAdapterInputFieldTemplate = InputFieldTemplateBase & {
   type: 'IPAdapterField';
 };
 
+export type IPAdapterCollectionInputFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'IPAdapterCollection';
+  item_default?: IPAdapterField;
+};
+
+export type IPAdapterPolymorphicInputFieldTemplate = Omit<
+  IPAdapterInputFieldTemplate,
+  'type'
+> & {
+  type: 'IPAdapterPolymorphic';
+};
+
+export type T2IAdapterInputFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'T2IAdapterField';
+};
+
+export type T2IAdapterCollectionInputFieldTemplate = InputFieldTemplateBase & {
+  default: undefined;
+  type: 'T2IAdapterCollection';
+  item_default?: T2IAdapterField;
+};
+
+export type T2IAdapterPolymorphicInputFieldTemplate = Omit<
+  T2IAdapterInputFieldTemplate,
+  'type'
+> & {
+  type: 'T2IAdapterPolymorphic';
+};
+
 export type EnumInputFieldTemplate = InputFieldTemplateBase & {
   default: string;
   type: 'enum';
@@ -906,6 +1043,11 @@ export type ControlNetModelInputFieldTemplate = InputFieldTemplateBase & {
 export type IPAdapterModelInputFieldTemplate = InputFieldTemplateBase & {
   default: string;
   type: 'IPAdapterModelField';
+};
+
+export type T2IAdapterModelInputFieldTemplate = InputFieldTemplateBase & {
+  default: string;
+  type: 'T2IAdapterModelField';
 };
 
 export type CollectionInputFieldTemplate = InputFieldTemplateBase & {
@@ -952,6 +1094,7 @@ export type WorkflowInputFieldTemplate = InputFieldTemplateBase & {
  * maximum length, pattern to match, etc).
  */
 export type InputFieldTemplate =
+  | BoardInputFieldTemplate
   | BooleanCollectionInputFieldTemplate
   | BooleanPolymorphicInputFieldTemplate
   | BooleanInputFieldTemplate
@@ -980,7 +1123,9 @@ export type InputFieldTemplate =
   | IntegerPolymorphicInputFieldTemplate
   | IntegerInputFieldTemplate
   | IPAdapterInputFieldTemplate
+  | IPAdapterCollectionInputFieldTemplate
   | IPAdapterModelInputFieldTemplate
+  | IPAdapterPolymorphicInputFieldTemplate
   | LatentsInputFieldTemplate
   | LatentsCollectionInputFieldTemplate
   | LatentsPolymorphicInputFieldTemplate
@@ -992,6 +1137,10 @@ export type InputFieldTemplate =
   | StringCollectionInputFieldTemplate
   | StringPolymorphicInputFieldTemplate
   | StringInputFieldTemplate
+  | T2IAdapterInputFieldTemplate
+  | T2IAdapterCollectionInputFieldTemplate
+  | T2IAdapterModelInputFieldTemplate
+  | T2IAdapterPolymorphicInputFieldTemplate
   | UNetInputFieldTemplate
   | VaeInputFieldTemplate
   | VaeModelInputFieldTemplate;
@@ -1118,6 +1267,18 @@ const zLoRAMetadataItem = z.object({
 
 export type LoRAMetadataItem = z.infer<typeof zLoRAMetadataItem>;
 
+const zControlNetMetadataItem = zControlField.deepPartial();
+
+export type ControlNetMetadataItem = z.infer<typeof zControlNetMetadataItem>;
+
+const zIPAdapterMetadataItem = zIPAdapterField.deepPartial();
+
+export type IPAdapterMetadataItem = z.infer<typeof zIPAdapterMetadataItem>;
+
+const zT2IAdapterMetadataItem = zT2IAdapterField.deepPartial();
+
+export type T2IAdapterMetadataItem = z.infer<typeof zT2IAdapterMetadataItem>;
+
 export const zCoreMetadata = z
   .object({
     app_version: z.string().nullish().catch(null),
@@ -1137,16 +1298,10 @@ export const zCoreMetadata = z
       .union([zMainModel.deepPartial(), zOnnxModel.deepPartial()])
       .nullish()
       .catch(null),
-    controlnets: z.array(zControlField.deepPartial()).nullish().catch(null),
-    loras: z
-      .array(
-        z.object({
-          lora: zLoRAModelField.deepPartial(),
-          weight: z.number(),
-        })
-      )
-      .nullish()
-      .catch(null),
+    controlnets: z.array(zControlNetMetadataItem).nullish().catch(null),
+    ipAdapters: z.array(zIPAdapterMetadataItem).nullish().catch(null),
+    t2iAdapters: z.array(zT2IAdapterMetadataItem).nullish().catch(null),
+    loras: z.array(zLoRAMetadataItem).nullish().catch(null),
     vae: zVaeModelField.nullish().catch(null),
     strength: z.number().nullish().catch(null),
     init_image: z.string().nullish().catch(null),
@@ -1199,6 +1354,7 @@ export const zInvocationNodeData = z.object({
   notes: z.string(),
   embedWorkflow: z.boolean(),
   isIntermediate: z.boolean(),
+  useCache: z.boolean().optional(),
   version: zSemVer.optional(),
 });
 

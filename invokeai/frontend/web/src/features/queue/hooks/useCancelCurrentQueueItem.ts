@@ -1,5 +1,6 @@
-import { useAppDispatch } from 'app/store/storeHooks';
+import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import { addToast } from 'features/system/store/systemSlice';
+import { isNil } from 'lodash-es';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,6 +9,7 @@ import {
 } from 'services/api/endpoints/queue';
 
 export const useCancelCurrentQueueItem = () => {
+  const isConnected = useAppSelector((state) => state.system.isConnected);
   const { data: queueStatus } = useGetQueueStatusQuery();
   const [trigger, { isLoading }] = useCancelQueueItemMutation();
   const dispatch = useAppDispatch();
@@ -38,5 +40,15 @@ export const useCancelCurrentQueueItem = () => {
     }
   }, [currentQueueItemId, dispatch, t, trigger]);
 
-  return { cancelQueueItem, isLoading, currentQueueItemId };
+  const isDisabled = useMemo(
+    () => !isConnected || isNil(currentQueueItemId),
+    [isConnected, currentQueueItemId]
+  );
+
+  return {
+    cancelQueueItem,
+    isLoading,
+    currentQueueItemId,
+    isDisabled,
+  };
 };

@@ -1,9 +1,8 @@
 import { UseToastOptions } from '@chakra-ui/react';
 import { PayloadAction, createSlice, isAnyOf } from '@reduxjs/toolkit';
 import { t } from 'i18next';
-import { get, startCase, truncate, upperFirst } from 'lodash-es';
+import { startCase } from 'lodash-es';
 import { LogLevelName } from 'roarr';
-import { isAnySessionRejected } from 'services/api/thunks/session';
 import {
   appSocketConnected,
   appSocketDisconnected,
@@ -20,10 +19,10 @@ import {
 } from 'services/events/actions';
 import { calculateStepPercentage } from '../util/calculateStepPercentage';
 import { makeToast } from '../util/makeToast';
-import { SystemState, LANGUAGES } from './types';
-import { zPydanticValidationError } from './zodSchemas';
+import { LANGUAGES, SystemState } from './types';
 
 export const initialSystemState: SystemState = {
+  isInitialized: false,
   isConnected: false,
   shouldConfirmOnDelete: true,
   enableImageDebugging: false,
@@ -35,6 +34,7 @@ export const initialSystemState: SystemState = {
   language: 'en',
   shouldUseNSFWChecker: false,
   shouldUseWatermarker: false,
+  shouldEnableInformationalPopovers: false,
   status: 'DISCONNECTED',
 };
 
@@ -74,6 +74,15 @@ export const systemSlice = createSlice({
     },
     shouldUseWatermarkerChanged(state, action: PayloadAction<boolean>) {
       state.shouldUseWatermarker = action.payload;
+    },
+    setShouldEnableInformationalPopovers(
+      state,
+      action: PayloadAction<boolean>
+    ) {
+      state.shouldEnableInformationalPopovers = action.payload;
+    },
+    isInitializedChanged(state, action: PayloadAction<boolean>) {
+      state.isInitialized = action.payload;
     },
   },
   extraReducers(builder) {
@@ -165,50 +174,6 @@ export const systemSlice = createSlice({
     // *** Matchers - must be after all cases ***
 
     /**
-     * Session Invoked - REJECTED
-     * Session Created - REJECTED
-     */
-    builder.addMatcher(isAnySessionRejected, (state, action) => {
-      let errorDescription = undefined;
-      const duration = 5000;
-
-      if (action.payload?.status === 422) {
-        const result = zPydanticValidationError.safeParse(action.payload);
-        if (result.success) {
-          result.data.error.detail.map((e) => {
-            state.toastQueue.push(
-              makeToast({
-                title: truncate(upperFirst(e.msg), { length: 128 }),
-                status: 'error',
-                description: truncate(
-                  `Path:
-                ${e.loc.join('.')}`,
-                  { length: 128 }
-                ),
-                duration,
-              })
-            );
-          });
-          return;
-        }
-      } else if (action.payload?.error) {
-        errorDescription = action.payload?.error;
-      }
-
-      state.toastQueue.push(
-        makeToast({
-          title: t('toast.serverError'),
-          status: 'error',
-          description: truncate(
-            get(errorDescription, 'detail', 'Unknown Error'),
-            { length: 128 }
-          ),
-          duration,
-        })
-      );
-    });
-
-    /**
      * Any server error
      */
     builder.addMatcher(isAnyServerError, (state, action) => {
@@ -234,6 +199,8 @@ export const {
   languageChanged,
   shouldUseNSFWCheckerChanged,
   shouldUseWatermarkerChanged,
+  setShouldEnableInformationalPopovers,
+  isInitializedChanged,
 } = systemSlice.actions;
 
 export default systemSlice.reducer;

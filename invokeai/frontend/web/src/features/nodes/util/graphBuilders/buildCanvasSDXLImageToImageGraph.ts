@@ -27,6 +27,7 @@ import {
   SEAMLESS,
 } from './constants';
 import { buildSDXLStylePrompts } from './helpers/craftSDXLStylePrompt';
+import { addT2IAdaptersToLinearGraph } from './addT2IAdapterToLinearGraph';
 
 /**
  * Builds the Canvas tab's Image to Image graph.
@@ -45,7 +46,6 @@ export const buildCanvasSDXLImageToImageGraph = (
     seed,
     steps,
     vaePrecision,
-    clipSkip,
     shouldUseCpuNoise,
     seamlessXAxis,
     seamlessYAxis,
@@ -339,7 +339,8 @@ export const buildCanvasSDXLImageToImageGraph = (
     vae: undefined, // option; set in addVAEToGraph
     controlnets: [], // populated in addControlNetToLinearGraph
     loras: [], // populated in addLoRAsToGraph
-    clip_skip: clipSkip,
+    ipAdapters: [], // populated in addIPAdapterToLinearGraph
+    t2iAdapters: [],
     strength,
     init_image: initialImage.image_name,
   };
@@ -385,6 +386,7 @@ export const buildCanvasSDXLImageToImageGraph = (
 
   // Add IP Adapter
   addIPAdapterToLinearGraph(state, graph, SDXL_DENOISE_LATENTS);
+  addT2IAdaptersToLinearGraph(state, graph, SDXL_DENOISE_LATENTS);
 
   // NSFW & watermark - must be last thing added to graph
   if (state.system.shouldUseNSFWChecker) {

@@ -2,6 +2,7 @@ import { Box, FormControl, useDisclosure } from '@chakra-ui/react';
 import { createSelector } from '@reduxjs/toolkit';
 import { stateSelector } from 'app/store/store';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
+import IAIInformationalPopover from 'common/components/IAIInformationalPopover/IAIInformationalPopover';
 import IAITextarea from 'common/components/IAITextarea';
 import AddEmbeddingButton from 'features/embedding/components/AddEmbeddingButton';
 import ParamEmbeddingPopover from 'features/embedding/components/ParamEmbeddingPopover';
@@ -109,17 +110,22 @@ const ParamPositiveConditioning = () => {
           onClose={onClose}
           onSelect={handleSelectEmbedding}
         >
-          <IAITextarea
-            id="prompt"
-            name="prompt"
-            ref={promptRef}
-            value={prompt}
-            placeholder={t('parameters.positivePromptPlaceholder')}
-            onChange={handleChangePrompt}
-            onKeyDown={handleKeyDown}
-            resize="vertical"
-            minH={32}
-          />
+          <IAIInformationalPopover
+            feature="paramPositiveConditioning"
+            placement="right"
+          >
+            <IAITextarea
+              id="prompt"
+              name="prompt"
+              ref={promptRef}
+              value={prompt}
+              placeholder={t('parameters.positivePromptPlaceholder')}
+              onChange={handleChangePrompt}
+              onKeyDown={handleKeyDown}
+              resize="vertical"
+              minH={32}
+            />
+          </IAIInformationalPopover>
         </ParamEmbeddingPopover>
       </FormControl>
       {!isOpen && isEmbeddingEnabled && (

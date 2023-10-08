@@ -1,7 +1,11 @@
 import { logger } from 'app/logging/logger';
 import { parseify } from 'common/util/serialize';
-import { controlNetImageProcessed } from 'features/controlNet/store/actions';
-import { controlNetProcessedImageChanged } from 'features/controlNet/store/controlNetSlice';
+import {
+  pendingControlImagesCleared,
+  controlAdapterImageChanged,
+  selectControlAdapterById,
+  controlAdapterProcessedImageChanged,
+} from 'features/controlAdapters/store/controlAdaptersSlice';
 import { SAVE_IMAGE } from 'features/nodes/util/graphBuilders/constants';
 import { addToast } from 'features/system/store/systemSlice';
 import { t } from 'i18next';
@@ -11,17 +15,23 @@ import { isImageOutput } from 'services/api/guards';
 import { Graph, ImageDTO } from 'services/api/types';
 import { socketInvocationComplete } from 'services/events/actions';
 import { startAppListening } from '..';
+import { controlAdapterImageProcessed } from 'features/controlAdapters/store/actions';
+import { isControlNetOrT2IAdapter } from 'features/controlAdapters/store/types';
 
 export const addControlNetImageProcessedListener = () => {
   startAppListening({
-    actionCreator: controlNetImageProcessed,
+    actionCreator: controlAdapterImageProcessed,
     effect: async (action, { dispatch, getState, take }) => {
       const log = logger('session');
-      const { controlNetId } = action.payload;
-      const controlNet = getState().controlNet.controlNets[controlNetId];
+      const { id } = action.payload;
+      const ca = selectControlAdapterById(getState().controlAdapters, id);
 
-      if (!controlNet?.controlImage) {
+      if (!ca?.controlImage || !isControlNetOrT2IAdapter(ca)) {
         log.error('Unable to process ControlNet image');
+        return;
+      }
+
+      if (ca.processorType === 'none' || ca.processorNode.type === 'none') {
         return;
       }
 
@@ -29,10 +39,10 @@ export const addControlNetImageProcessedListener = () => {
       // Also we need to grab the image.
       const graph: Graph = {
         nodes: {
-          [controlNet.processorNode.id]: {
-            ...controlNet.processorNode,
+          [ca.processorNode.id]: {
+            ...ca.processorNode,
             is_intermediate: true,
-            image: { image_name: controlNet.controlImage },
+            image: { image_name: ca.controlImage },
           },
           [SAVE_IMAGE]: {
             id: SAVE_IMAGE,
@@ -44,7 +54,7 @@ export const addControlNetImageProcessedListener = () => {
         edges: [
           {
             source: {
-              node_id: controlNet.processorNode.id,
+              node_id: ca.processorNode.id,
               field: 'image',
             },
             destination: {
@@ -99,14 +109,36 @@ export const addControlNetImageProcessedListener = () => {
 
           // Update the processed image in the store
           dispatch(
-            controlNetProcessedImageChanged({
-              controlNetId,
+            controlAdapterProcessedImageChanged({
+              id,
               processedControlImage: processedControlImage.image_name,
             })
           );
         }
-      } catch {
+      } catch (error) {
         log.error({ graph: parseify(graph) }, t('queue.graphFailedToQueue'));
+
+        // handle usage-related errors
+        if (error instanceof Object) {
+          if ('data' in error && 'status' in error) {
+            if (error.status === 403) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const detail = (error.data as any)?.detail || 'Unknown Error';
+              dispatch(
+                addToast({
+                  title: t('queue.graphFailedToQueue'),
+                  status: 'error',
+                  description: detail,
+                  duration: 15000,
+                })
+              );
+              dispatch(pendingControlImagesCleared());
+              dispatch(controlAdapterImageChanged({ id, controlImage: null }));
+              return;
+            }
+          }
+        }
+
         dispatch(
           addToast({
             title: t('queue.graphFailedToQueue'),

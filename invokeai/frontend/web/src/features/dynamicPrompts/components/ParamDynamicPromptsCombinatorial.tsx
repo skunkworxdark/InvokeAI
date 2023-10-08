@@ -4,8 +4,8 @@ import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
 import IAISwitch from 'common/components/IAISwitch';
 import { memo, useCallback } from 'react';
-import { combinatorialToggled } from '../store/dynamicPromptsSlice';
 import { useTranslation } from 'react-i18next';
+import { combinatorialToggled } from '../store/dynamicPromptsSlice';
 
 const selector = createSelector(
   stateSelector,
