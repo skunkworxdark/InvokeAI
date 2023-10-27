@@ -2,7 +2,6 @@
 
 import json
 import random
-import re
 from typing import Literal, Optional, Union
 
 from pydantic import BaseModel
