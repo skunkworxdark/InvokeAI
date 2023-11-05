@@ -9,7 +9,7 @@ import curses
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import npyscreen
 from npyscreen import widget
@@ -274,9 +274,10 @@ class mergeModelsForm(npyscreen.FormMultiPageAction):
         else:
             interp = self.interpolations[self.merge_method.value[0]]
 
+        bases = ["sd-1", "sd-2", "sdxl"]
         args = dict(
             model_names=models,
-            base_model=tuple(BaseModelType)[self.base_select.value[0]],
+            base_model=BaseModelType(bases[self.base_select.value[0]]),
             alpha=self.alpha.value,
             interp=interp,
             force=self.force.value,
