@@ -33,7 +33,7 @@ class PromptsToFileInvocationOutput(BaseInvocationOutput):
     title="Prompts To File",
     tags=["prompt", "file"],
     category="prompt",
-    version="1.0.0",
+    version="1.0.1",
 )
 class PromptsToFileInvocation(BaseInvocation):
     """Save prompts to a text file"""
@@ -51,7 +51,7 @@ class PromptsToFileInvocation(BaseInvocation):
     )
 
     def invoke(self, context: InvocationContext) -> PromptsToFileInvocationOutput:
-        with open(self.file_path, "a" if self.append else "w") as f:
+        with open(self.file_path, "a" if self.append else "w", encoding="utf-8") as f:
             if isinstance(self.prompts, list):
                 for line in self.prompts:
                     f.write(line + "\n")
@@ -285,7 +285,9 @@ class PromptStrengthsCombineInvocation(BaseInvocation):
             if len(string) > 0:
                 strings.append(f'"{string}"')
                 numbers.append(number)
-        return StringOutput(value=f'({",".join(strings)}){self.combine_type}({",".join(map(str, numbers))})')
+        return StringOutput(
+            value=f'({",".join(strings)}){self.combine_type}({",".join(map(str, numbers))})'
+        )
 
 
 @invocation(
@@ -309,7 +311,8 @@ class CSVToIndexStringInvocation(BaseInvocation):
         description="Random Index?",
     )
     index: int = InputField(
-        default=0, description="zero based index into CSV array (note index will wrap around if out of bounds)"
+        default=0,
+        description="zero based index into CSV array (note index will wrap around if out of bounds)",
     )
 
     def invoke(self, context: InvocationContext) -> StringOutput:
