@@ -53,6 +53,7 @@ class ModelProbe(object):
         "StableDiffusionXLPipeline": ModelType.Main,
         "StableDiffusionXLImg2ImgPipeline": ModelType.Main,
         "StableDiffusionXLInpaintPipeline": ModelType.Main,
+        "LatentConsistencyModelPipeline": ModelType.Main,
         "AutoencoderKL": ModelType.Vae,
         "AutoencoderTiny": ModelType.Vae,
         "ControlNetModel": ModelType.ControlNet,
@@ -224,7 +225,7 @@ class ModelProbe(object):
         with SilenceWarnings():
             if model_path.suffix.endswith((".ckpt", ".pt", ".bin")):
                 cls._scan_model(model_path, model_path)
-                return torch.load(model_path)
+                return torch.load(model_path, map_location="cpu")
             else:
                 return safetensors.torch.load_file(model_path)
 
@@ -372,12 +373,16 @@ class TextualInversionCheckpointProbe(CheckpointProbeBase):
             token_dim = list(checkpoint["string_to_param"].values())[0].shape[-1]
         elif "emb_params" in checkpoint:
             token_dim = checkpoint["emb_params"].shape[-1]
+        elif "clip_g" in checkpoint:
+            token_dim = checkpoint["clip_g"].shape[-1]
         else:
             token_dim = list(checkpoint.values())[0].shape[0]
         if token_dim == 768:
             return BaseModelType.StableDiffusion1
         elif token_dim == 1024:
             return BaseModelType.StableDiffusion2
+        elif token_dim == 1280:
+            return BaseModelType.StableDiffusionXL
         else:
             return None
 
