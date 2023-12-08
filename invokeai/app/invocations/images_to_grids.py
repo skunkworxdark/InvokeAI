@@ -47,30 +47,58 @@ from invokeai.app.services.image_records.image_records_common import ImageCatego
 
 _downsampling_factor = 8
 
-
-def is_all_numeric(array):
-    pattern = r"^-?\d+(\.\d+)?$"
-    return all(re.match(pattern, item) for item in array)
-
-
-def sort_array(array):
-    return sorted(array, key=float) if is_all_numeric(array) else sorted(array)
-
-
-def is_all_numeric2(array, i):
-    pattern = r"^-?\d+(\.\d+)?$"
-    return all(re.match(pattern, item[i]) for item in array)
+# numeric pattern
+# - ^[-+]? - optional -+ at a start
+# - \s* - any whitespace before number
+# - (\d+(\.\d*)?|\.\d+) - number.(number)optional|.number
+# - \s* - any whitespace after the number
+# - %?\s*$ - optional % and any whitespace after
+num_pattern = re.compile(r"^[-+]?\s*(\d+(\.\d*)?|\.\d+)\s*%?\s*$")
 
 
-def sort_array2(array):
+def is_numeric(s: str) -> bool:
+    """checks if a string is numeric ignoring leading + trailing % and any whitespace"""
+
+    return bool(num_pattern.match(s))
+
+
+def prep_num(s: str) -> str:
+    """removes any leading + or trailing % or whitespace"""
+
+    return "".join(s.split()).replace("%", "").replace("+", "")
+
+
+def is_all_numeric(array: list[str]) -> bool:
+    """returns if all elements in an array are numeric or not"""
+
+    return all(is_numeric(item) for item in array)
+
+
+def sort_array(array: list[str]) -> list[str]:
+    """sort array of str but if they are all numeric then it will sort the as numbers"""
+
+    return sorted(array, key=lambda x: float(prep_num(x))) if is_all_numeric(array) else sorted(array)
+
+
+def is_all_numeric2(array: list[tuple[str, str, str]], i: int) -> bool:
+    """returns if all elements in a 2D array index i are numeric or not"""
+
+    return all(is_numeric(item[i]) for item in array)
+
+
+def sort_array2(array: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    """sort 2D array of str but if they are all numeric then it will sort the as numbers
+    specifically it will sort them index 1,0 because it is expecting x,y.
+    This is to ensure it is in the right order for XY grid processing"""
+
     isNum0 = is_all_numeric2(array, 0)
     isNum1 = is_all_numeric2(array, 1)
 
     return sorted(
         array,
         key=lambda x: (
-            (float(x[1]) if isNum1 else x[1]),
-            (float(x[0]) if isNum0 else x[0]),
+            (float(prep_num(x[1])) if isNum1 else x[1]),
+            (float(prep_num(x[0])) if isNum0 else x[0]),
         ),
     )
 
@@ -222,6 +250,26 @@ class CSVToStringsInvocation(BaseInvocation):
 
 
 @invocation(
+    "percent_to_float",
+    title="Percent to Float",
+    tags=["float", "percentage"],
+    category="string",
+    version="1.0.0",
+)
+class PercentToFloatInvocation(BaseInvocation):
+    """Converts a string to a float and divides it by 100."""
+
+    text: str = InputField(
+        title="Text",
+        description="Input text",
+    )
+
+    def invoke(self, context) -> FloatOutput:
+        output = float(prep_num(self.text)) / 100
+        return FloatOutput(value=output)
+
+
+@invocation(
     "string_to_float",
     title="String To Float",
     tags=["float", "string"],
@@ -234,7 +282,7 @@ class StringToFloatInvocation(BaseInvocation):
     float_string: str = InputField(description="string containing a float to convert")
 
     def invoke(self, context: InvocationContext) -> FloatOutput:
-        return FloatOutput(value=float(self.float_string))
+        return FloatOutput(value=float(prep_num(self.float_string)))
 
 
 @invocation(
@@ -250,7 +298,7 @@ class StringToIntInvocation(BaseInvocation):
     int_string: str = InputField(description="string containing an integer to convert")
 
     def invoke(self, context: InvocationContext) -> IntegerOutput:
-        return IntegerOutput(value=int(self.int_string))
+        return IntegerOutput(value=int(prep_num(self.int_string)))
 
 
 @invocation(
@@ -376,7 +424,13 @@ class XYImageExpandInvocation(BaseInvocation):
         image_name = str(lst[2]) if len(lst) > 2 else ""
         image = context.services.images.get_pil_image(image_name)
 
-        return XYImageExpandOutput(x_item=x_item, y_item=y_item, image=ImageField(image_name=image_name), width=image.width, height=image.height)
+        return XYImageExpandOutput(
+            x_item=x_item,
+            y_item=y_item,
+            image=ImageField(image_name=image_name),
+            width=image.width,
+            height=image.height,
+        )
 
 
 @invocation(
@@ -1023,14 +1077,14 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithWorkflow, WithMetadata):
         y_coords = sort_array({item[1] for item in sorted_array})
         rows = len(y_coords)
 
-        #use the last tile position and the tiles image size to calculate the output size
+        # use the last tile position and the tiles image size to calculate the output size
         output_width = images[-1].width + int(x_coords[-1])
         output_height = images[-1].height + int(y_coords[-1])
 
         output_image = Image.new("RGBA", (output_width, output_height))
         row_image = Image.new("RGBA", (output_width, images[0].height))
 
-        #create linear gradient masks
+        # create linear gradient masks
         gy = Image.linear_gradient("L")
         gx = gy.rotate(90)
 
@@ -1044,7 +1098,9 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithWorkflow, WithMetadata):
             next_x += images[ix].width - overlap_x
             if overlap_x > 0:
                 # blend X
-                x_img1 = images[ix - 1].crop((images[ix - 1].width - overlap_x, 0, images[ix - 1].width, images[ix - 1].height))
+                x_img1 = images[ix - 1].crop(
+                    (images[ix - 1].width - overlap_x, 0, images[ix - 1].width, images[ix - 1].height)
+                )
                 x_img2 = images[ix].crop((0, 0, overlap_x, images[ix].height))
                 if self.blend_mode == "Linear":
                     x_img1.paste(x_img2, (0, 0), gx.resize((overlap_x, images[ix].height)))
@@ -1069,7 +1125,14 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithWorkflow, WithMetadata):
                 next_x += images[iy_off + ix].width - overlap_x
                 if overlap_x > 0:
                     # blend X overlap
-                    x_img1 = images[(iy_off + ix) - 1].crop((images[(iy_off + ix) - 1].width - overlap_x, 0, images[(iy_off + ix) - 1].width, images[(iy_off + ix) - 1].height))
+                    x_img1 = images[(iy_off + ix) - 1].crop(
+                        (
+                            images[(iy_off + ix) - 1].width - overlap_x,
+                            0,
+                            images[(iy_off + ix) - 1].width,
+                            images[(iy_off + ix) - 1].height,
+                        )
+                    )
                     x_img2 = images[iy_off + ix].crop((0, 0, overlap_x, images[iy_off + ix].height))
                     if self.blend_mode == "Linear":
                         x_img1.paste(x_img2, (0, 0), gx.resize((overlap_x, images[iy_off + ix].height)))
