@@ -8,6 +8,7 @@ from itertools import product
 from pathlib import Path
 from typing import Literal, Optional, Union
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
@@ -23,7 +24,6 @@ from invokeai.app.invocations.baseinvocation import (
     UIComponent,
     UIType,
     WithMetadata,
-    WithWorkflow,
     invocation,
     invocation_output,
 )
@@ -114,7 +114,20 @@ def shift(arr, num, fill_value=255.0):
     return result
 
 
-def get_seam_line(i1: Image, i2: Image, rotate: bool, gutter: int) -> Image:
+BLEND_MODES = Literal[
+    "Linear",
+    "seam-grad",
+    "seam-sobel1",
+    "seam-sobel3",
+    "seam-sobel5",
+    "seam-sobel7",
+    "seam-scharr",
+]
+
+
+def get_seam_line(
+    i1: Image, i2: Image, rotate: bool, gutter: int, search_size: int = 1, blend_mode: BLEND_MODES = "seam-grad"
+) -> Image:
     ia1 = np.array(i1.convert("RGB")) / 255.0
     if i1.mode != "L":
         # ia1 = np.sum(ia1, -1) / 3.0
@@ -138,7 +151,37 @@ def get_seam_line(i1: Image, i2: Image, rotate: bool, gutter: int) -> Image:
     # print("SHAPE:")
     # print(ia.shape)
 
-    energy = np.abs(np.gradient(ia, axis=0)) + np.abs(np.gradient(ia, axis=1))
+    if blend_mode == "seam-sobel1":
+        # Use Sobel operator for energy calculation
+        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=1)
+        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=1)
+        energy = np.hypot(gx, gy)
+    elif blend_mode == "seam-sobel3":
+        # Use Sobel operator for energy calculation
+        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=3)
+        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=3)
+        energy = np.hypot(gx, gy)
+    elif blend_mode == "seam-sobel5":
+        # Use Sobel operator for energy calculation
+        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=5)
+        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=5)
+        energy = np.hypot(gx, gy)
+    elif blend_mode == "seam-sobel7":
+        # Use Sobel operator for energy calculation
+        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=7)
+        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=7)
+        energy = np.hypot(gx, gy)
+    elif blend_mode == "seam-scharr":
+        # Use Sobel operator for energy calculation
+        gx = cv2.Scharr(ia, cv2.CV_64F, 1, 0)
+        gy = cv2.Scharr(ia, cv2.CV_64F, 0, 1)
+        energy = np.hypot(gx, gy)
+    elif blend_mode == "seam-grad":
+        # Calc the energy in the difference
+        energy = np.abs(np.gradient(ia, axis=0)) + np.abs(np.gradient(ia, axis=1))
+
+    ie = Image.fromarray((energy * 255.0).astype("uint8"))
+    print(f"energy{ie.size}")
 
     res = np.copy(energy)
 
@@ -154,8 +197,8 @@ def get_seam_line(i1: Image, i2: Image, rotate: bool, gutter: int) -> Image:
 
     for ypos in range(max_y - 2, -1, -1):
         lowest_pos = lowest_energy_line[ypos + 1]
-        lpos = lowest_pos - 1
-        rpos = lowest_pos + 1
+        lpos = lowest_pos - search_size
+        rpos = lowest_pos + search_size
         lpos = np.clip(lpos, min_x, max_x - 1)
         rpos = np.clip(rpos, min_x, max_x - 1)
         lowest_energy_line[ypos] = np.argmin(energy[ypos, lpos : rpos + 1]) + lpos
@@ -174,8 +217,10 @@ def get_seam_line(i1: Image, i2: Image, rotate: bool, gutter: int) -> Image:
     return image
 
 
-def seam_mask(i1: Image, i2: Image, rotate: bool, blur_size: int) -> Image:
-    seam = get_seam_line(i1, i2, rotate, blur_size + 1)
+def seam_mask(
+    i1: Image, i2: Image, rotate: bool, blur_size: int, search_size: int = 1, blend_mode: BLEND_MODES = "seam-grad"
+) -> Image:
+    seam = get_seam_line(i1, i2, rotate, blur_size + 1, search_size=search_size, blend_mode=blend_mode)
     #    blur = ImageFilter.GaussianBlur(float(blur_size))
     blur = ImageFilter.BoxBlur(float(blur_size))
     mask = seam.filter(blur)
@@ -194,10 +239,9 @@ class FloatsToStringsInvocation(BaseInvocation):
     """Converts a float or collections of floats to a collection of strings"""
 
     floats: Union[float, list[float]] = InputField(
-        default_factory=list,
+        default=[],
         description="float or collection of floats",
         input=Input.Connection,
-        ui_type=UIType.FloatCollection,
     )
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
@@ -219,10 +263,9 @@ class IntsToStringsInvocation(BaseInvocation):
     """Converts an integer or collection of integers to a collection of strings"""
 
     ints: Union[int, list[int]] = InputField(
-        default_factory=list,
+        default=[],
         description="int or collection of ints",
         input=Input.Connection,
-        ui_type=UIType.IntegerCollection,
     )
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
@@ -335,8 +378,8 @@ class XYProductOutput(BaseInvocationOutput):
 class XYProductInvocation(BaseInvocation):
     """Takes X and Y string collections and outputs a XY Item collection with every combination of X and Y"""
 
-    x_collection: list[str] = InputField(default_factory=list, description="The X collection")
-    y_collection: list[str] = InputField(default_factory=list, description="The Y collection")
+    x_collection: list[str] = InputField(default=[], description="The X collection")
+    y_collection: list[str] = InputField(default=[], description="The Y collection")
 
     def invoke(self, context: InvocationContext) -> XYProductOutput:
         combinations = list(product(self.x_collection, self.y_collection))
@@ -458,12 +501,12 @@ class XYImageCollectInvocation(BaseInvocation):
     category="grid",
     version="1.0.0",
 )
-class XYImagesToGridInvocation(BaseInvocation, WithWorkflow, WithMetadata):
+class XYImagesToGridInvocation(BaseInvocation, WithMetadata):
     """Takes Collection of XYImages (json of (x_item,y_item,image_name)array), sorts the images into X,Y and creates a grid image with labels"""
 
     board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     xyimages: list[str] = InputField(
-        default_factory=list,
+        default=[],
         description="The XYImage item Collection",
     )
     scale_factor: Optional[float] = InputField(
@@ -570,7 +613,7 @@ class XYImagesToGridInvocation(BaseInvocation, WithWorkflow, WithMetadata):
             session_id=context.graph_execution_state_id,
             is_intermediate=self.is_intermediate,
             metadata=self.metadata,
-            workflow=self.workflow,
+            workflow=context.workflow,
         )
 
         return ImageOutput(
@@ -587,14 +630,13 @@ class XYImagesToGridInvocation(BaseInvocation, WithWorkflow, WithMetadata):
     category="grid",
     version="1.0.0",
 )
-class ImagesToGridsInvocation(BaseInvocation, WithWorkflow, WithMetadata):
+class ImagesToGridsInvocation(BaseInvocation, WithMetadata):
     """Takes a collection of images and outputs a collection of generated grid images"""
 
     board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     images: list[ImageField] = InputField(
-        default_factory=list,
+        default=[],
         description="The image collection to turn into grids",
-        ui_type=UIType.ImageCollection,
     )
     columns: int = InputField(
         default=1,
@@ -673,7 +715,7 @@ class ImagesToGridsInvocation(BaseInvocation, WithWorkflow, WithMetadata):
                     session_id=context.graph_execution_state_id,
                     is_intermediate=self.is_intermediate,
                     metadata=self.metadata,
-                    workflow=self.workflow,
+                    workflow=context.workflow,
                 )
                 grid_images.append(ImageField(image_name=image_dto.image_name))
                 output_image = Image.new(
@@ -693,7 +735,7 @@ class ImagesToGridsInvocation(BaseInvocation, WithWorkflow, WithMetadata):
                 session_id=context.graph_execution_state_id,
                 is_intermediate=self.is_intermediate,
                 metadata=self.metadata,
-                workflow=self.workflow,
+                workflow=context.workflow,
             )
             grid_images.append(ImageField(image_name=image_dto.image_name))
 
@@ -707,7 +749,7 @@ class ImagesToGridsInvocation(BaseInvocation, WithWorkflow, WithMetadata):
     category="grid",
     version="1.0.0",
 )
-class ImageToXYImageCollectionInvocation(BaseInvocation, WithWorkflow, WithMetadata):
+class ImageToXYImageCollectionInvocation(BaseInvocation, WithMetadata):
     """Cuts an image up into columns and rows and outputs XYImage Collection"""
 
     # Inputs
@@ -736,7 +778,7 @@ class ImageToXYImageCollectionInvocation(BaseInvocation, WithWorkflow, WithMetad
                     session_id=context.graph_execution_state_id,
                     is_intermediate=self.is_intermediate,
                     metadata=self.metadata,
-                    workflow=self.workflow,
+                    workflow=context.workflow,
                 )
                 xyimages.append(json.dumps([str(x), str(y), image_dto.image_name]))
 
@@ -757,7 +799,7 @@ class TilesOutput(BaseInvocationOutput):
     category="tile",
     version="1.1.0",
 )
-class DefaultXYTileGenerator(BaseInvocation, WithWorkflow):
+class DefaultXYTileGenerator(BaseInvocation):
     """Cuts up an image into overlapping tiles and outputs a string representation of the tiles to use"""
 
     # Inputs
@@ -840,7 +882,7 @@ class DefaultXYTileGenerator(BaseInvocation, WithWorkflow):
     category="tile",
     version="1.1.0",
 )
-class MinimumOverlapXYTileGenerator(BaseInvocation, WithWorkflow):
+class MinimumOverlapXYTileGenerator(BaseInvocation):
     """Cuts up an image into overlapping tiles and outputs a string representation of the tiles to use, taking the
     input overlap as a minimum"""
 
@@ -915,7 +957,7 @@ class MinimumOverlapXYTileGenerator(BaseInvocation, WithWorkflow):
     category="tile",
     version="1.1.0",
 )
-class EvenSplitXYTileGenerator(BaseInvocation, WithWorkflow):
+class EvenSplitXYTileGenerator(BaseInvocation):
     """Cuts up an image into a number of even sized tiles with the overlap been a percentage of the tile size and outputs a string representation of the tiles to use"""
 
     # Inputs
@@ -1003,11 +1045,11 @@ class ImageToXYImageTilesOutput(BaseInvocationOutput):
     category="tile",
     version="1.2.0",
 )
-class ImageToXYImageTilesInvocation(BaseInvocation, WithWorkflow):
+class ImageToXYImageTilesInvocation(BaseInvocation):
     """Cuts an image up into overlapping tiles and outputs as an XYImage Collection (x,y is the final position of the tile)"""
 
     # Inputs
-    tiles: list[str] = InputField(default_factory=list, description="The list of tiles")
+    tiles: list[str] = InputField(default=[], description="The list of tiles")
 
     def invoke(self, context: InvocationContext) -> ImageToXYImageTilesOutput:
         tiles = self.tiles.copy()
@@ -1029,17 +1071,11 @@ class ImageToXYImageTilesInvocation(BaseInvocation, WithWorkflow):
                 node_id=self.id,
                 session_id=context.graph_execution_state_id,
                 is_intermediate=self.is_intermediate,
-                workflow=self.workflow,
+                workflow=context.workflow,
             )
             xyimages.append(json.dumps([str(x1), str(y1), image_dto.image_name]))
 
         return ImageToXYImageTilesOutput(xyImages=xyimages)
-
-
-BLEND_MODES = Literal[
-    "Linear",
-    "Smart",
-]
 
 
 @invocation(
@@ -1049,16 +1085,16 @@ BLEND_MODES = Literal[
     category="tile",
     version="1.1.0",
 )
-class XYImageTilesToImageInvocation(BaseInvocation, WithWorkflow, WithMetadata):
+class XYImageTilesToImageInvocation(BaseInvocation, WithMetadata):
     """Takes a collection of XYImage Tiles (json of array(x_pos,y_pos,image_name)) and create an image from overlapping tiles"""
 
     board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     xyimages: list[str] = InputField(
-        default_factory=list,
+        default=[],
         description="The xyImage Collection",
     )
     blend_mode: BLEND_MODES = InputField(
-        default="Smart",
+        default="seam-grad",
         description="Seam blending type Linear or Smart",
         input=Input.Direct,
     )
@@ -1066,6 +1102,12 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithWorkflow, WithMetadata):
         default=16,
         ge=0,
         description="Size of the blur & Gutter to use with Smart Seam",
+    )
+    search_size: int = InputField(
+        default=1,
+        ge=1,
+        description="Seam search size in pixels 1-4 are sensible sizes",
+        input=Input.Direct,
     )
 
     def invoke(self, context: InvocationContext) -> ImageOutput:
@@ -1105,7 +1147,9 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithWorkflow, WithMetadata):
                 if self.blend_mode == "Linear":
                     x_img1.paste(x_img2, (0, 0), gx.resize((overlap_x, images[ix].height)))
                 else:
-                    mask = seam_mask(x_img1, x_img2, False, self.blur_size)
+                    mask = seam_mask(
+                        x_img1, x_img2, False, self.blur_size, search_size=self.search_size, blend_mode=self.blend_mode
+                    )
                     x_img1.paste(x_img2, (0, 0), mask)
                 row_image.paste(x_img1, (x, 0))
         output_image.paste(row_image, (0, 0))
@@ -1167,7 +1211,7 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithWorkflow, WithMetadata):
             session_id=context.graph_execution_state_id,
             is_intermediate=self.is_intermediate,
             metadata=self.metadata,
-            workflow=self.workflow,
+            workflow=context.workflow,
         )
 
         return ImageOutput(
