@@ -11,6 +11,7 @@ from typing import Literal, Optional, Union
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL.Image import Image as PILImageType
 
 import invokeai.assets.fonts as font_assets
 from invokeai.app.invocations.baseinvocation import (
@@ -22,7 +23,6 @@ from invokeai.app.invocations.baseinvocation import (
     InvocationContext,
     OutputField,
     UIComponent,
-    UIType,
     WithMetadata,
     invocation,
     invocation_output,
@@ -48,22 +48,23 @@ from invokeai.app.services.image_records.image_records_common import ImageCatego
 _downsampling_factor = 8
 
 # numeric pattern
-# - ^[-+]? - optional -+ at a start
+# - ^s* - start of line then any whitespace
+# - [-+]? - optional -+ at a start
 # - \s* - any whitespace before number
 # - (\d+(\.\d*)?|\.\d+) - number.(number)optional|.number
 # - \s* - any whitespace after the number
 # - %?\s*$ - optional % and any whitespace after
-num_pattern = re.compile(r"^[-+]?\s*(\d+(\.\d*)?|\.\d+)\s*%?\s*$")
+num_pattern = re.compile(r"^\s*[-+]?\s*(\d+(\.\d*)?|\.\d+)\s*%?\s*$")
 
 
 def is_numeric(s: str) -> bool:
-    """checks if a string is numeric ignoring leading + trailing % and any whitespace"""
+    """checks if a string is numeric ignoring leading + trailing % and any whitespace."""
 
     return bool(num_pattern.match(s))
 
 
 def prep_num(s: str) -> str:
-    """removes any leading + or trailing % or whitespace"""
+    """removes all + or % or whitespace"""
 
     return "".join(s.split()).replace("%", "").replace("+", "")
 
@@ -87,7 +88,7 @@ def is_all_numeric2(array: list[tuple[str, str, str]], i: int) -> bool:
 
 
 def sort_array2(array: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
-    """sort 2D array of str but if they are all numeric then it will sort the as numbers
+    """sort 2D array of str but if they are all numeric then it will sort them as numeric
     specifically it will sort them index 1,0 because it is expecting x,y.
     This is to ensure it is in the right order for XY grid processing"""
 
@@ -103,7 +104,7 @@ def sort_array2(array: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]
     )
 
 
-def shift(arr, num, fill_value=255.0):
+def shift(arr: np.ndarray, num: int, fill_value: float = 255.0):
     result = np.full_like(arr, fill_value)
     if num > 0:
         result[num:] = arr[:-num]
@@ -126,17 +127,22 @@ BLEND_MODES = Literal[
 
 
 def get_seam_line(
-    i1: Image, i2: Image, rotate: bool, gutter: int, search_size: int = 1, blend_mode: BLEND_MODES = "seam-grad"
-) -> Image:
+    i1: PILImageType,
+    i2: PILImageType,
+    rotate: bool,
+    gutter: int,
+    search_size: int = 1,
+    blend_mode: BLEND_MODES = "seam-grad",
+) -> PILImageType:
     ia1 = np.array(i1.convert("RGB")) / 255.0
+    # BT.601 luminance conversion
+    lc = np.array([0.2989, 0.5870, 0.1140])
     if i1.mode != "L":
-        # ia1 = np.sum(ia1, -1) / 3.0
-        ia1 = np.dot(ia1, [0.2989, 0.5870, 0.1140])
+        ia1 = np.tensordot(ia1, lc, axes=1)
 
     ia2 = np.array(i2.convert("RGB")) / 255.0
     if i2.mode != "L":
-        # ia2 = np.sum(ia2, -1) / 3.0
-        ia2 = np.dot(ia2, [0.2989, 0.5870, 0.1140])
+        ia2 = np.tensordot(ia2, lc, axes=1)
 
     ia = ia2 - ia1
 
@@ -148,37 +154,37 @@ def get_seam_line(
     max_x -= gutter
     min_x = gutter
 
-    # print("SHAPE:")
-    # print(ia.shape)
-
     if blend_mode == "seam-sobel1":
         # Use Sobel operator for energy calculation
-        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=1)
-        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=1)
+        # gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=1)
+        gx = cv2.Sobel(ia, -1, 1, 0, ksize=1)
+        gy = cv2.Sobel(ia, -1, 0, 1, ksize=1)
         energy = np.hypot(gx, gy)
     elif blend_mode == "seam-sobel3":
         # Use Sobel operator for energy calculation
-        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=3)
-        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=3)
+        gx = cv2.Sobel(ia, -1, 1, 0, ksize=3)
+        gy = cv2.Sobel(ia, -1, 0, 1, ksize=3)
         energy = np.hypot(gx, gy)
     elif blend_mode == "seam-sobel5":
         # Use Sobel operator for energy calculation
-        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=5)
-        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=5)
+        gx = cv2.Sobel(ia, -1, 1, 0, ksize=5)
+        gy = cv2.Sobel(ia, -1, 0, 1, ksize=5)
         energy = np.hypot(gx, gy)
     elif blend_mode == "seam-sobel7":
         # Use Sobel operator for energy calculation
-        gx = cv2.Sobel(ia, cv2.CV_64F, 1, 0, ksize=7)
-        gy = cv2.Sobel(ia, cv2.CV_64F, 0, 1, ksize=7)
+        gx = cv2.Sobel(ia, -1, 1, 0, ksize=7)
+        gy = cv2.Sobel(ia, -1, 0, 1, ksize=7)
         energy = np.hypot(gx, gy)
     elif blend_mode == "seam-scharr":
         # Use Sobel operator for energy calculation
-        gx = cv2.Scharr(ia, cv2.CV_64F, 1, 0)
-        gy = cv2.Scharr(ia, cv2.CV_64F, 0, 1)
+        gx = cv2.Scharr(ia, -1, 1, 0)
+        gy = cv2.Scharr(ia, -1, 0, 1)
         energy = np.hypot(gx, gy)
     elif blend_mode == "seam-grad":
         # Calc the energy in the difference
         energy = np.abs(np.gradient(ia, axis=0)) + np.abs(np.gradient(ia, axis=1))
+    else:
+        raise ValueError(f"Unsupported blend mode: '{blend_mode}'.")
 
     ie = Image.fromarray((energy * 255.0).astype("uint8"))
     print(f"energy{ie.size}")
@@ -218,8 +224,13 @@ def get_seam_line(
 
 
 def seam_mask(
-    i1: Image, i2: Image, rotate: bool, blur_size: int, search_size: int = 1, blend_mode: BLEND_MODES = "seam-grad"
-) -> Image:
+    i1: PILImageType,
+    i2: PILImageType,
+    rotate: bool,
+    blur_size: int,
+    search_size: int = 1,
+    blend_mode: BLEND_MODES = "seam-grad",
+) -> PILImageType:
     seam = get_seam_line(i1, i2, rotate, blur_size + 1, search_size=search_size, blend_mode=blend_mode)
     #    blur = ImageFilter.GaussianBlur(float(blur_size))
     blur = ImageFilter.BoxBlur(float(blur_size))
@@ -289,7 +300,23 @@ class CSVToStringsInvocation(BaseInvocation):
     csv: str = InputField(description="csv string")
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
-        return StringCollectionOutput(collection=self.csv.split(",").rstrip())
+        return StringCollectionOutput(collection=[x.rstrip() for x in self.csv.split(",")])
+
+
+@invocation(
+    "string_to_float",
+    title="String To Float",
+    tags=["float", "string"],
+    category="util",
+    version="1.0.0",
+)
+class StringToFloatInvocation(BaseInvocation):
+    """Converts a string to a float"""
+
+    float_string: str = InputField(description="string containing a float to convert")
+
+    def invoke(self, context: InvocationContext) -> FloatOutput:
+        return FloatOutput(value=float(prep_num(self.float_string)))
 
 
 @invocation(
@@ -310,22 +337,6 @@ class PercentToFloatInvocation(BaseInvocation):
     def invoke(self, context) -> FloatOutput:
         output = float(prep_num(self.text)) / 100
         return FloatOutput(value=output)
-
-
-@invocation(
-    "string_to_float",
-    title="String To Float",
-    tags=["float", "string"],
-    category="util",
-    version="1.0.0",
-)
-class StringToFloatInvocation(BaseInvocation):
-    """Converts a string to a float"""
-
-    float_string: str = InputField(description="string containing a float to convert")
-
-    def invoke(self, context: InvocationContext) -> FloatOutput:
-        return FloatOutput(value=float(prep_num(self.float_string)))
 
 
 @invocation(
@@ -499,7 +510,7 @@ class XYImageCollectInvocation(BaseInvocation):
     title="XYImages To Grid",
     tags=["xy", "grid", "image"],
     category="grid",
-    version="1.0.0",
+    version="1.1.0",
 )
 class XYImagesToGridInvocation(BaseInvocation, WithMetadata):
     """Takes Collection of XYImages (json of (x_item,y_item,image_name)array), sorts the images into X,Y and creates a grid image with labels"""
@@ -509,7 +520,7 @@ class XYImagesToGridInvocation(BaseInvocation, WithMetadata):
         default=[],
         description="The XYImage item Collection",
     )
-    scale_factor: Optional[float] = InputField(
+    scale_factor: float = InputField(
         default=1.0,
         gt=0,
         description="The factor by which to scale the images",
@@ -532,8 +543,8 @@ class XYImagesToGridInvocation(BaseInvocation, WithMetadata):
         new_array = [json.loads(s) for s in self.xyimages]
         sorted_array = sort_array2(new_array)
         images = [context.services.images.get_pil_image(item[2]) for item in sorted_array]
-        x_labels = sort_array({item[0] for item in sorted_array})
-        y_labels = sort_array({item[1] for item in sorted_array})
+        x_labels = sort_array(list({item[0] for item in sorted_array}))
+        y_labels = sort_array(list({item[1] for item in sorted_array}))
         columns = len(x_labels)
         rows = len(y_labels)
         column_width = int(max([image.width for image in images]) * self.scale_factor)
@@ -653,7 +664,7 @@ class ImagesToGridsInvocation(BaseInvocation, WithMetadata):
         ge=0,
         description="The space to be added between images",
     )
-    scale_factor: Optional[float] = InputField(
+    scale_factor: float = InputField(
         default=1.0,
         gt=0,
         description="The factor by which to scale the images",
@@ -1114,9 +1125,9 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithMetadata):
         new_array = [json.loads(s) for s in self.xyimages]
         sorted_array = sort_array2(new_array)
         images = [context.services.images.get_pil_image(item[2]) for item in sorted_array]
-        x_coords = sort_array({item[0] for item in sorted_array})
+        x_coords = sort_array(list({item[0] for item in sorted_array}))
         columns = len(x_coords)
-        y_coords = sort_array({item[1] for item in sorted_array})
+        y_coords = sort_array(list({item[1] for item in sorted_array}))
         rows = len(y_coords)
 
         # use the last tile position and the tiles image size to calculate the output size
@@ -1181,13 +1192,20 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithMetadata):
                     if self.blend_mode == "Linear":
                         x_img1.paste(x_img2, (0, 0), gx.resize((overlap_x, images[iy_off + ix].height)))
                     else:
-                        mask = seam_mask(x_img1, x_img2, False, self.blur_size)
+                        mask = seam_mask(
+                            x_img1,
+                            x_img2,
+                            False,
+                            self.blur_size,
+                            search_size=self.search_size,
+                            blend_mode=self.blend_mode,
+                        )
                         x_img1.paste(x_img2, (0, 0), mask)
                     row_image_new.paste(x_img1, (x, 0))
             y = int(y_coords[iy])
             output_image.paste(row_image_new, (0, y))
             overlap_y = next_y - y
-            next_y += images[iy_off + ix].height - overlap_y
+            next_y += images[iy_off].height - overlap_y
             if overlap_y > 0:
                 # blend y overlap
                 y_img1 = row_image.crop((0, row_image.height - overlap_y, output_width, row_image.height))
@@ -1195,7 +1213,9 @@ class XYImageTilesToImageInvocation(BaseInvocation, WithMetadata):
                 if self.blend_mode == "Linear":
                     y_img1.paste(y_img2, (0, 0), gy.resize((output_width, overlap_y)))
                 else:
-                    mask = seam_mask(y_img1, y_img2, True, self.blur_size)
+                    mask = seam_mask(
+                        y_img1, y_img2, True, self.blur_size, search_size=self.search_size, blend_mode=self.blend_mode
+                    )
                     y_img1.paste(y_img2, (0, 0), mask)
                 row_image_new.paste(y_img1, (0, 0))
                 output_image.paste(row_image_new, (0, y))

@@ -132,7 +132,7 @@ def seam_blend(ia1: np.ndarray, ia2: np.ndarray, blend_amount: int, x_seam: bool
 
     # blur the seam mask if required
     if blend_amount > 0:
-        mask = cv2.blur(mask, (blend_amount, blend_amount))
+        mask = cv2.blur(mask, (blend_amount, blend_amount)).astype(np.float64)
 
     # for visual debugging
     # from PIL import Image
