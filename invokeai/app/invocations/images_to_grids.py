@@ -1,5 +1,7 @@
 # 2023 skunkworxdark (https://github.com/skunkworxdark)
 
+import csv
+import io
 import json
 import math
 import re
@@ -104,7 +106,7 @@ def sort_array2(array: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]
     )
 
 
-def shift(arr: np.ndarray, num: int, fill_value: float = 255.0):
+def shift(arr: np.ndarray, num: int, fill_value: float = 255.0) -> np.ndarray:
     result = np.full_like(arr, fill_value)
     if num > 0:
         result[num:] = arr[:-num]
@@ -144,6 +146,7 @@ def get_seam_line(
     if i2.mode != "L":
         ia2 = np.tensordot(ia2, lc, axes=1)
 
+    # calc difference between images
     ia = ia2 - ia1
 
     if rotate:
@@ -239,6 +242,20 @@ def seam_mask(
     return mask
 
 
+def csv_line_to_list(csv_string: str) -> list[str]:
+    """Converts the first line of a CSV into a list of strings"""
+
+    reader = csv.reader(io.StringIO(csv_string))
+    return next(reader)
+
+
+def csv_to_list(csv_string: str) -> list[list[str]]:
+    """Converts a CSV into a list of list of strings"""
+
+    reader = csv.reader(io.StringIO(csv_string))
+    return [list(row) for row in reader]
+
+
 @invocation(
     "floats_to_strings",
     title="Floats To Strings",
@@ -268,7 +285,7 @@ class FloatsToStringsInvocation(BaseInvocation):
     title="Ints To Strings",
     tags=["int", "string"],
     category="util",
-    version="1.0.0",
+    version="1.1.0",
 )
 class IntsToStringsInvocation(BaseInvocation):
     """Converts an integer or collection of integers to a collection of strings"""
@@ -292,15 +309,15 @@ class IntsToStringsInvocation(BaseInvocation):
     title="CSV To Strings",
     tags=["xy", "grid", "csv"],
     category="util",
-    version="1.0.0",
+    version="1.1.0",
 )
 class CSVToStringsInvocation(BaseInvocation):
     """Converts a CSV string to a collection of strings"""
 
-    csv: str = InputField(description="csv string")
+    csv_string: str = InputField(description="csv string")
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
-        return StringCollectionOutput(collection=[x.rstrip() for x in self.csv.split(",")])
+        return StringCollectionOutput(collection=csv_line_to_list(self.csv_string))
 
 
 @invocation(
@@ -308,7 +325,7 @@ class CSVToStringsInvocation(BaseInvocation):
     title="String To Float",
     tags=["float", "string"],
     category="util",
-    version="1.0.0",
+    version="1.0.1",
 )
 class StringToFloatInvocation(BaseInvocation):
     """Converts a string to a float"""
@@ -321,7 +338,7 @@ class StringToFloatInvocation(BaseInvocation):
 
 @invocation(
     "percent_to_float",
-    title="Percent to Float",
+    title="Percent To Float",
     tags=["float", "percentage"],
     category="string",
     version="1.0.0",
@@ -344,7 +361,7 @@ class PercentToFloatInvocation(BaseInvocation):
     title="String To Int",
     tags=["int"],
     category="util",
-    version="1.0.0",
+    version="1.0.1",
 )
 class StringToIntInvocation(BaseInvocation):
     """Converts a string to an integer"""
@@ -384,7 +401,7 @@ class XYProductOutput(BaseInvocationOutput):
     title="XY Product",
     tags=["xy", "grid", "collect"],
     category="grid",
-    version="1.0.0",
+    version="1.1.0",
 )
 class XYProductInvocation(BaseInvocation):
     """Takes X and Y string collections and outputs a XY Item collection with every combination of X and Y"""
@@ -404,7 +421,7 @@ class XYProductInvocation(BaseInvocation):
     title="XY Product CSV",
     tags=["xy", "grid", "csv"],
     category="grid",
-    version="1.0.0",
+    version="1.0.1",
 )
 class XYProductCSVInvocation(BaseInvocation):
     """Converts X and Y CSV strings to an XY Item collection with every combination of X and Y"""
@@ -413,8 +430,8 @@ class XYProductCSVInvocation(BaseInvocation):
     y: str = InputField(description="y string", ui_component=UIComponent.Textarea)
 
     def invoke(self, context: InvocationContext) -> XYProductOutput:
-        x_list = self.x.split(",")
-        y_list = self.y.split(",")
+        x_list = csv_line_to_list(self.x)
+        y_list = csv_line_to_list(self.y)
         combinations = list(product(x_list, y_list))
         json_combinations = [json.dumps(list(comb)) for comb in combinations]
 
@@ -510,7 +527,7 @@ class XYImageCollectInvocation(BaseInvocation):
     title="XYImages To Grid",
     tags=["xy", "grid", "image"],
     category="grid",
-    version="1.1.0",
+    version="1.2.0",
 )
 class XYImagesToGridInvocation(BaseInvocation, WithMetadata):
     """Takes Collection of XYImages (json of (x_item,y_item,image_name)array), sorts the images into X,Y and creates a grid image with labels"""
@@ -639,7 +656,7 @@ class XYImagesToGridInvocation(BaseInvocation, WithMetadata):
     title="Images To Grids",
     tags=["grid", "image"],
     category="grid",
-    version="1.0.0",
+    version="1.2.0",
 )
 class ImagesToGridsInvocation(BaseInvocation, WithMetadata):
     """Takes a collection of images and outputs a collection of generated grid images"""
@@ -758,7 +775,7 @@ class ImagesToGridsInvocation(BaseInvocation, WithMetadata):
     title="Image To XYImage Collection",
     tags=["xy", "grid", "image"],
     category="grid",
-    version="1.0.0",
+    version="1.1.0",
 )
 class ImageToXYImageCollectionInvocation(BaseInvocation, WithMetadata):
     """Cuts an image up into columns and rows and outputs XYImage Collection"""
@@ -1054,7 +1071,7 @@ class ImageToXYImageTilesOutput(BaseInvocationOutput):
     title="Image To XYImage Tiles",
     tags=["xy", "tile", "image"],
     category="tile",
-    version="1.2.0",
+    version="1.3.0",
 )
 class ImageToXYImageTilesInvocation(BaseInvocation):
     """Cuts an image up into overlapping tiles and outputs as an XYImage Collection (x,y is the final position of the tile)"""
@@ -1094,7 +1111,7 @@ class ImageToXYImageTilesInvocation(BaseInvocation):
     title="XYImage Tiles To Image",
     tags=["xy", "tile", "image"],
     category="tile",
-    version="1.1.0",
+    version="1.2.0",
 )
 class XYImageTilesToImageInvocation(BaseInvocation, WithMetadata):
     """Takes a collection of XYImage Tiles (json of array(x_pos,y_pos,image_name)) and create an image from overlapping tiles"""
