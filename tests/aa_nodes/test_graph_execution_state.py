@@ -26,10 +26,9 @@ from invokeai.app.services.shared.graph import (
     Graph,
     GraphExecutionState,
     IterateInvocation,
-    LibraryGraph,
 )
-from invokeai.app.services.shared.sqlite.sqlite_database import SqliteDatabase
 from invokeai.backend.util.logging import InvokeAILogger
+from tests.fixtures.sqlite_database import create_mock_sqlite_database
 
 from .test_invoker import create_edge
 
@@ -49,7 +48,8 @@ def simple_graph():
 @pytest.fixture
 def mock_services() -> InvocationServices:
     configuration = InvokeAIAppConfig(use_memory_db=True, node_cache_size=0)
-    db = SqliteDatabase(configuration, InvokeAILogger.get_logger())
+    logger = InvokeAILogger.get_logger()
+    db = create_mock_sqlite_database(configuration, logger)
     # NOTE: none of these are actually called by the test invocations
     graph_execution_manager = SqliteItemStorage[GraphExecutionState](db=db, table_name="graph_executions")
     return InvocationServices(
@@ -60,7 +60,6 @@ def mock_services() -> InvocationServices:
         configuration=configuration,
         events=TestEventService(),
         graph_execution_manager=graph_execution_manager,
-        graph_library=SqliteItemStorage[LibraryGraph](db=db, table_name="graphs"),
         image_files=None,  # type: ignore
         image_records=None,  # type: ignore
         images=None,  # type: ignore
@@ -69,6 +68,7 @@ def mock_services() -> InvocationServices:
         logger=logging,  # type: ignore
         model_manager=None,  # type: ignore
         model_records=None,  # type: ignore
+        download_queue=None,  # type: ignore
         model_install=None,  # type: ignore
         names=None,  # type: ignore
         performance_statistics=InvocationStatsService(),

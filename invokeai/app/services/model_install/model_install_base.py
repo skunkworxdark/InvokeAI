@@ -5,14 +5,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from fastapi import Body
 from pydantic import BaseModel, Field, field_validator
 from pydantic.networks import AnyHttpUrl
 from typing_extensions import Annotated
 
 from invokeai.app.services.config import InvokeAIAppConfig
 from invokeai.app.services.events import EventServiceBase
-from invokeai.app.services.invoker import Invoker
 from invokeai.app.services.model_records import ModelRecordServiceBase
 from invokeai.backend.model_manager import AnyModelConfig
 
@@ -112,17 +110,7 @@ class URLModelSource(StringLikeSource):
         return str(self.url)
 
 
-# Body() is being applied here rather than Field() because otherwise FastAPI will
-# refuse to generate a schema. Relevant links:
-#
-# "Model Manager Refactor Phase 1 - SQL-based config storage
-#        https://github.com/invoke-ai/InvokeAI/pull/5039#discussion_r1389752119 (comment)
-# Param: xyz can only be a request body, using Body() when using discriminated unions
-#        https://github.com/tiangolo/fastapi/discussions/9761
-# Body parameter cannot be a pydantic union anymore sinve v0.95
-#       https://github.com/tiangolo/fastapi/discussions/9287
-
-ModelSource = Annotated[Union[LocalModelSource, HFModelSource, URLModelSource], Body(discriminator="type")]
+ModelSource = Annotated[Union[LocalModelSource, HFModelSource, URLModelSource], Field(discriminator="type")]
 
 
 class ModelInstallJob(BaseModel):
@@ -168,12 +156,12 @@ class ModelInstallServiceBase(ABC):
         :param event_bus: InvokeAI event bus for reporting events to.
         """
 
-    def start(self, invoker: Invoker) -> None:
-        """Call at InvokeAI startup time."""
-        self.sync_to_config()
+    @abstractmethod
+    def start(self, *args: Any, **kwarg: Any) -> None:
+        """Start the installer service."""
 
     @abstractmethod
-    def stop(self) -> None:
+    def stop(self, *args: Any, **kwarg: Any) -> None:
         """Stop the model install service. After this the objection can be safely deleted."""
 
     @property
