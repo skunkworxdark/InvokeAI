@@ -30,22 +30,14 @@ writes to the system log is stored in InvocationServices.performance_statistics.
 
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
-from typing import Dict
+from pathlib import Path
 
 from invokeai.app.invocations.baseinvocation import BaseInvocation
-from invokeai.backend.model_management.model_cache import CacheStats
-
-from .invocation_stats_common import NodeLog
+from invokeai.app.services.invocation_stats.invocation_stats_common import InvocationStatsSummary
 
 
 class InvocationStatsServiceBase(ABC):
     "Abstract base class for recording node memory/time performance statistics"
-
-    # {graph_id => NodeLog}
-    _stats: Dict[str, NodeLog]
-    _cache_stats: Dict[str, CacheStats]
-    ram_used: float
-    ram_changed: float
 
     @abstractmethod
     def __init__(self):
@@ -71,51 +63,36 @@ class InvocationStatsServiceBase(ABC):
     @abstractmethod
     def reset_stats(self, graph_execution_state_id: str):
         """
-        Reset all statistics for the indicated graph
-        :param graph_execution_state_id
+        Reset all statistics for the indicated graph.
+        :param graph_execution_state_id: The id of the session whose stats to reset.
+        :raises GESStatsNotFoundError: if the graph isn't tracked in the stats.
         """
         pass
 
     @abstractmethod
-    def reset_all_stats(self):
-        """Zero all statistics"""
-        pass
-
-    @abstractmethod
-    def update_invocation_stats(
-        self,
-        graph_id: str,
-        invocation_type: str,
-        time_used: float,
-        vram_used: float,
-    ):
-        """
-        Add timing information on execution of a node. Usually
-        used internally.
-        :param graph_id: ID of the graph that is currently executing
-        :param invocation_type: String literal type of the node
-        :param time_used: Time used by node's exection (sec)
-        :param vram_used: Maximum VRAM used during exection (GB)
-        """
-        pass
-
-    @abstractmethod
-    def log_stats(self):
+    def log_stats(self, graph_execution_state_id: str):
         """
         Write out the accumulated statistics to the log or somewhere else.
+        :param graph_execution_state_id: The id of the session whose stats to log.
+        :raises GESStatsNotFoundError: if the graph isn't tracked in the stats.
         """
         pass
 
     @abstractmethod
-    def update_mem_stats(
-        self,
-        ram_used: float,
-        ram_changed: float,
-    ):
+    def get_stats(self, graph_execution_state_id: str) -> InvocationStatsSummary:
         """
-        Update the collector with RAM memory usage info.
+        Gets the accumulated statistics for the indicated graph.
+        :param graph_execution_state_id: The id of the session whose stats to get.
+        :raises GESStatsNotFoundError: if the graph isn't tracked in the stats.
+        """
+        pass
 
-        :param ram_used: How much RAM is currently in use.
-        :param ram_changed: How much RAM changed since last generation.
+    @abstractmethod
+    def dump_stats(self, graph_execution_state_id: str, output_path: Path) -> None:
+        """
+        Write out the accumulated statistics to the indicated path as JSON.
+        :param graph_execution_state_id: The id of the session whose stats to dump.
+        :param output_path: The file to write the stats to.
+        :raises GESStatsNotFoundError: if the graph isn't tracked in the stats.
         """
         pass

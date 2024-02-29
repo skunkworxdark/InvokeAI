@@ -1,6 +1,9 @@
+import { $openAPISchemaUrl } from 'app/store/nanostores/openAPISchemaUrl';
+import type { OpenAPIV3_1 } from 'openapi-types';
+import type { paths } from 'services/api/schema';
+import type { AppConfig, AppDependencyVersions, AppVersion } from 'services/api/types';
+
 import { api } from '..';
-import { paths } from '../schema';
-import { AppConfig, AppVersion } from '../types';
 
 export const appInfoApi = api.injectEndpoints({
   endpoints: (build) => ({
@@ -9,16 +12,21 @@ export const appInfoApi = api.injectEndpoints({
         url: `app/version`,
         method: 'GET',
       }),
-      providesTags: ['AppVersion'],
-      keepUnusedDataFor: 86400000, // 1 day
+      providesTags: ['FetchOnReconnect'],
+    }),
+    getAppDeps: build.query<AppDependencyVersions, void>({
+      query: () => ({
+        url: `app/app_deps`,
+        method: 'GET',
+      }),
+      providesTags: ['FetchOnReconnect'],
     }),
     getAppConfig: build.query<AppConfig, void>({
       query: () => ({
         url: `app/config`,
         method: 'GET',
       }),
-      providesTags: ['AppConfig'],
-      keepUnusedDataFor: 86400000, // 1 day
+      providesTags: ['FetchOnReconnect'],
     }),
     getInvocationCacheStatus: build.query<
       paths['/api/v1/app/invocation_cache/status']['get']['responses']['200']['content']['application/json'],
@@ -28,7 +36,7 @@ export const appInfoApi = api.injectEndpoints({
         url: `app/invocation_cache/status`,
         method: 'GET',
       }),
-      providesTags: ['InvocationCacheStatus'],
+      providesTags: ['InvocationCacheStatus', 'FetchOnReconnect'],
     }),
     clearInvocationCache: build.mutation<void, void>({
       query: () => ({
@@ -51,14 +59,25 @@ export const appInfoApi = api.injectEndpoints({
       }),
       invalidatesTags: ['InvocationCacheStatus'],
     }),
+    getOpenAPISchema: build.query<OpenAPIV3_1.Document, void>({
+      query: () => {
+        const openAPISchemaUrl = $openAPISchemaUrl.get();
+        const url = openAPISchemaUrl ? openAPISchemaUrl : `${window.location.href.replace(/\/$/, '')}/openapi.json`;
+        return url;
+      },
+      providesTags: ['Schema'],
+    }),
   }),
 });
 
 export const {
   useGetAppVersionQuery,
+  useGetAppDepsQuery,
   useGetAppConfigQuery,
   useClearInvocationCacheMutation,
   useDisableInvocationCacheMutation,
   useEnableInvocationCacheMutation,
   useGetInvocationCacheStatusQuery,
+  useGetOpenAPISchemaQuery,
+  useLazyGetOpenAPISchemaQuery,
 } = appInfoApi;

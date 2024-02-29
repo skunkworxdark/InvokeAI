@@ -1,22 +1,17 @@
 import { logger } from 'app/logging/logger';
-import { setBoundingBoxDimensions } from 'features/canvas/store/canvasSlice';
 import {
   controlAdapterIsEnabledChanged,
   selectControlAdapterAll,
 } from 'features/controlAdapters/store/controlAdaptersSlice';
 import { loraRemoved } from 'features/lora/store/loraSlice';
 import { modelSelected } from 'features/parameters/store/actions';
-import {
-  modelChanged,
-  setHeight,
-  setWidth,
-  vaeSelected,
-} from 'features/parameters/store/generationSlice';
-import { zMainOrOnnxModel } from 'features/parameters/types/parameterSchemas';
+import { modelChanged, vaeSelected } from 'features/parameters/store/generationSlice';
+import { zParameterModel } from 'features/parameters/types/parameterSchemas';
 import { addToast } from 'features/system/store/systemSlice';
 import { makeToast } from 'features/system/util/makeToast';
 import { t } from 'i18next';
 import { forEach } from 'lodash-es';
+
 import { startAppListening } from '..';
 
 export const addModelSelectedListener = () => {
@@ -26,27 +21,25 @@ export const addModelSelectedListener = () => {
       const log = logger('models');
 
       const state = getState();
-      const result = zMainOrOnnxModel.safeParse(action.payload);
+      const result = zParameterModel.safeParse(action.payload);
 
       if (!result.success) {
-        log.error(
-          { error: result.error.format() },
-          'Failed to parse main model'
-        );
+        log.error({ error: result.error.format() }, 'Failed to parse main model');
         return;
       }
 
       const newModel = result.data;
 
-      const { base_model } = newModel;
+      const newBaseModel = newModel.base_model;
+      const didBaseModelChange = state.generation.model?.base_model !== newBaseModel;
 
-      if (state.generation.model?.base_model !== base_model) {
+      if (didBaseModelChange) {
         // we may need to reset some incompatible submodels
         let modelsCleared = 0;
 
         // handle incompatible loras
         forEach(state.lora.loras, (lora, id) => {
-          if (lora.base_model !== base_model) {
+          if (lora.base_model !== newBaseModel) {
             dispatch(loraRemoved(id));
             modelsCleared += 1;
           }
@@ -54,17 +47,15 @@ export const addModelSelectedListener = () => {
 
         // handle incompatible vae
         const { vae } = state.generation;
-        if (vae && vae.base_model !== base_model) {
+        if (vae && vae.base_model !== newBaseModel) {
           dispatch(vaeSelected(null));
           modelsCleared += 1;
         }
 
         // handle incompatible controlnets
         selectControlAdapterAll(state.controlAdapters).forEach((ca) => {
-          if (ca.model?.base_model !== base_model) {
-            dispatch(
-              controlAdapterIsEnabledChanged({ id: ca.id, isEnabled: false })
-            );
+          if (ca.model?.base_model !== newBaseModel) {
+            dispatch(controlAdapterIsEnabledChanged({ id: ca.id, isEnabled: false }));
             modelsCleared += 1;
           }
         });
@@ -83,23 +74,7 @@ export const addModelSelectedListener = () => {
         }
       }
 
-      // Update Width / Height / Bounding Box Dimensions on Model Change
-      if (
-        state.generation.model?.base_model !== newModel.base_model &&
-        state.ui.shouldAutoChangeDimensions
-      ) {
-        if (['sdxl', 'sdxl-refiner'].includes(newModel.base_model)) {
-          dispatch(setWidth(1024));
-          dispatch(setHeight(1024));
-          dispatch(setBoundingBoxDimensions({ width: 1024, height: 1024 }));
-        } else {
-          dispatch(setWidth(512));
-          dispatch(setHeight(512));
-          dispatch(setBoundingBoxDimensions({ width: 512, height: 512 }));
-        }
-      }
-
-      dispatch(modelChanged(newModel));
+      dispatch(modelChanged(newModel, state.generation.model));
     },
   });
 };

@@ -3,6 +3,7 @@ import { initialImageChanged } from 'features/parameters/store/generationSlice';
 import { addToast } from 'features/system/store/systemSlice';
 import { makeToast } from 'features/system/util/makeToast';
 import { t } from 'i18next';
+
 import { startAppListening } from '..';
 
 export const addInitialImageSelectedListener = () => {
@@ -10,11 +11,7 @@ export const addInitialImageSelectedListener = () => {
     actionCreator: initialImageSelected,
     effect: (action, { dispatch }) => {
       if (!action.payload) {
-        dispatch(
-          addToast(
-            makeToast({ title: t('toast.imageNotLoadedDesc'), status: 'error' })
-          )
-        );
+        dispatch(addToast(makeToast({ title: t('toast.imageNotLoadedDesc'), status: 'error' })));
         return;
       }
 

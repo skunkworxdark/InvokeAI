@@ -6,17 +6,12 @@ import {
   controlAdapterImageChanged,
   controlAdapterIsEnabledChanged,
 } from 'features/controlAdapters/store/controlAdaptersSlice';
-import {
-  TypesafeDraggableData,
-  TypesafeDroppableData,
-} from 'features/dnd/types';
+import type { TypesafeDraggableData, TypesafeDroppableData } from 'features/dnd/types';
 import { imageSelected } from 'features/gallery/store/gallerySlice';
-import {
-  fieldImageValueChanged,
-  workflowExposedFieldAdded,
-} from 'features/nodes/store/nodesSlice';
-import { initialImageChanged } from 'features/parameters/store/generationSlice';
+import { fieldImageValueChanged } from 'features/nodes/store/nodesSlice';
+import { initialImageChanged, selectOptimalDimension } from 'features/parameters/store/generationSlice';
 import { imagesApi } from 'services/api/endpoints/images';
+
 import { startAppListening } from '../';
 
 export const dndDropped = createAction<{
@@ -27,37 +22,18 @@ export const dndDropped = createAction<{
 export const addImageDroppedListener = () => {
   startAppListening({
     actionCreator: dndDropped,
-    effect: async (action, { dispatch }) => {
+    effect: async (action, { dispatch, getState }) => {
       const log = logger('dnd');
       const { activeData, overData } = action.payload;
 
       if (activeData.payloadType === 'IMAGE_DTO') {
         log.debug({ activeData, overData }, 'Image dropped');
-      } else if (activeData.payloadType === 'IMAGE_DTOS') {
-        log.debug(
-          { activeData, overData },
-          `Images (${activeData.payload.imageDTOs.length}) dropped`
-        );
+      } else if (activeData.payloadType === 'GALLERY_SELECTION') {
+        log.debug({ activeData, overData }, `Images (${getState().gallery.selection.length}) dropped`);
       } else if (activeData.payloadType === 'NODE_FIELD') {
-        log.debug(
-          { activeData: parseify(activeData), overData: parseify(overData) },
-          'Node field dropped'
-        );
+        log.debug({ activeData: parseify(activeData), overData: parseify(overData) }, 'Node field dropped');
       } else {
         log.debug({ activeData, overData }, `Unknown payload dropped`);
-      }
-
-      if (
-        overData.actionType === 'ADD_FIELD_TO_LINEAR' &&
-        activeData.payloadType === 'NODE_FIELD'
-      ) {
-        const { nodeId, field } = activeData.payload;
-        dispatch(
-          workflowExposedFieldAdded({
-            nodeId,
-            fieldName: field.name,
-          })
-        );
       }
 
       /**
@@ -116,7 +92,7 @@ export const addImageDroppedListener = () => {
         activeData.payloadType === 'IMAGE_DTO' &&
         activeData.payload.imageDTO
       ) {
-        dispatch(setInitialCanvasImage(activeData.payload.imageDTO));
+        dispatch(setInitialCanvasImage(activeData.payload.imageDTO, selectOptimalDimension(getState())));
         return;
       }
 
@@ -198,12 +174,8 @@ export const addImageDroppedListener = () => {
       /**
        * Multiple images dropped on user board
        */
-      if (
-        overData.actionType === 'ADD_TO_BOARD' &&
-        activeData.payloadType === 'IMAGE_DTOS' &&
-        activeData.payload.imageDTOs
-      ) {
-        const { imageDTOs } = activeData.payload;
+      if (overData.actionType === 'ADD_TO_BOARD' && activeData.payloadType === 'GALLERY_SELECTION') {
+        const imageDTOs = getState().gallery.selection;
         const { boardId } = overData.context;
         dispatch(
           imagesApi.endpoints.addImagesToBoard.initiate({
@@ -217,12 +189,8 @@ export const addImageDroppedListener = () => {
       /**
        * Multiple images dropped on 'none' board
        */
-      if (
-        overData.actionType === 'REMOVE_FROM_BOARD' &&
-        activeData.payloadType === 'IMAGE_DTOS' &&
-        activeData.payload.imageDTOs
-      ) {
-        const { imageDTOs } = activeData.payload;
+      if (overData.actionType === 'REMOVE_FROM_BOARD' && activeData.payloadType === 'GALLERY_SELECTION') {
+        const imageDTOs = getState().gallery.selection;
         dispatch(
           imagesApi.endpoints.removeImagesFromBoard.initiate({
             imageDTOs,

@@ -1,32 +1,32 @@
-import { PayloadAction, createSlice } from '@reduxjs/toolkit';
-import {
-  NegativeStylePromptSDXLParam,
-  PositiveStylePromptSDXLParam,
-  SDXLRefinerModelParam,
-  SchedulerParam,
+import type { PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
+import type { PersistConfig, RootState } from 'app/store/store';
+import type {
+  ParameterNegativeStylePromptSDXL,
+  ParameterPositiveStylePromptSDXL,
+  ParameterScheduler,
+  ParameterSDXLRefinerModel,
 } from 'features/parameters/types/parameterSchemas';
 
 type SDXLState = {
-  positiveStylePrompt: PositiveStylePromptSDXLParam;
-  negativeStylePrompt: NegativeStylePromptSDXLParam;
+  _version: 1;
+  positiveStylePrompt: ParameterPositiveStylePromptSDXL;
+  negativeStylePrompt: ParameterNegativeStylePromptSDXL;
   shouldConcatSDXLStylePrompt: boolean;
-  shouldUseSDXLRefiner: boolean;
-  sdxlImg2ImgDenoisingStrength: number;
-  refinerModel: SDXLRefinerModelParam | null;
+  refinerModel: ParameterSDXLRefinerModel | null;
   refinerSteps: number;
   refinerCFGScale: number;
-  refinerScheduler: SchedulerParam;
+  refinerScheduler: ParameterScheduler;
   refinerPositiveAestheticScore: number;
   refinerNegativeAestheticScore: number;
   refinerStart: number;
 };
 
 export const initialSDXLState: SDXLState = {
+  _version: 1,
   positiveStylePrompt: '',
   negativeStylePrompt: '',
   shouldConcatSDXLStylePrompt: true,
-  shouldUseSDXLRefiner: false,
-  sdxlImg2ImgDenoisingStrength: 0.7,
   refinerModel: null,
   refinerSteps: 20,
   refinerCFGScale: 7.5,
@@ -36,7 +36,7 @@ export const initialSDXLState: SDXLState = {
   refinerStart: 0.8,
 };
 
-const sdxlSlice = createSlice({
+export const sdxlSlice = createSlice({
   name: 'sdxl',
   initialState: initialSDXLState,
   reducers: {
@@ -49,16 +49,7 @@ const sdxlSlice = createSlice({
     setShouldConcatSDXLStylePrompt: (state, action: PayloadAction<boolean>) => {
       state.shouldConcatSDXLStylePrompt = action.payload;
     },
-    setShouldUseSDXLRefiner: (state, action: PayloadAction<boolean>) => {
-      state.shouldUseSDXLRefiner = action.payload;
-    },
-    setSDXLImg2ImgDenoisingStrength: (state, action: PayloadAction<number>) => {
-      state.sdxlImg2ImgDenoisingStrength = action.payload;
-    },
-    refinerModelChanged: (
-      state,
-      action: PayloadAction<SDXLRefinerModelParam | null>
-    ) => {
+    refinerModelChanged: (state, action: PayloadAction<ParameterSDXLRefinerModel | null>) => {
       state.refinerModel = action.payload;
     },
     setRefinerSteps: (state, action: PayloadAction<number>) => {
@@ -67,19 +58,13 @@ const sdxlSlice = createSlice({
     setRefinerCFGScale: (state, action: PayloadAction<number>) => {
       state.refinerCFGScale = action.payload;
     },
-    setRefinerScheduler: (state, action: PayloadAction<SchedulerParam>) => {
+    setRefinerScheduler: (state, action: PayloadAction<ParameterScheduler>) => {
       state.refinerScheduler = action.payload;
     },
-    setRefinerPositiveAestheticScore: (
-      state,
-      action: PayloadAction<number>
-    ) => {
+    setRefinerPositiveAestheticScore: (state, action: PayloadAction<number>) => {
       state.refinerPositiveAestheticScore = action.payload;
     },
-    setRefinerNegativeAestheticScore: (
-      state,
-      action: PayloadAction<number>
-    ) => {
+    setRefinerNegativeAestheticScore: (state, action: PayloadAction<number>) => {
       state.refinerNegativeAestheticScore = action.payload;
     },
     setRefinerStart: (state, action: PayloadAction<number>) => {
@@ -92,8 +77,6 @@ export const {
   setPositiveStylePromptSDXL,
   setNegativeStylePromptSDXL,
   setShouldConcatSDXLStylePrompt,
-  setShouldUseSDXLRefiner,
-  setSDXLImg2ImgDenoisingStrength,
   refinerModelChanged,
   setRefinerSteps,
   setRefinerCFGScale,
@@ -103,4 +86,19 @@ export const {
   setRefinerStart,
 } = sdxlSlice.actions;
 
-export default sdxlSlice.reducer;
+export const selectSdxlSlice = (state: RootState) => state.sdxl;
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+export const migrateSDXLState = (state: any): any => {
+  if (!('_version' in state)) {
+    state._version = 1;
+  }
+  return state;
+};
+
+export const sdxlPersistConfig: PersistConfig<SDXLState> = {
+  name: sdxlSlice.name,
+  initialState: initialSDXLState,
+  migrate: migrateSDXLState,
+  persistDenylist: [],
+};

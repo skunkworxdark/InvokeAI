@@ -1,11 +1,10 @@
-import { Flex, FormControl, FormLabel } from '@chakra-ui/react';
-import { createSelector } from '@reduxjs/toolkit';
-import { stateSelector } from 'app/store/store';
+import type { FormControlProps } from '@invoke-ai/ui-library';
+import { Flex, FormControl, FormControlGroup, FormLabel, Input, Textarea } from '@invoke-ai/ui-library';
+import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
-import IAIInput from 'common/components/IAIInput';
-import IAITextarea from 'common/components/IAITextarea';
+import ScrollableContent from 'common/components/OverlayScrollbars/ScrollableContent';
 import {
+  selectWorkflowSlice,
   workflowAuthorChanged,
   workflowContactChanged,
   workflowDescriptionChanged,
@@ -13,33 +12,27 @@ import {
   workflowNotesChanged,
   workflowTagsChanged,
   workflowVersionChanged,
-} from 'features/nodes/store/nodesSlice';
-import { ChangeEvent, memo, useCallback } from 'react';
-import ScrollableContent from '../ScrollableContent';
+} from 'features/nodes/store/workflowSlice';
+import type { ChangeEvent } from 'react';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const selector = createSelector(
-  stateSelector,
-  ({ nodes }) => {
-    const { author, name, description, tags, version, contact, notes } =
-      nodes.workflow;
+const selector = createMemoizedSelector(selectWorkflowSlice, (workflow) => {
+  const { author, name, description, tags, version, contact, notes } = workflow;
 
-    return {
-      name,
-      author,
-      description,
-      tags,
-      version,
-      contact,
-      notes,
-    };
-  },
-  defaultSelectorOptions
-);
+  return {
+    name,
+    author,
+    description,
+    tags,
+    version,
+    contact,
+    notes,
+  };
+});
 
 const WorkflowGeneralTab = () => {
-  const { author, name, description, tags, version, contact, notes } =
-    useAppSelector(selector);
+  const { author, name, description, tags, version, contact, notes } = useAppSelector(selector);
   const dispatch = useAppDispatch();
 
   const handleChangeName = useCallback(
@@ -90,64 +83,48 @@ const WorkflowGeneralTab = () => {
 
   return (
     <ScrollableContent>
-      <Flex
-        sx={{
-          flexDir: 'column',
-          alignItems: 'flex-start',
-          gap: 2,
-          h: 'full',
-        }}
-      >
-        <Flex sx={{ gap: 2, w: 'full' }}>
-          <IAIInput
-            label={t('nodes.workflowName')}
-            value={name}
-            onChange={handleChangeName}
-          />
-          <IAIInput
-            label={t('nodes.workflowVersion')}
-            value={version}
-            onChange={handleChangeVersion}
-          />
-        </Flex>
-        <Flex sx={{ gap: 2, w: 'full' }}>
-          <IAIInput
-            label={t('nodes.workflowAuthor')}
-            value={author}
-            onChange={handleChangeAuthor}
-          />
-          <IAIInput
-            label={t('nodes.workflowContact')}
-            value={contact}
-            onChange={handleChangeContact}
-          />
-        </Flex>
-        <IAIInput
-          label={t('nodes.workflowTags')}
-          value={tags}
-          onChange={handleChangeTags}
-        />
-        <FormControl as={Flex} sx={{ flexDir: 'column' }}>
-          <FormLabel>{t('nodes.workflowDescription')}</FormLabel>
-          <IAITextarea
-            onChange={handleChangeDescription}
-            value={description}
-            fontSize="sm"
-            sx={{ resize: 'none' }}
-          />
-        </FormControl>
-        <FormControl as={Flex} sx={{ flexDir: 'column', h: 'full' }}>
-          <FormLabel>{t('nodes.workflowNotes')}</FormLabel>
-          <IAITextarea
-            onChange={handleChangeNotes}
-            value={notes}
-            fontSize="sm"
-            sx={{ h: 'full', resize: 'none' }}
-          />
-        </FormControl>
+      <Flex flexDir="column" alignItems="flex-start" gap={2} h="full">
+        <FormControlGroup orientation="vertical" formControlProps={formControlProps}>
+          <Flex gap={2} w="full">
+            <FormControl>
+              <FormLabel>{t('nodes.workflowName')}</FormLabel>
+              <Input value={name} onChange={handleChangeName} />
+            </FormControl>
+            <FormControl>
+              <FormLabel>{t('nodes.workflowVersion')}</FormLabel>
+              <Input value={version} onChange={handleChangeVersion} />
+            </FormControl>
+          </Flex>
+          <Flex gap={2} w="full">
+            <FormControl>
+              <FormLabel>{t('nodes.workflowAuthor')}</FormLabel>
+              <Input value={author} onChange={handleChangeAuthor} />
+            </FormControl>
+            <FormControl>
+              <FormLabel>{t('nodes.workflowContact')}</FormLabel>
+              <Input value={contact} onChange={handleChangeContact} />
+            </FormControl>
+          </Flex>
+          <FormControl>
+            <FormLabel>{t('nodes.workflowTags')}</FormLabel>
+            <Input value={tags} onChange={handleChangeTags} />
+          </FormControl>
+          <FormControl>
+            <FormLabel>{t('nodes.workflowDescription')}</FormLabel>
+            <Textarea onChange={handleChangeDescription} value={description} fontSize="sm" resize="none" rows={3} />
+          </FormControl>
+          <FormControl>
+            <FormLabel>{t('nodes.workflowNotes')}</FormLabel>
+            <Textarea onChange={handleChangeNotes} value={notes} fontSize="sm" resize="none" rows={10} />
+          </FormControl>
+        </FormControlGroup>
       </Flex>
     </ScrollableContent>
   );
 };
 
 export default memo(WorkflowGeneralTab);
+
+const formControlProps: FormControlProps = {
+  flexShrink: 0,
+};

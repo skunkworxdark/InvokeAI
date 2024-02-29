@@ -1,18 +1,19 @@
-import {
+import type {
   ControlNetMetadataItem,
   CoreMetadata,
-  LoRAMetadataItem,
   IPAdapterMetadataItem,
+  LoRAMetadataItem,
   T2IAdapterMetadataItem,
-} from 'features/nodes/types/types';
+} from 'features/nodes/types/metadata';
 import { useRecallParameters } from 'features/parameters/hooks/useRecallParameters';
-import { memo, useMemo, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
 import {
-  isValidControlNetModel,
-  isValidLoRAModel,
-  isValidT2IAdapterModel,
-} from '../../../parameters/types/parameterSchemas';
+  isParameterControlNetModel,
+  isParameterLoRAModel,
+  isParameterT2IAdapterModel,
+} from 'features/parameters/types/parameterSchemas';
+import { memo, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import ImageMetadataItem from './ImageMetadataItem';
 
 type Props = {
@@ -29,16 +30,23 @@ const ImageMetadataActions = (props: Props) => {
     recallNegativePrompt,
     recallSeed,
     recallCfgScale,
+    recallCfgRescaleMultiplier,
     recallModel,
     recallScheduler,
+    recallVaeModel,
     recallSteps,
     recallWidth,
     recallHeight,
     recallStrength,
+    recallHrfEnabled,
+    recallHrfStrength,
+    recallHrfMethod,
     recallLoRA,
     recallControlNet,
     recallIPAdapter,
     recallT2IAdapter,
+    recallSDXLPositiveStylePrompt,
+    recallSDXLNegativeStylePrompt,
   } = useRecallParameters();
 
   const handleRecallPositivePrompt = useCallback(() => {
@@ -48,6 +56,14 @@ const ImageMetadataActions = (props: Props) => {
   const handleRecallNegativePrompt = useCallback(() => {
     recallNegativePrompt(metadata?.negative_prompt);
   }, [metadata?.negative_prompt, recallNegativePrompt]);
+
+  const handleRecallSDXLPositiveStylePrompt = useCallback(() => {
+    recallSDXLPositiveStylePrompt(metadata?.positive_style_prompt);
+  }, [metadata?.positive_style_prompt, recallSDXLPositiveStylePrompt]);
+
+  const handleRecallSDXLNegativeStylePrompt = useCallback(() => {
+    recallSDXLNegativeStylePrompt(metadata?.negative__style_prompt);
+  }, [metadata?.negative__style_prompt, recallSDXLNegativeStylePrompt]);
 
   const handleRecallSeed = useCallback(() => {
     recallSeed(metadata?.seed);
@@ -69,6 +85,10 @@ const ImageMetadataActions = (props: Props) => {
     recallScheduler(metadata?.scheduler);
   }, [metadata?.scheduler, recallScheduler]);
 
+  const handleRecallVaeModel = useCallback(() => {
+    recallVaeModel(metadata?.vae);
+  }, [metadata?.vae, recallVaeModel]);
+
   const handleRecallSteps = useCallback(() => {
     recallSteps(metadata?.steps);
   }, [metadata?.steps, recallSteps]);
@@ -77,9 +97,25 @@ const ImageMetadataActions = (props: Props) => {
     recallCfgScale(metadata?.cfg_scale);
   }, [metadata?.cfg_scale, recallCfgScale]);
 
+  const handleRecallCfgRescaleMultiplier = useCallback(() => {
+    recallCfgRescaleMultiplier(metadata?.cfg_rescale_multiplier);
+  }, [metadata?.cfg_rescale_multiplier, recallCfgRescaleMultiplier]);
+
   const handleRecallStrength = useCallback(() => {
     recallStrength(metadata?.strength);
   }, [metadata?.strength, recallStrength]);
+
+  const handleRecallHrfEnabled = useCallback(() => {
+    recallHrfEnabled(metadata?.hrf_enabled);
+  }, [metadata?.hrf_enabled, recallHrfEnabled]);
+
+  const handleRecallHrfStrength = useCallback(() => {
+    recallHrfStrength(metadata?.hrf_strength);
+  }, [metadata?.hrf_strength, recallHrfStrength]);
+
+  const handleRecallHrfMethod = useCallback(() => {
+    recallHrfMethod(metadata?.hrf_method);
+  }, [metadata?.hrf_method, recallHrfMethod]);
 
   const handleRecallLoRA = useCallback(
     (lora: LoRAMetadataItem) => {
@@ -111,25 +147,19 @@ const ImageMetadataActions = (props: Props) => {
 
   const validControlNets: ControlNetMetadataItem[] = useMemo(() => {
     return metadata?.controlnets
-      ? metadata.controlnets.filter((controlnet) =>
-          isValidControlNetModel(controlnet.control_model)
-        )
+      ? metadata.controlnets.filter((controlnet) => isParameterControlNetModel(controlnet.control_model))
       : [];
   }, [metadata?.controlnets]);
 
   const validIPAdapters: IPAdapterMetadataItem[] = useMemo(() => {
     return metadata?.ipAdapters
-      ? metadata.ipAdapters.filter((ipAdapter) =>
-          isValidControlNetModel(ipAdapter.ip_adapter_model)
-        )
+      ? metadata.ipAdapters.filter((ipAdapter) => isParameterControlNetModel(ipAdapter.ip_adapter_model))
       : [];
   }, [metadata?.ipAdapters]);
 
   const validT2IAdapters: T2IAdapterMetadataItem[] = useMemo(() => {
     return metadata?.t2iAdapters
-      ? metadata.t2iAdapters.filter((t2iAdapter) =>
-          isValidT2IAdapterModel(t2iAdapter.t2i_adapter_model)
-        )
+      ? metadata.t2iAdapters.filter((t2iAdapter) => isParameterT2IAdapterModel(t2iAdapter.t2i_adapter_model))
       : [];
   }, [metadata?.t2iAdapters]);
 
@@ -139,17 +169,9 @@ const ImageMetadataActions = (props: Props) => {
 
   return (
     <>
-      {metadata.created_by && (
-        <ImageMetadataItem
-          label={t('metadata.createdBy')}
-          value={metadata.created_by}
-        />
-      )}
+      {metadata.created_by && <ImageMetadataItem label={t('metadata.createdBy')} value={metadata.created_by} />}
       {metadata.generation_mode && (
-        <ImageMetadataItem
-          label={t('metadata.generationMode')}
-          value={metadata.generation_mode}
-        />
+        <ImageMetadataItem label={t('metadata.generationMode')} value={metadata.generation_mode} />
       )}
       {metadata.positive_prompt && (
         <ImageMetadataItem
@@ -167,73 +189,88 @@ const ImageMetadataActions = (props: Props) => {
           onClick={handleRecallNegativePrompt}
         />
       )}
-      {metadata.seed !== undefined && metadata.seed !== null && (
+      {metadata.positive_style_prompt && (
         <ImageMetadataItem
-          label={t('metadata.seed')}
-          value={metadata.seed}
-          onClick={handleRecallSeed}
+          label={t('sdxl.posStylePrompt')}
+          labelPosition="top"
+          value={metadata.positive_style_prompt}
+          onClick={handleRecallSDXLPositiveStylePrompt}
         />
       )}
-      {metadata.model !== undefined &&
-        metadata.model !== null &&
-        metadata.model.model_name && (
-          <ImageMetadataItem
-            label={t('metadata.model')}
-            value={metadata.model.model_name}
-            onClick={handleRecallModel}
-          />
-        )}
-      {metadata.width && (
+      {metadata.negative_style_prompt && (
         <ImageMetadataItem
-          label={t('metadata.width')}
-          value={metadata.width}
-          onClick={handleRecallWidth}
+          label={t('sdxl.negStylePrompt')}
+          labelPosition="top"
+          value={metadata.negative_style_prompt}
+          onClick={handleRecallSDXLNegativeStylePrompt}
         />
+      )}
+      {metadata.seed !== undefined && metadata.seed !== null && (
+        <ImageMetadataItem label={t('metadata.seed')} value={metadata.seed} onClick={handleRecallSeed} />
+      )}
+      {metadata.model !== undefined && metadata.model !== null && metadata.model.model_name && (
+        <ImageMetadataItem label={t('metadata.model')} value={metadata.model.model_name} onClick={handleRecallModel} />
+      )}
+      {metadata.width && (
+        <ImageMetadataItem label={t('metadata.width')} value={metadata.width} onClick={handleRecallWidth} />
       )}
       {metadata.height && (
-        <ImageMetadataItem
-          label={t('metadata.height')}
-          value={metadata.height}
-          onClick={handleRecallHeight}
-        />
+        <ImageMetadataItem label={t('metadata.height')} value={metadata.height} onClick={handleRecallHeight} />
       )}
       {metadata.scheduler && (
-        <ImageMetadataItem
-          label={t('metadata.scheduler')}
-          value={metadata.scheduler}
-          onClick={handleRecallScheduler}
-        />
+        <ImageMetadataItem label={t('metadata.scheduler')} value={metadata.scheduler} onClick={handleRecallScheduler} />
       )}
+      <ImageMetadataItem
+        label={t('metadata.vae')}
+        value={metadata.vae?.model_name ?? 'Default'}
+        onClick={handleRecallVaeModel}
+      />
       {metadata.steps && (
-        <ImageMetadataItem
-          label={t('metadata.steps')}
-          value={metadata.steps}
-          onClick={handleRecallSteps}
-        />
+        <ImageMetadataItem label={t('metadata.steps')} value={metadata.steps} onClick={handleRecallSteps} />
       )}
       {metadata.cfg_scale !== undefined && metadata.cfg_scale !== null && (
+        <ImageMetadataItem label={t('metadata.cfgScale')} value={metadata.cfg_scale} onClick={handleRecallCfgScale} />
+      )}
+      {metadata.cfg_rescale_multiplier !== undefined && metadata.cfg_rescale_multiplier !== null && (
         <ImageMetadataItem
-          label={t('metadata.cfgScale')}
-          value={metadata.cfg_scale}
-          onClick={handleRecallCfgScale}
+          label={t('metadata.cfgRescaleMultiplier')}
+          value={metadata.cfg_rescale_multiplier}
+          onClick={handleRecallCfgRescaleMultiplier}
         />
       )}
       {metadata.strength && (
+        <ImageMetadataItem label={t('metadata.strength')} value={metadata.strength} onClick={handleRecallStrength} />
+      )}
+      {metadata.hrf_enabled && (
         <ImageMetadataItem
-          label={t('metadata.strength')}
-          value={metadata.strength}
-          onClick={handleRecallStrength}
+          label={t('hrf.metadata.enabled')}
+          value={metadata.hrf_enabled}
+          onClick={handleRecallHrfEnabled}
+        />
+      )}
+      {metadata.hrf_enabled && metadata.hrf_strength && (
+        <ImageMetadataItem
+          label={t('hrf.metadata.strength')}
+          value={metadata.hrf_strength}
+          onClick={handleRecallHrfStrength}
+        />
+      )}
+      {metadata.hrf_enabled && metadata.hrf_method && (
+        <ImageMetadataItem
+          label={t('hrf.metadata.method')}
+          value={metadata.hrf_method}
+          onClick={handleRecallHrfMethod}
         />
       )}
       {metadata.loras &&
         metadata.loras.map((lora, index) => {
-          if (isValidLoRAModel(lora.lora)) {
+          if (isParameterLoRAModel(lora.lora)) {
             return (
               <ImageMetadataItem
                 key={index}
                 label="LoRA"
                 value={`${lora.lora.model_name} - ${lora.weight}`}
-                onClick={() => handleRecallLoRA(lora)}
+                onClick={handleRecallLoRA.bind(null, lora)}
               />
             );
           }
@@ -243,7 +280,7 @@ const ImageMetadataActions = (props: Props) => {
           key={index}
           label="ControlNet"
           value={`${controlnet.control_model?.model_name} - ${controlnet.control_weight}`}
-          onClick={() => handleRecallControlNet(controlnet)}
+          onClick={handleRecallControlNet.bind(null, controlnet)}
         />
       ))}
       {validIPAdapters.map((ipAdapter, index) => (
@@ -251,7 +288,7 @@ const ImageMetadataActions = (props: Props) => {
           key={index}
           label="IP Adapter"
           value={`${ipAdapter.ip_adapter_model?.model_name} - ${ipAdapter.weight}`}
-          onClick={() => handleRecallIPAdapter(ipAdapter)}
+          onClick={handleRecallIPAdapter.bind(null, ipAdapter)}
         />
       ))}
       {validT2IAdapters.map((t2iAdapter, index) => (
@@ -259,7 +296,7 @@ const ImageMetadataActions = (props: Props) => {
           key={index}
           label="T2I Adapter"
           value={`${t2iAdapter.t2i_adapter_model?.model_name} - ${t2iAdapter.weight}`}
-          onClick={() => handleRecallT2IAdapter(t2iAdapter)}
+          onClick={handleRecallT2IAdapter.bind(null, t2iAdapter)}
         />
       ))}
     </>

@@ -1,8 +1,8 @@
-import IAIIconButton from 'common/components/IAIIconButton';
+import { IconButton } from '@invoke-ai/ui-library';
 import { memo, useCallback } from 'react';
-import { FaPlus } from 'react-icons/fa';
-import { useCreateBoardMutation } from 'services/api/endpoints/boards';
 import { useTranslation } from 'react-i18next';
+import { PiPlusBold } from 'react-icons/pi';
+import { useCreateBoardMutation } from 'services/api/endpoints/boards';
 
 const AddBoardButton = () => {
   const { t } = useTranslation();
@@ -13,8 +13,8 @@ const AddBoardButton = () => {
   }, [createBoard, DEFAULT_BOARD_NAME]);
 
   return (
-    <IAIIconButton
-      icon={<FaPlus />}
+    <IconButton
+      icon={<PiPlusBold />}
       isLoading={isLoading}
       tooltip={t('boards.addBoard')}
       aria-label={t('boards.addBoard')}

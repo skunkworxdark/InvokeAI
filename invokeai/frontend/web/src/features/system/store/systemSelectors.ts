@@ -1,9 +1,4 @@
 import { createSelector } from '@reduxjs/toolkit';
-import { stateSelector } from 'app/store/store';
-import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
+import { selectSystemSlice } from 'features/system/store/systemSlice';
 
-export const languageSelector = createSelector(
-  stateSelector,
-  ({ system }) => system.language,
-  defaultSelectorOptions
-);
+export const languageSelector = createSelector(selectSystemSlice, (system) => system.language);

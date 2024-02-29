@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import diffusers
 import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.loaders import FromOriginalControlnetMixin
+from diffusers.loaders import FromOriginalControlNetMixin
 from diffusers.models.attention_processor import AttentionProcessor, AttnProcessor
 from diffusers.models.controlnet import ControlNetConditioningEmbedding, ControlNetOutput, zero_module
 from diffusers.models.embeddings import (
@@ -14,8 +14,13 @@ from diffusers.models.embeddings import (
     Timesteps,
 )
 from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.unet_2d_blocks import CrossAttnDownBlock2D, DownBlock2D, UNetMidBlock2DCrossAttn, get_down_block
-from diffusers.models.unet_2d_condition import UNet2DConditionModel
+from diffusers.models.unets.unet_2d_blocks import (
+    CrossAttnDownBlock2D,
+    DownBlock2D,
+    UNetMidBlock2DCrossAttn,
+    get_down_block,
+)
+from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from torch import nn
 
 from invokeai.backend.util.logging import InvokeAILogger
@@ -27,7 +32,7 @@ from invokeai.backend.util.logging import InvokeAILogger
 logger = InvokeAILogger.get_logger(__name__)
 
 
-class ControlNetModel(ModelMixin, ConfigMixin, FromOriginalControlnetMixin):
+class ControlNetModel(ModelMixin, ConfigMixin, FromOriginalControlNetMixin):
     """
     A ControlNet model.
 
@@ -732,7 +737,9 @@ class ControlNetModel(ModelMixin, ConfigMixin, FromOriginalControlnetMixin):
 
         controlnet_down_block_res_samples = ()
 
-        for down_block_res_sample, controlnet_block in zip(down_block_res_samples, self.controlnet_down_blocks):
+        for down_block_res_sample, controlnet_block in zip(
+            down_block_res_samples, self.controlnet_down_blocks, strict=True
+        ):
             down_block_res_sample = controlnet_block(down_block_res_sample)
             controlnet_down_block_res_samples = controlnet_down_block_res_samples + (down_block_res_sample,)
 
@@ -745,7 +752,9 @@ class ControlNetModel(ModelMixin, ConfigMixin, FromOriginalControlnetMixin):
             scales = torch.logspace(-1, 0, len(down_block_res_samples) + 1, device=sample.device)  # 0.1 to 1.0
 
             scales = scales * conditioning_scale
-            down_block_res_samples = [sample * scale for sample, scale in zip(down_block_res_samples, scales)]
+            down_block_res_samples = [
+                sample * scale for sample, scale in zip(down_block_res_samples, scales, strict=False)
+            ]
             mid_block_res_sample = mid_block_res_sample * scales[-1]  # last one
         else:
             down_block_res_samples = [sample * conditioning_scale for sample in down_block_res_samples]

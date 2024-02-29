@@ -12,6 +12,9 @@ from diffusers.models import UNet2DConditionModel
 from safetensors.torch import load_file
 from transformers import CLIPTextModel, CLIPTokenizer
 
+from invokeai.app.shared.models import FreeUConfig
+from invokeai.backend.model_management.model_load_optimizations import skip_torch_weight_init
+
 from .models.lora import LoRAModel
 
 """
@@ -102,7 +105,7 @@ class ModelPatcher:
         loras: List[Tuple[LoRAModel, float]],
         prefix: str,
     ):
-        original_weights = dict()
+        original_weights = {}
         try:
             with torch.no_grad():
                 for lora, lora_weight in loras:
@@ -164,6 +167,15 @@ class ModelPatcher:
         init_tokens_count = None
         new_tokens_added = None
 
+        # TODO: This is required since Transformers 4.32 see
+        # https://github.com/huggingface/transformers/pull/25088
+        # More information by NVIDIA:
+        # https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+        # This value might need to be changed in the future and take the GPUs model into account as there seem
+        # to be ideal values for different GPUS. This value is temporary!
+        # For references to the current discussion please see https://github.com/invoke-ai/InvokeAI/pull/4817
+        pad_to_multiple_of = 8
+
         try:
             # HACK: The CLIPTokenizer API does not include a way to remove tokens after calling add_tokens(...). As a
             # workaround, we create a full copy of `tokenizer` so that its original behavior can be restored after
@@ -173,7 +185,7 @@ class ModelPatcher:
             # but a pickle roundtrip was found to be much faster (1 sec vs. 0.05 secs).
             ti_tokenizer = pickle.loads(pickle.dumps(tokenizer))
             ti_manager = TextualInversionManager(ti_tokenizer)
-            init_tokens_count = text_encoder.resize_token_embeddings(None).num_embeddings
+            init_tokens_count = text_encoder.resize_token_embeddings(None, pad_to_multiple_of).num_embeddings
 
             def _get_trigger(ti_name, index):
                 trigger = ti_name
@@ -181,20 +193,39 @@ class ModelPatcher:
                     trigger += f"-!pad-{i}"
                 return f"<{trigger}>"
 
+            def _get_ti_embedding(model_embeddings, ti):
+                # for SDXL models, select the embedding that matches the text encoder's dimensions
+                if ti.embedding_2 is not None:
+                    return (
+                        ti.embedding_2
+                        if ti.embedding_2.shape[1] == model_embeddings.weight.data[0].shape[0]
+                        else ti.embedding
+                    )
+                else:
+                    return ti.embedding
+
             # modify tokenizer
             new_tokens_added = 0
             for ti_name, ti in ti_list:
-                for i in range(ti.embedding.shape[0]):
+                ti_embedding = _get_ti_embedding(text_encoder.get_input_embeddings(), ti)
+
+                for i in range(ti_embedding.shape[0]):
                     new_tokens_added += ti_tokenizer.add_tokens(_get_trigger(ti_name, i))
 
-            # modify text_encoder
-            text_encoder.resize_token_embeddings(init_tokens_count + new_tokens_added)
+            # Modify text_encoder.
+            # resize_token_embeddings(...) constructs a new torch.nn.Embedding internally. Initializing the weights of
+            # this embedding is slow and unnecessary, so we wrap this step in skip_torch_weight_init() to save some
+            # time.
+            with skip_torch_weight_init():
+                text_encoder.resize_token_embeddings(init_tokens_count + new_tokens_added, pad_to_multiple_of)
             model_embeddings = text_encoder.get_input_embeddings()
 
             for ti_name, ti in ti_list:
+                ti_embedding = _get_ti_embedding(text_encoder.get_input_embeddings(), ti)
+
                 ti_tokens = []
-                for i in range(ti.embedding.shape[0]):
-                    embedding = ti.embedding[i]
+                for i in range(ti_embedding.shape[0]):
+                    embedding = ti_embedding[i]
                     trigger = _get_trigger(ti_name, i)
 
                     token_id = ti_tokenizer.convert_tokens_to_ids(trigger)
@@ -220,7 +251,7 @@ class ModelPatcher:
 
         finally:
             if init_tokens_count and new_tokens_added:
-                text_encoder.resize_token_embeddings(init_tokens_count)
+                text_encoder.resize_token_embeddings(init_tokens_count, pad_to_multiple_of)
 
     @classmethod
     @contextmanager
@@ -231,7 +262,7 @@ class ModelPatcher:
     ):
         skipped_layers = []
         try:
-            for i in range(clip_skip):
+            for _i in range(clip_skip):
                 skipped_layers.append(text_encoder.text_model.encoder.layers.pop(-1))
 
             yield
@@ -240,9 +271,29 @@ class ModelPatcher:
             while len(skipped_layers) > 0:
                 text_encoder.text_model.encoder.layers.append(skipped_layers.pop())
 
+    @classmethod
+    @contextmanager
+    def apply_freeu(
+        cls,
+        unet: UNet2DConditionModel,
+        freeu_config: Optional[FreeUConfig] = None,
+    ):
+        did_apply_freeu = False
+        try:
+            if freeu_config is not None:
+                unet.enable_freeu(b1=freeu_config.b1, b2=freeu_config.b2, s1=freeu_config.s1, s2=freeu_config.s2)
+                did_apply_freeu = True
+
+            yield
+
+        finally:
+            if did_apply_freeu:
+                unet.disable_freeu()
+
 
 class TextualInversionModel:
     embedding: torch.Tensor  # [n, 768]|[n, 1280]
+    embedding_2: Optional[torch.Tensor] = None  # [n, 768]|[n, 1280]   - for SDXL models
 
     @classmethod
     def from_checkpoint(
@@ -266,8 +317,8 @@ class TextualInversionModel:
         if "string_to_param" in state_dict:
             if len(state_dict["string_to_param"]) > 1:
                 print(
-                    f'Warn: Embedding "{file_path.name}" contains multiple tokens, which is not supported. The first'
-                    " token will be used."
+                    f'Warn: Embedding "{file_path.name}" contains multiple tokens, which is not supported. The first',
+                    " token will be used.",
                 )
 
             result.embedding = next(iter(state_dict["string_to_param"].values()))
@@ -275,6 +326,11 @@ class TextualInversionModel:
         # v3 (easynegative)
         elif "emb_params" in state_dict:
             result.embedding = state_dict["emb_params"]
+
+        # v5(sdxl safetensors file)
+        elif "clip_g" in state_dict and "clip_l" in state_dict:
+            result.embedding = state_dict["clip_g"]
+            result.embedding_2 = state_dict["clip_l"]
 
         # v4(diffusers bin files)
         else:
@@ -294,7 +350,7 @@ class TextualInversionManager(BaseTextualInversionManager):
     tokenizer: CLIPTokenizer
 
     def __init__(self, tokenizer: CLIPTokenizer):
-        self.pad_tokens = dict()
+        self.pad_tokens = {}
         self.tokenizer = tokenizer
 
     def expand_textual_inversion_token_ids_if_necessary(self, token_ids: list[int]) -> list[int]:
@@ -311,6 +367,13 @@ class TextualInversionManager(BaseTextualInversionManager):
             new_token_ids.append(token_id)
             if token_id in self.pad_tokens:
                 new_token_ids.extend(self.pad_tokens[token_id])
+
+        # Do not exceed the max model input size
+        # The -2 here is compensating for compensate compel.embeddings_provider.get_token_ids(),
+        # which first removes and then adds back the start and end tokens.
+        max_length = list(self.tokenizer.max_model_input_sizes.values())[0] - 2
+        if len(new_token_ids) > max_length:
+            new_token_ids = new_token_ids[0:max_length]
 
         return new_token_ids
 
@@ -355,10 +418,10 @@ class ONNXModelPatcher:
         if not isinstance(model, IAIOnnxRuntimeModel):
             raise Exception("Only IAIOnnxRuntimeModel models supported")
 
-        orig_weights = dict()
+        orig_weights = {}
 
         try:
-            blended_loras = dict()
+            blended_loras = {}
 
             for lora, lora_weight in loras:
                 for layer_key, layer in lora.layers.items():
@@ -374,7 +437,7 @@ class ONNXModelPatcher:
                     else:
                         blended_loras[layer_key] = layer_weight
 
-            node_names = dict()
+            node_names = {}
             for node in model.nodes.values():
                 node_names[node.name.replace("/", "_").replace(".", "_").lstrip("_")] = node.name
 
@@ -460,24 +523,31 @@ class ONNXModelPatcher:
                     trigger += f"-!pad-{i}"
                 return f"<{trigger}>"
 
+            # modify text_encoder
+            orig_embeddings = text_encoder.tensors["text_model.embeddings.token_embedding.weight"]
+
             # modify tokenizer
             new_tokens_added = 0
             for ti_name, ti in ti_list:
-                for i in range(ti.embedding.shape[0]):
-                    new_tokens_added += ti_tokenizer.add_tokens(_get_trigger(ti_name, i))
+                if ti.embedding_2 is not None:
+                    ti_embedding = (
+                        ti.embedding_2 if ti.embedding_2.shape[1] == orig_embeddings.shape[0] else ti.embedding
+                    )
+                else:
+                    ti_embedding = ti.embedding
 
-            # modify text_encoder
-            orig_embeddings = text_encoder.tensors["text_model.embeddings.token_embedding.weight"]
+                for i in range(ti_embedding.shape[0]):
+                    new_tokens_added += ti_tokenizer.add_tokens(_get_trigger(ti_name, i))
 
             embeddings = np.concatenate(
                 (np.copy(orig_embeddings), np.zeros((new_tokens_added, orig_embeddings.shape[1]))),
                 axis=0,
             )
 
-            for ti_name, ti in ti_list:
+            for ti_name, _ in ti_list:
                 ti_tokens = []
-                for i in range(ti.embedding.shape[0]):
-                    embedding = ti.embedding[i].detach().numpy()
+                for i in range(ti_embedding.shape[0]):
+                    embedding = ti_embedding[i].detach().numpy()
                     trigger = _get_trigger(ti_name, i)
 
                     token_id = ti_tokenizer.convert_tokens_to_ids(trigger)

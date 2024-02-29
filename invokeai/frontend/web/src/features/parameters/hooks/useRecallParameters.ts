@@ -1,30 +1,64 @@
-import { createSelector } from '@reduxjs/toolkit';
 import { useAppToaster } from 'app/components/Toaster';
-import { stateSelector } from 'app/store/store';
+import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
 import { CONTROLNET_PROCESSORS } from 'features/controlAdapters/store/constants';
-import {
-  controlAdapterRecalled,
-  controlAdaptersReset,
-} from 'features/controlAdapters/store/controlAdaptersSlice';
-import {
-  ControlNetConfig,
-  IPAdapterConfig,
-  T2IAdapterConfig,
-} from 'features/controlAdapters/store/types';
+import { controlAdapterRecalled, controlAdaptersReset } from 'features/controlAdapters/store/controlAdaptersSlice';
+import type { ControlNetConfig, IPAdapterConfig, T2IAdapterConfig } from 'features/controlAdapters/store/types';
 import {
   initialControlNet,
   initialIPAdapter,
   initialT2IAdapter,
 } from 'features/controlAdapters/util/buildControlAdapter';
-import {
+import { setHrfEnabled, setHrfMethod, setHrfStrength } from 'features/hrf/store/hrfSlice';
+import { loraRecalled, lorasCleared } from 'features/lora/store/loraSlice';
+import type {
   ControlNetMetadataItem,
   CoreMetadata,
   IPAdapterMetadataItem,
   LoRAMetadataItem,
   T2IAdapterMetadataItem,
-} from 'features/nodes/types/types';
+} from 'features/nodes/types/metadata';
+import { initialImageSelected, modelSelected } from 'features/parameters/store/actions';
+import {
+  heightRecalled,
+  selectGenerationSlice,
+  setCfgRescaleMultiplier,
+  setCfgScale,
+  setImg2imgStrength,
+  setNegativePrompt,
+  setPositivePrompt,
+  setScheduler,
+  setSeed,
+  setSteps,
+  vaeSelected,
+  widthRecalled,
+} from 'features/parameters/store/generationSlice';
+import type { ParameterModel } from 'features/parameters/types/parameterSchemas';
+import {
+  isParameterCFGRescaleMultiplier,
+  isParameterCFGScale,
+  isParameterControlNetModel,
+  isParameterHeight,
+  isParameterHRFEnabled,
+  isParameterHRFMethod,
+  isParameterIPAdapterModel,
+  isParameterLoRAModel,
+  isParameterModel,
+  isParameterNegativePrompt,
+  isParameterNegativeStylePromptSDXL,
+  isParameterPositivePrompt,
+  isParameterPositiveStylePromptSDXL,
+  isParameterScheduler,
+  isParameterSDXLRefinerModel,
+  isParameterSDXLRefinerNegativeAestheticScore,
+  isParameterSDXLRefinerPositiveAestheticScore,
+  isParameterSDXLRefinerStart,
+  isParameterSeed,
+  isParameterSteps,
+  isParameterStrength,
+  isParameterVAEModel,
+  isParameterWidth,
+} from 'features/parameters/types/parameterSchemas';
 import {
   refinerModelChanged,
   setNegativeStylePromptSDXL,
@@ -36,66 +70,29 @@ import {
   setRefinerStart,
   setRefinerSteps,
 } from 'features/sdxl/store/sdxlSlice';
+import { isNil } from 'lodash-es';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ImageDTO } from 'services/api/types';
-import { v4 as uuidv4 } from 'uuid';
 import {
-  controlNetModelsAdapter,
-  ipAdapterModelsAdapter,
-  loraModelsAdapter,
-  t2iAdapterModelsAdapter,
+  controlNetModelsAdapterSelectors,
+  ipAdapterModelsAdapterSelectors,
+  loraModelsAdapterSelectors,
+  t2iAdapterModelsAdapterSelectors,
   useGetControlNetModelsQuery,
   useGetIPAdapterModelsQuery,
   useGetLoRAModelsQuery,
   useGetT2IAdapterModelsQuery,
-} from '../../../services/api/endpoints/models';
-import { loraRecalled, lorasCleared } from '../../lora/store/loraSlice';
-import { initialImageSelected, modelSelected } from '../store/actions';
-import {
-  setCfgScale,
-  setHeight,
-  setImg2imgStrength,
-  setNegativePrompt,
-  setPositivePrompt,
-  setScheduler,
-  setSeed,
-  setSteps,
-  setWidth,
-} from '../store/generationSlice';
-import {
-  isValidCfgScale,
-  isValidControlNetModel,
-  isValidHeight,
-  isValidIPAdapterModel,
-  isValidLoRAModel,
-  isValidMainModel,
-  isValidNegativePrompt,
-  isValidPositivePrompt,
-  isValidSDXLNegativeStylePrompt,
-  isValidSDXLPositiveStylePrompt,
-  isValidSDXLRefinerModel,
-  isValidSDXLRefinerNegativeAestheticScore,
-  isValidSDXLRefinerPositiveAestheticScore,
-  isValidSDXLRefinerStart,
-  isValidScheduler,
-  isValidSeed,
-  isValidSteps,
-  isValidStrength,
-  isValidWidth,
-} from '../types/parameterSchemas';
+} from 'services/api/endpoints/models';
+import type { ImageDTO } from 'services/api/types';
+import { v4 as uuidv4 } from 'uuid';
 
-const selector = createSelector(
-  stateSelector,
-  ({ generation }) => generation.model,
-  defaultSelectorOptions
-);
+const selectModel = createMemoizedSelector(selectGenerationSlice, (generation) => generation.model);
 
 export const useRecallParameters = () => {
   const dispatch = useAppDispatch();
   const toaster = useAppToaster();
   const { t } = useTranslation();
-  const model = useAppSelector(selector);
+  const model = useAppSelector(selectModel);
 
   const parameterSetToast = useCallback(() => {
     toaster({
@@ -145,31 +142,26 @@ export const useRecallParameters = () => {
    * Recall both prompts with toast
    */
   const recallBothPrompts = useCallback(
-    (
-      positivePrompt: unknown,
-      negativePrompt: unknown,
-      positiveStylePrompt: unknown,
-      negativeStylePrompt: unknown
-    ) => {
+    (positivePrompt: unknown, negativePrompt: unknown, positiveStylePrompt: unknown, negativeStylePrompt: unknown) => {
       if (
-        isValidPositivePrompt(positivePrompt) ||
-        isValidNegativePrompt(negativePrompt) ||
-        isValidSDXLPositiveStylePrompt(positiveStylePrompt) ||
-        isValidSDXLNegativeStylePrompt(negativeStylePrompt)
+        isParameterPositivePrompt(positivePrompt) ||
+        isParameterNegativePrompt(negativePrompt) ||
+        isParameterPositiveStylePromptSDXL(positiveStylePrompt) ||
+        isParameterNegativeStylePromptSDXL(negativeStylePrompt)
       ) {
-        if (isValidPositivePrompt(positivePrompt)) {
+        if (isParameterPositivePrompt(positivePrompt)) {
           dispatch(setPositivePrompt(positivePrompt));
         }
 
-        if (isValidNegativePrompt(negativePrompt)) {
+        if (isParameterNegativePrompt(negativePrompt)) {
           dispatch(setNegativePrompt(negativePrompt));
         }
 
-        if (isValidSDXLPositiveStylePrompt(positiveStylePrompt)) {
+        if (isParameterPositiveStylePromptSDXL(positiveStylePrompt)) {
           dispatch(setPositiveStylePromptSDXL(positiveStylePrompt));
         }
 
-        if (isValidSDXLPositiveStylePrompt(negativeStylePrompt)) {
+        if (isParameterPositiveStylePromptSDXL(negativeStylePrompt)) {
           dispatch(setNegativeStylePromptSDXL(negativeStylePrompt));
         }
 
@@ -186,7 +178,7 @@ export const useRecallParameters = () => {
    */
   const recallPositivePrompt = useCallback(
     (positivePrompt: unknown) => {
-      if (!isValidPositivePrompt(positivePrompt)) {
+      if (!isParameterPositivePrompt(positivePrompt)) {
         parameterNotSetToast();
         return;
       }
@@ -201,7 +193,7 @@ export const useRecallParameters = () => {
    */
   const recallNegativePrompt = useCallback(
     (negativePrompt: unknown) => {
-      if (!isValidNegativePrompt(negativePrompt)) {
+      if (!isParameterNegativePrompt(negativePrompt)) {
         parameterNotSetToast();
         return;
       }
@@ -216,7 +208,7 @@ export const useRecallParameters = () => {
    */
   const recallSDXLPositiveStylePrompt = useCallback(
     (positiveStylePrompt: unknown) => {
-      if (!isValidSDXLPositiveStylePrompt(positiveStylePrompt)) {
+      if (!isParameterPositiveStylePromptSDXL(positiveStylePrompt)) {
         parameterNotSetToast();
         return;
       }
@@ -231,7 +223,7 @@ export const useRecallParameters = () => {
    */
   const recallSDXLNegativeStylePrompt = useCallback(
     (negativeStylePrompt: unknown) => {
-      if (!isValidSDXLNegativeStylePrompt(negativeStylePrompt)) {
+      if (!isParameterNegativeStylePromptSDXL(negativeStylePrompt)) {
         parameterNotSetToast();
         return;
       }
@@ -246,7 +238,7 @@ export const useRecallParameters = () => {
    */
   const recallSeed = useCallback(
     (seed: unknown) => {
-      if (!isValidSeed(seed)) {
+      if (!isParameterSeed(seed)) {
         parameterNotSetToast();
         return;
       }
@@ -261,7 +253,7 @@ export const useRecallParameters = () => {
    */
   const recallCfgScale = useCallback(
     (cfgScale: unknown) => {
-      if (!isValidCfgScale(cfgScale)) {
+      if (!isParameterCFGScale(cfgScale)) {
         parameterNotSetToast();
         return;
       }
@@ -272,11 +264,26 @@ export const useRecallParameters = () => {
   );
 
   /**
+   * Recall CFG rescale multiplier with toast
+   */
+  const recallCfgRescaleMultiplier = useCallback(
+    (cfgRescaleMultiplier: unknown) => {
+      if (!isParameterCFGRescaleMultiplier(cfgRescaleMultiplier)) {
+        parameterNotSetToast();
+        return;
+      }
+      dispatch(setCfgRescaleMultiplier(cfgRescaleMultiplier));
+      parameterSetToast();
+    },
+    [dispatch, parameterSetToast, parameterNotSetToast]
+  );
+
+  /**
    * Recall model with toast
    */
   const recallModel = useCallback(
     (model: unknown) => {
-      if (!isValidMainModel(model)) {
+      if (!isParameterModel(model)) {
         parameterNotSetToast();
         return;
       }
@@ -291,7 +298,7 @@ export const useRecallParameters = () => {
    */
   const recallScheduler = useCallback(
     (scheduler: unknown) => {
-      if (!isValidScheduler(scheduler)) {
+      if (!isParameterScheduler(scheduler)) {
         parameterNotSetToast();
         return;
       }
@@ -302,11 +309,30 @@ export const useRecallParameters = () => {
   );
 
   /**
+   * Recall vae model
+   */
+  const recallVaeModel = useCallback(
+    (vae: unknown) => {
+      if (!isParameterVAEModel(vae) && !isNil(vae)) {
+        parameterNotSetToast();
+        return;
+      }
+      if (isNil(vae)) {
+        dispatch(vaeSelected(null));
+      } else {
+        dispatch(vaeSelected(vae));
+      }
+      parameterSetToast();
+    },
+    [dispatch, parameterSetToast, parameterNotSetToast]
+  );
+
+  /**
    * Recall steps with toast
    */
   const recallSteps = useCallback(
     (steps: unknown) => {
-      if (!isValidSteps(steps)) {
+      if (!isParameterSteps(steps)) {
         parameterNotSetToast();
         return;
       }
@@ -321,11 +347,11 @@ export const useRecallParameters = () => {
    */
   const recallWidth = useCallback(
     (width: unknown) => {
-      if (!isValidWidth(width)) {
+      if (!isParameterWidth(width)) {
         parameterNotSetToast();
         return;
       }
-      dispatch(setWidth(width));
+      dispatch(widthRecalled(width));
       parameterSetToast();
     },
     [dispatch, parameterSetToast, parameterNotSetToast]
@@ -336,14 +362,34 @@ export const useRecallParameters = () => {
    */
   const recallHeight = useCallback(
     (height: unknown) => {
-      if (!isValidHeight(height)) {
+      if (!isParameterHeight(height)) {
         parameterNotSetToast();
         return;
       }
-      dispatch(setHeight(height));
+      dispatch(heightRecalled(height));
       parameterSetToast();
     },
     [dispatch, parameterSetToast, parameterNotSetToast]
+  );
+
+  /**
+   * Recall width and height with toast
+   */
+  const recallWidthAndHeight = useCallback(
+    (width: unknown, height: unknown) => {
+      if (!isParameterWidth(width)) {
+        allParameterNotSetToast();
+        return;
+      }
+      if (!isParameterHeight(height)) {
+        allParameterNotSetToast();
+        return;
+      }
+      dispatch(heightRecalled(height));
+      dispatch(widthRecalled(width));
+      allParameterSetToast();
+    },
+    [dispatch, allParameterSetToast, allParameterNotSetToast]
   );
 
   /**
@@ -351,11 +397,56 @@ export const useRecallParameters = () => {
    */
   const recallStrength = useCallback(
     (strength: unknown) => {
-      if (!isValidStrength(strength)) {
+      if (!isParameterStrength(strength)) {
         parameterNotSetToast();
         return;
       }
       dispatch(setImg2imgStrength(strength));
+      parameterSetToast();
+    },
+    [dispatch, parameterSetToast, parameterNotSetToast]
+  );
+
+  /**
+   * Recall high resolution enabled with toast
+   */
+  const recallHrfEnabled = useCallback(
+    (hrfEnabled: unknown) => {
+      if (!isParameterHRFEnabled(hrfEnabled)) {
+        parameterNotSetToast();
+        return;
+      }
+      dispatch(setHrfEnabled(hrfEnabled));
+      parameterSetToast();
+    },
+    [dispatch, parameterSetToast, parameterNotSetToast]
+  );
+
+  /**
+   * Recall high resolution strength with toast
+   */
+  const recallHrfStrength = useCallback(
+    (hrfStrength: unknown) => {
+      if (!isParameterStrength(hrfStrength)) {
+        parameterNotSetToast();
+        return;
+      }
+      dispatch(setHrfStrength(hrfStrength));
+      parameterSetToast();
+    },
+    [dispatch, parameterSetToast, parameterNotSetToast]
+  );
+
+  /**
+   * Recall high resolution method with toast
+   */
+  const recallHrfMethod = useCallback(
+    (hrfMethod: unknown) => {
+      if (!isParameterHRFMethod(hrfMethod)) {
+        parameterNotSetToast();
+        return;
+      }
+      dispatch(setHrfMethod(hrfMethod));
       parameterSetToast();
     },
     [dispatch, parameterSetToast, parameterNotSetToast]
@@ -368,25 +459,22 @@ export const useRecallParameters = () => {
   const { data: loraModels } = useGetLoRAModelsQuery(undefined);
 
   const prepareLoRAMetadataItem = useCallback(
-    (loraMetadataItem: LoRAMetadataItem) => {
-      if (!isValidLoRAModel(loraMetadataItem.lora)) {
+    (loraMetadataItem: LoRAMetadataItem, newModel?: ParameterModel) => {
+      if (!isParameterLoRAModel(loraMetadataItem.lora)) {
         return { lora: null, error: 'Invalid LoRA model' };
       }
 
       const { base_model, model_name } = loraMetadataItem.lora;
 
       const matchingLoRA = loraModels
-        ? loraModelsAdapter
-            .getSelectors()
-            .selectById(loraModels, `${base_model}/lora/${model_name}`)
+        ? loraModelsAdapterSelectors.selectById(loraModels, `${base_model}/lora/${model_name}`)
         : undefined;
 
       if (!matchingLoRA) {
         return { lora: null, error: 'LoRA model is not installed' };
       }
 
-      const isCompatibleBaseModel =
-        matchingLoRA?.base_model === model?.base_model;
+      const isCompatibleBaseModel = matchingLoRA?.base_model === (newModel ?? model)?.base_model;
 
       if (!isCompatibleBaseModel) {
         return {
@@ -397,7 +485,7 @@ export const useRecallParameters = () => {
 
       return { lora: matchingLoRA, error: null };
     },
-    [loraModels, model?.base_model]
+    [loraModels, model]
   );
 
   const recallLoRA = useCallback(
@@ -409,9 +497,7 @@ export const useRecallParameters = () => {
         return;
       }
 
-      dispatch(
-        loraRecalled({ ...result.lora, weight: loraMetadataItem.weight })
-      );
+      dispatch(loraRecalled({ ...result.lora, weight: loraMetadataItem.weight }));
 
       parameterSetToast();
     },
@@ -425,36 +511,26 @@ export const useRecallParameters = () => {
   const { data: controlNetModels } = useGetControlNetModelsQuery(undefined);
 
   const prepareControlNetMetadataItem = useCallback(
-    (controlnetMetadataItem: ControlNetMetadataItem) => {
-      if (!isValidControlNetModel(controlnetMetadataItem.control_model)) {
+    (controlnetMetadataItem: ControlNetMetadataItem, newModel?: ParameterModel) => {
+      if (!isParameterControlNetModel(controlnetMetadataItem.control_model)) {
         return { controlnet: null, error: 'Invalid ControlNet model' };
       }
 
-      const {
-        image,
-        control_model,
-        control_weight,
-        begin_step_percent,
-        end_step_percent,
-        control_mode,
-        resize_mode,
-      } = controlnetMetadataItem;
+      const { image, control_model, control_weight, begin_step_percent, end_step_percent, control_mode, resize_mode } =
+        controlnetMetadataItem;
 
       const matchingControlNetModel = controlNetModels
-        ? controlNetModelsAdapter
-            .getSelectors()
-            .selectById(
-              controlNetModels,
-              `${control_model.base_model}/controlnet/${control_model.model_name}`
-            )
+        ? controlNetModelsAdapterSelectors.selectById(
+            controlNetModels,
+            `${control_model.base_model}/controlnet/${control_model.model_name}`
+          )
         : undefined;
 
       if (!matchingControlNetModel) {
         return { controlnet: null, error: 'ControlNet model is not installed' };
       }
 
-      const isCompatibleBaseModel =
-        matchingControlNetModel?.base_model === model?.base_model;
+      const isCompatibleBaseModel = matchingControlNetModel?.base_model === (newModel ?? model)?.base_model;
 
       if (!isCompatibleBaseModel) {
         return {
@@ -471,10 +547,7 @@ export const useRecallParameters = () => {
         type: 'controlnet',
         isEnabled: true,
         model: matchingControlNetModel,
-        weight:
-          typeof control_weight === 'number'
-            ? control_weight
-            : initialControlNet.weight,
+        weight: typeof control_weight === 'number' ? control_weight : initialControlNet.weight,
         beginStepPct: begin_step_percent || initialControlNet.beginStepPct,
         endStepPct: end_step_percent || initialControlNet.endStepPct,
         controlMode: control_mode || initialControlNet.controlMode,
@@ -489,7 +562,7 @@ export const useRecallParameters = () => {
 
       return { controlnet, error: null };
     },
-    [controlNetModels, model?.base_model]
+    [controlNetModels, model]
   );
 
   const recallControlNet = useCallback(
@@ -505,12 +578,7 @@ export const useRecallParameters = () => {
 
       parameterSetToast();
     },
-    [
-      prepareControlNetMetadataItem,
-      dispatch,
-      parameterSetToast,
-      parameterNotSetToast,
-    ]
+    [prepareControlNetMetadataItem, dispatch, parameterSetToast, parameterNotSetToast]
   );
 
   /**
@@ -520,35 +588,26 @@ export const useRecallParameters = () => {
   const { data: t2iAdapterModels } = useGetT2IAdapterModelsQuery(undefined);
 
   const prepareT2IAdapterMetadataItem = useCallback(
-    (t2iAdapterMetadataItem: T2IAdapterMetadataItem) => {
-      if (!isValidControlNetModel(t2iAdapterMetadataItem.t2i_adapter_model)) {
+    (t2iAdapterMetadataItem: T2IAdapterMetadataItem, newModel?: ParameterModel) => {
+      if (!isParameterControlNetModel(t2iAdapterMetadataItem.t2i_adapter_model)) {
         return { controlnet: null, error: 'Invalid ControlNet model' };
       }
 
-      const {
-        image,
-        t2i_adapter_model,
-        weight,
-        begin_step_percent,
-        end_step_percent,
-        resize_mode,
-      } = t2iAdapterMetadataItem;
+      const { image, t2i_adapter_model, weight, begin_step_percent, end_step_percent, resize_mode } =
+        t2iAdapterMetadataItem;
 
       const matchingT2IAdapterModel = t2iAdapterModels
-        ? t2iAdapterModelsAdapter
-            .getSelectors()
-            .selectById(
-              t2iAdapterModels,
-              `${t2i_adapter_model.base_model}/t2i_adapter/${t2i_adapter_model.model_name}`
-            )
+        ? t2iAdapterModelsAdapterSelectors.selectById(
+            t2iAdapterModels,
+            `${t2i_adapter_model.base_model}/t2i_adapter/${t2i_adapter_model.model_name}`
+          )
         : undefined;
 
       if (!matchingT2IAdapterModel) {
         return { controlnet: null, error: 'ControlNet model is not installed' };
       }
 
-      const isCompatibleBaseModel =
-        matchingT2IAdapterModel?.base_model === model?.base_model;
+      const isCompatibleBaseModel = matchingT2IAdapterModel?.base_model === (newModel ?? model)?.base_model;
 
       if (!isCompatibleBaseModel) {
         return {
@@ -579,7 +638,7 @@ export const useRecallParameters = () => {
 
       return { t2iAdapter, error: null };
     },
-    [model?.base_model, t2iAdapterModels]
+    [model, t2iAdapterModels]
   );
 
   const recallT2IAdapter = useCallback(
@@ -595,12 +654,7 @@ export const useRecallParameters = () => {
 
       parameterSetToast();
     },
-    [
-      prepareT2IAdapterMetadataItem,
-      dispatch,
-      parameterSetToast,
-      parameterNotSetToast,
-    ]
+    [prepareT2IAdapterMetadataItem, dispatch, parameterSetToast, parameterNotSetToast]
   );
 
   /**
@@ -610,34 +664,25 @@ export const useRecallParameters = () => {
   const { data: ipAdapterModels } = useGetIPAdapterModelsQuery(undefined);
 
   const prepareIPAdapterMetadataItem = useCallback(
-    (ipAdapterMetadataItem: IPAdapterMetadataItem) => {
-      if (!isValidIPAdapterModel(ipAdapterMetadataItem?.ip_adapter_model)) {
+    (ipAdapterMetadataItem: IPAdapterMetadataItem, newModel?: ParameterModel) => {
+      if (!isParameterIPAdapterModel(ipAdapterMetadataItem?.ip_adapter_model)) {
         return { ipAdapter: null, error: 'Invalid IP Adapter model' };
       }
 
-      const {
-        image,
-        ip_adapter_model,
-        weight,
-        begin_step_percent,
-        end_step_percent,
-      } = ipAdapterMetadataItem;
+      const { image, ip_adapter_model, weight, begin_step_percent, end_step_percent } = ipAdapterMetadataItem;
 
       const matchingIPAdapterModel = ipAdapterModels
-        ? ipAdapterModelsAdapter
-            .getSelectors()
-            .selectById(
-              ipAdapterModels,
-              `${ip_adapter_model.base_model}/ip_adapter/${ip_adapter_model.model_name}`
-            )
+        ? ipAdapterModelsAdapterSelectors.selectById(
+            ipAdapterModels,
+            `${ip_adapter_model.base_model}/ip_adapter/${ip_adapter_model.model_name}`
+          )
         : undefined;
 
       if (!matchingIPAdapterModel) {
         return { ipAdapter: null, error: 'IP Adapter model is not installed' };
       }
 
-      const isCompatibleBaseModel =
-        matchingIPAdapterModel?.base_model === model?.base_model;
+      const isCompatibleBaseModel = matchingIPAdapterModel?.base_model === (newModel ?? model)?.base_model;
 
       if (!isCompatibleBaseModel) {
         return {
@@ -659,7 +704,7 @@ export const useRecallParameters = () => {
 
       return { ipAdapter, error: null };
     },
-    [ipAdapterModels, model?.base_model]
+    [ipAdapterModels, model]
   );
 
   const recallIPAdapter = useCallback(
@@ -675,12 +720,7 @@ export const useRecallParameters = () => {
 
       parameterSetToast();
     },
-    [
-      prepareIPAdapterMetadataItem,
-      dispatch,
-      parameterSetToast,
-      parameterNotSetToast,
-    ]
+    [prepareIPAdapterMetadataItem, dispatch, parameterSetToast, parameterNotSetToast]
   );
 
   /*
@@ -702,15 +742,20 @@ export const useRecallParameters = () => {
 
       const {
         cfg_scale,
+        cfg_rescale_multiplier,
         height,
         model,
         positive_prompt,
         negative_prompt,
         scheduler,
+        vae,
         seed,
         steps,
         width,
         strength,
+        hrf_enabled,
+        hrf_strength,
+        hrf_method,
         positive_style_prompt,
         negative_style_prompt,
         refiner_model,
@@ -726,88 +771,111 @@ export const useRecallParameters = () => {
         t2iAdapters,
       } = metadata;
 
-      if (isValidCfgScale(cfg_scale)) {
-        dispatch(setCfgScale(cfg_scale));
-      }
-      if (isValidMainModel(model)) {
+      let newModel: ParameterModel | undefined = undefined;
+
+      if (isParameterModel(model)) {
+        newModel = model;
         dispatch(modelSelected(model));
       }
-      if (isValidPositivePrompt(positive_prompt)) {
+
+      if (isParameterCFGScale(cfg_scale)) {
+        dispatch(setCfgScale(cfg_scale));
+      }
+
+      if (isParameterCFGRescaleMultiplier(cfg_rescale_multiplier)) {
+        dispatch(setCfgRescaleMultiplier(cfg_rescale_multiplier));
+      }
+
+      if (isParameterPositivePrompt(positive_prompt)) {
         dispatch(setPositivePrompt(positive_prompt));
       }
-      if (isValidNegativePrompt(negative_prompt)) {
+
+      if (isParameterNegativePrompt(negative_prompt)) {
         dispatch(setNegativePrompt(negative_prompt));
       }
-      if (isValidScheduler(scheduler)) {
+
+      if (isParameterScheduler(scheduler)) {
         dispatch(setScheduler(scheduler));
       }
-      if (isValidSeed(seed)) {
+      if (isParameterVAEModel(vae) || isNil(vae)) {
+        if (isNil(vae)) {
+          dispatch(vaeSelected(null));
+        } else {
+          dispatch(vaeSelected(vae));
+        }
+      }
+
+      if (isParameterSeed(seed)) {
         dispatch(setSeed(seed));
       }
-      if (isValidSteps(steps)) {
+
+      if (isParameterSteps(steps)) {
         dispatch(setSteps(steps));
       }
-      if (isValidWidth(width)) {
-        dispatch(setWidth(width));
+
+      if (isParameterWidth(width)) {
+        dispatch(widthRecalled(width));
       }
-      if (isValidHeight(height)) {
-        dispatch(setHeight(height));
+
+      if (isParameterHeight(height)) {
+        dispatch(heightRecalled(height));
       }
-      if (isValidStrength(strength)) {
+
+      if (isParameterStrength(strength)) {
         dispatch(setImg2imgStrength(strength));
       }
 
-      if (isValidSDXLPositiveStylePrompt(positive_style_prompt)) {
+      if (isParameterHRFEnabled(hrf_enabled)) {
+        dispatch(setHrfEnabled(hrf_enabled));
+      }
+
+      if (isParameterStrength(hrf_strength)) {
+        dispatch(setHrfStrength(hrf_strength));
+      }
+
+      if (isParameterHRFMethod(hrf_method)) {
+        dispatch(setHrfMethod(hrf_method));
+      }
+
+      if (isParameterPositiveStylePromptSDXL(positive_style_prompt)) {
         dispatch(setPositiveStylePromptSDXL(positive_style_prompt));
       }
 
-      if (isValidSDXLNegativeStylePrompt(negative_style_prompt)) {
+      if (isParameterNegativeStylePromptSDXL(negative_style_prompt)) {
         dispatch(setNegativeStylePromptSDXL(negative_style_prompt));
       }
 
-      if (isValidSDXLRefinerModel(refiner_model)) {
+      if (isParameterSDXLRefinerModel(refiner_model)) {
         dispatch(refinerModelChanged(refiner_model));
       }
 
-      if (isValidSteps(refiner_steps)) {
+      if (isParameterSteps(refiner_steps)) {
         dispatch(setRefinerSteps(refiner_steps));
       }
 
-      if (isValidCfgScale(refiner_cfg_scale)) {
+      if (isParameterCFGScale(refiner_cfg_scale)) {
         dispatch(setRefinerCFGScale(refiner_cfg_scale));
       }
 
-      if (isValidScheduler(refiner_scheduler)) {
+      if (isParameterScheduler(refiner_scheduler)) {
         dispatch(setRefinerScheduler(refiner_scheduler));
       }
 
-      if (
-        isValidSDXLRefinerPositiveAestheticScore(
-          refiner_positive_aesthetic_score
-        )
-      ) {
-        dispatch(
-          setRefinerPositiveAestheticScore(refiner_positive_aesthetic_score)
-        );
+      if (isParameterSDXLRefinerPositiveAestheticScore(refiner_positive_aesthetic_score)) {
+        dispatch(setRefinerPositiveAestheticScore(refiner_positive_aesthetic_score));
       }
 
-      if (
-        isValidSDXLRefinerNegativeAestheticScore(
-          refiner_negative_aesthetic_score
-        )
-      ) {
-        dispatch(
-          setRefinerNegativeAestheticScore(refiner_negative_aesthetic_score)
-        );
+      if (isParameterSDXLRefinerNegativeAestheticScore(refiner_negative_aesthetic_score)) {
+        dispatch(setRefinerNegativeAestheticScore(refiner_negative_aesthetic_score));
       }
 
-      if (isValidSDXLRefinerStart(refiner_start)) {
+      if (isParameterSDXLRefinerStart(refiner_start)) {
         dispatch(setRefinerStart(refiner_start));
       }
 
       dispatch(lorasCleared());
       loras?.forEach((lora) => {
-        const result = prepareLoRAMetadataItem(lora);
+        const result = prepareLoRAMetadataItem(lora, newModel);
         if (result.lora) {
           dispatch(loraRecalled({ ...result.lora, weight: lora.weight }));
         }
@@ -815,21 +883,21 @@ export const useRecallParameters = () => {
 
       dispatch(controlAdaptersReset());
       controlnets?.forEach((controlnet) => {
-        const result = prepareControlNetMetadataItem(controlnet);
+        const result = prepareControlNetMetadataItem(controlnet, newModel);
         if (result.controlnet) {
           dispatch(controlAdapterRecalled(result.controlnet));
         }
       });
 
       ipAdapters?.forEach((ipAdapter) => {
-        const result = prepareIPAdapterMetadataItem(ipAdapter);
+        const result = prepareIPAdapterMetadataItem(ipAdapter, newModel);
         if (result.ipAdapter) {
           dispatch(controlAdapterRecalled(result.ipAdapter));
         }
       });
 
       t2iAdapters?.forEach((t2iAdapter) => {
-        const result = prepareT2IAdapterMetadataItem(t2iAdapter);
+        const result = prepareT2IAdapterMetadataItem(t2iAdapter, newModel);
         if (result.t2iAdapter) {
           dispatch(controlAdapterRecalled(result.t2iAdapter));
         }
@@ -856,12 +924,18 @@ export const useRecallParameters = () => {
     recallSDXLNegativeStylePrompt,
     recallSeed,
     recallCfgScale,
+    recallCfgRescaleMultiplier,
     recallModel,
     recallScheduler,
+    recallVaeModel,
     recallSteps,
     recallWidth,
     recallHeight,
+    recallWidthAndHeight,
     recallStrength,
+    recallHrfEnabled,
+    recallHrfStrength,
+    recallHrfMethod,
     recallLoRA,
     recallControlNet,
     recallIPAdapter,

@@ -1,12 +1,5 @@
-import { components } from 'services/api/schema';
-import { O } from 'ts-toolbelt';
-import {
-  BaseModelType,
-  Graph,
-  GraphExecutionState,
-  ModelType,
-  SubModelType,
-} from '../api/types';
+import type { components } from 'services/api/schema';
+import type { BaseModelType, Graph, GraphExecutionState, ModelType, SubModelType } from 'services/api/types';
 
 /**
  * A progress image, we get one for each step in the generation
@@ -16,11 +9,6 @@ export type ProgressImage = {
   width: number;
   height: number;
 };
-
-export type AnyInvocationType = O.Required<
-  NonNullable<NonNullable<Graph['nodes']>[string]>,
-  'type'
->['type'];
 
 export type AnyInvocation = NonNullable<NonNullable<Graph['nodes']>[string]>;
 
@@ -219,9 +207,7 @@ export type ServerToClientEvents = {
   invocation_complete: (payload: InvocationCompleteEvent) => void;
   invocation_error: (payload: InvocationErrorEvent) => void;
   invocation_started: (payload: InvocationStartedEvent) => void;
-  graph_execution_state_complete: (
-    payload: GraphExecutionStateCompleteEvent
-  ) => void;
+  graph_execution_state_complete: (payload: GraphExecutionStateCompleteEvent) => void;
   model_load_started: (payload: ModelLoadStartedEvent) => void;
   model_load_completed: (payload: ModelLoadCompletedEvent) => void;
   session_retrieval_error: (payload: SessionRetrievalErrorEvent) => void;

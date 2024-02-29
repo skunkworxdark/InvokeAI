@@ -1,40 +1,40 @@
-import {
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogOverlay,
-  Divider,
-  Flex,
-  Text,
-} from '@chakra-ui/react';
-import { createSelector } from '@reduxjs/toolkit';
-import { stateSelector } from 'app/store/store';
+import { ConfirmationAlertDialog, Divider, Flex, FormControl, FormLabel, Switch, Text } from '@invoke-ai/ui-library';
+import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
-import IAIButton from 'common/components/IAIButton';
-import IAISwitch from 'common/components/IAISwitch';
+import { selectCanvasSlice } from 'features/canvas/store/canvasSlice';
+import { selectControlAdaptersSlice } from 'features/controlAdapters/store/controlAdaptersSlice';
+import { imageDeletionConfirmed } from 'features/deleteImageModal/store/actions';
+import { getImageUsage, selectImageUsage } from 'features/deleteImageModal/store/selectors';
+import {
+  imageDeletionCanceled,
+  isModalOpenChanged,
+  selectDeleteImageModalSlice,
+} from 'features/deleteImageModal/store/slice';
+import type { ImageUsage } from 'features/deleteImageModal/store/types';
+import { selectNodesSlice } from 'features/nodes/store/nodesSlice';
+import { selectGenerationSlice } from 'features/parameters/store/generationSlice';
 import { setShouldConfirmOnDelete } from 'features/system/store/systemSlice';
 import { some } from 'lodash-es';
-import { ChangeEvent, memo, useCallback, useRef } from 'react';
+import type { ChangeEvent } from 'react';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { imageDeletionConfirmed } from '../store/actions';
-import { getImageUsage, selectImageUsage } from '../store/selectors';
-import { imageDeletionCanceled, isModalOpenChanged } from '../store/slice';
-import { ImageUsage } from '../store/types';
+
 import ImageUsageMessage from './ImageUsageMessage';
 
-const selector = createSelector(
-  [stateSelector, selectImageUsage],
-  (state, imagesUsage) => {
-    const { system, config, deleteImageModal } = state;
-    const { shouldConfirmOnDelete } = system;
-    const { canRestoreDeletedImagesFromBin } = config;
-    const { imagesToDelete, isModalOpen } = deleteImageModal;
+const selectImageUsages = createMemoizedSelector(
+  [
+    selectDeleteImageModalSlice,
+    selectGenerationSlice,
+    selectCanvasSlice,
+    selectNodesSlice,
+    selectControlAdaptersSlice,
+    selectImageUsage,
+  ],
+  (deleteImageModal, generation, canvas, nodes, controlAdapters, imagesUsage) => {
+    const { imagesToDelete } = deleteImageModal;
 
     const allImageUsage = (imagesToDelete ?? []).map(({ image_name }) =>
-      getImageUsage(state, image_name)
+      getImageUsage(generation, canvas, nodes, controlAdapters, image_name)
     );
 
     const imageUsageSummary: ImageUsage = {
@@ -45,33 +45,23 @@ const selector = createSelector(
     };
 
     return {
-      shouldConfirmOnDelete,
-      canRestoreDeletedImagesFromBin,
       imagesToDelete,
       imagesUsage,
-      isModalOpen,
       imageUsageSummary,
     };
-  },
-  defaultSelectorOptions
+  }
 );
 
 const DeleteImageModal = () => {
   const dispatch = useAppDispatch();
   const { t } = useTranslation();
-
-  const {
-    shouldConfirmOnDelete,
-    canRestoreDeletedImagesFromBin,
-    imagesToDelete,
-    imagesUsage,
-    isModalOpen,
-    imageUsageSummary,
-  } = useAppSelector(selector);
+  const shouldConfirmOnDelete = useAppSelector((s) => s.system.shouldConfirmOnDelete);
+  const canRestoreDeletedImagesFromBin = useAppSelector((s) => s.config.canRestoreDeletedImagesFromBin);
+  const isModalOpen = useAppSelector((s) => s.deleteImageModal.isModalOpen);
+  const { imagesToDelete, imagesUsage, imageUsageSummary } = useAppSelector(selectImageUsages);
 
   const handleChangeShouldConfirmOnDelete = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) =>
-      dispatch(setShouldConfirmOnDelete(!e.target.checked)),
+    (e: ChangeEvent<HTMLInputElement>) => dispatch(setShouldConfirmOnDelete(!e.target.checked)),
     [dispatch]
   );
 
@@ -85,54 +75,29 @@ const DeleteImageModal = () => {
       return;
     }
     dispatch(imageDeletionCanceled());
-    dispatch(
-      imageDeletionConfirmed({ imageDTOs: imagesToDelete, imagesUsage })
-    );
+    dispatch(imageDeletionConfirmed({ imageDTOs: imagesToDelete, imagesUsage }));
   }, [dispatch, imagesToDelete, imagesUsage]);
 
-  const cancelRef = useRef<HTMLButtonElement>(null);
-
   return (
-    <AlertDialog
+    <ConfirmationAlertDialog
+      title={t('gallery.deleteImage')}
       isOpen={isModalOpen}
       onClose={handleClose}
-      leastDestructiveRef={cancelRef}
-      isCentered
+      cancelButtonText={t('boards.cancel')}
+      acceptButtonText={t('controlnet.delete')}
+      acceptCallback={handleDelete}
     >
-      <AlertDialogOverlay>
-        <AlertDialogContent>
-          <AlertDialogHeader fontSize="lg" fontWeight="bold">
-            {t('gallery.deleteImage')}
-          </AlertDialogHeader>
-
-          <AlertDialogBody>
-            <Flex direction="column" gap={3}>
-              <ImageUsageMessage imageUsage={imageUsageSummary} />
-              <Divider />
-              <Text>
-                {canRestoreDeletedImagesFromBin
-                  ? t('gallery.deleteImageBin')
-                  : t('gallery.deleteImagePermanent')}
-              </Text>
-              <Text>{t('common.areYouSure')}</Text>
-              <IAISwitch
-                label={t('common.dontAskMeAgain')}
-                isChecked={!shouldConfirmOnDelete}
-                onChange={handleChangeShouldConfirmOnDelete}
-              />
-            </Flex>
-          </AlertDialogBody>
-          <AlertDialogFooter>
-            <IAIButton ref={cancelRef} onClick={handleClose}>
-              Cancel
-            </IAIButton>
-            <IAIButton colorScheme="error" onClick={handleDelete} ml={3}>
-              Delete
-            </IAIButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialogOverlay>
-    </AlertDialog>
+      <Flex direction="column" gap={3}>
+        <ImageUsageMessage imageUsage={imageUsageSummary} />
+        <Divider />
+        <Text>{canRestoreDeletedImagesFromBin ? t('gallery.deleteImageBin') : t('gallery.deleteImagePermanent')}</Text>
+        <Text>{t('common.areYouSure')}</Text>
+        <FormControl>
+          <FormLabel>{t('common.dontAskMeAgain')}</FormLabel>
+          <Switch isChecked={!shouldConfirmOnDelete} onChange={handleChangeShouldConfirmOnDelete} />
+        </FormControl>
+      </Flex>
+    </ConfirmationAlertDialog>
   );
 };
 

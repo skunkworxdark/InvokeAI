@@ -1,18 +1,18 @@
-import { Flex, forwardRef } from '@chakra-ui/react';
+import { Flex, forwardRef } from '@invoke-ai/ui-library';
 import { memo } from 'react';
-import { Components } from 'react-virtuoso';
-import { SessionQueueItemDTO } from 'services/api/types';
-import { ListContext } from './types';
+import type { Components } from 'react-virtuoso';
+import type { SessionQueueItemDTO } from 'services/api/types';
 
-const QueueListComponent: Components<SessionQueueItemDTO, ListContext>['List'] =
-  memo(
-    forwardRef((props, ref) => {
-      return (
-        <Flex {...props} ref={ref} flexDirection="column" gap={0.5}>
-          {props.children}
-        </Flex>
-      );
-    })
-  );
+import type { ListContext } from './types';
+
+const QueueListComponent: Components<SessionQueueItemDTO, ListContext>['List'] = memo(
+  forwardRef((props, ref) => {
+    return (
+      <Flex {...props} ref={ref} flexDirection="column" gap={0.5}>
+        {props.children}
+      </Flex>
+    );
+  })
+);
 
 export default memo(QueueListComponent);

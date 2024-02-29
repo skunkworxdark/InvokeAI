@@ -42,8 +42,7 @@ from diffusers.schedulers import (
     PNDMScheduler,
     UnCLIPScheduler,
 )
-from diffusers.utils import is_accelerate_available, is_omegaconf_available
-from diffusers.utils.import_utils import BACKENDS_MAPPING
+from diffusers.utils import is_accelerate_available
 from picklescan.scanner import scan_file_path
 from transformers import (
     AutoFeatureExtractor,
@@ -269,7 +268,7 @@ def create_unet_diffusers_config(original_config, image_size: int, controlnet=Fa
             resolution *= 2
 
     up_block_types = []
-    for i in range(len(block_out_channels)):
+    for _i in range(len(block_out_channels)):
         block_type = "CrossAttnUpBlock2D" if resolution in unet_params.attention_resolutions else "UpBlock2D"
         up_block_types.append(block_type)
         resolution //= 2
@@ -1211,9 +1210,6 @@ def download_from_original_stable_diffusion_ckpt(
     if prediction_type == "v-prediction":
         prediction_type = "v_prediction"
 
-    if not is_omegaconf_available():
-        raise ValueError(BACKENDS_MAPPING["omegaconf"][1])
-
     if from_safetensors:
         from safetensors.torch import load_file as safe_load
 
@@ -1223,7 +1219,7 @@ def download_from_original_stable_diffusion_ckpt(
             # scan model
             scan_result = scan_file_path(checkpoint_path)
             if scan_result.infected_files != 0:
-                raise "The model {checkpoint_path} is potentially infected by malware. Aborting import."
+                raise Exception("The model {checkpoint_path} is potentially infected by malware. Aborting import.")
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -1647,11 +1643,6 @@ def download_controlnet_from_original_ckpt(
     cross_attention_dim: Optional[bool] = None,
     scan_needed: bool = False,
 ) -> DiffusionPipeline:
-    if not is_omegaconf_available():
-        raise ValueError(BACKENDS_MAPPING["omegaconf"][1])
-
-    from omegaconf import OmegaConf
-
     if from_safetensors:
         from safetensors import safe_open
 
@@ -1664,7 +1655,7 @@ def download_controlnet_from_original_ckpt(
             # scan model
             scan_result = scan_file_path(checkpoint_path)
             if scan_result.infected_files != 0:
-                raise "The model {checkpoint_path} is potentially infected by malware. Aborting import."
+                raise Exception("The model {checkpoint_path} is potentially infected by malware. Aborting import.")
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             checkpoint = torch.load(checkpoint_path, map_location=device)

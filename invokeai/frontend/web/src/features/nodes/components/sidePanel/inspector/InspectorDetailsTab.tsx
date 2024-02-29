@@ -1,78 +1,82 @@
-import { Box, Flex } from '@chakra-ui/react';
-import { createSelector } from '@reduxjs/toolkit';
-import { stateSelector } from 'app/store/store';
+import { Box, Flex, FormControl, FormLabel, HStack, Text } from '@invoke-ai/ui-library';
+import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppSelector } from 'app/store/storeHooks';
-import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
 import { IAINoContentFallback } from 'common/components/IAIImageFallback';
-import { InvocationTemplate, NodeData } from 'features/nodes/types/types';
+import ScrollableContent from 'common/components/OverlayScrollbars/ScrollableContent';
+import NotesTextarea from 'features/nodes/components/flow/nodes/Invocation/NotesTextarea';
+import { useNodeNeedsUpdate } from 'features/nodes/hooks/useNodeNeedsUpdate';
+import { selectNodesSlice } from 'features/nodes/store/nodesSlice';
+import { selectNodeTemplatesSlice } from 'features/nodes/store/nodeTemplatesSlice';
+import { isInvocationNode } from 'features/nodes/types/invocation';
 import { memo } from 'react';
-import NotesTextarea from '../../flow/nodes/Invocation/NotesTextarea';
-import NodeTitle from '../../flow/nodes/common/NodeTitle';
-import ScrollableContent from '../ScrollableContent';
 import { useTranslation } from 'react-i18next';
 
-const selector = createSelector(
-  stateSelector,
-  ({ nodes }) => {
-    const lastSelectedNodeId =
-      nodes.selectedNodes[nodes.selectedNodes.length - 1];
+import EditableNodeTitle from './details/EditableNodeTitle';
 
-    const lastSelectedNode = nodes.nodes.find(
-      (node) => node.id === lastSelectedNodeId
-    );
+const selector = createMemoizedSelector(selectNodesSlice, selectNodeTemplatesSlice, (nodes, nodeTemplates) => {
+  const lastSelectedNodeId = nodes.selectedNodes[nodes.selectedNodes.length - 1];
 
-    const lastSelectedNodeTemplate = lastSelectedNode
-      ? nodes.nodeTemplates[lastSelectedNode.data.type]
-      : undefined;
+  const lastSelectedNode = nodes.nodes.find((node) => node.id === lastSelectedNodeId);
 
-    return {
-      data: lastSelectedNode?.data,
-      template: lastSelectedNodeTemplate,
-    };
-  },
-  defaultSelectorOptions
-);
+  const lastSelectedNodeTemplate = lastSelectedNode ? nodeTemplates.templates[lastSelectedNode.data.type] : undefined;
 
-const InspectorDetailsTab = () => {
-  const { data, template } = useAppSelector(selector);
-  const { t } = useTranslation();
-
-  if (!template || !data) {
-    return (
-      <IAINoContentFallback label={t('nodes.noNodeSelected')} icon={null} />
-    );
+  if (!isInvocationNode(lastSelectedNode) || !lastSelectedNodeTemplate) {
+    return;
   }
 
-  return <Content data={data} template={template} />;
+  return {
+    nodeId: lastSelectedNode.data.id,
+    nodeVersion: lastSelectedNode.data.version,
+    templateTitle: lastSelectedNodeTemplate.title,
+  };
+});
+
+const InspectorDetailsTab = () => {
+  const data = useAppSelector(selector);
+  const { t } = useTranslation();
+
+  if (!data) {
+    return <IAINoContentFallback label={t('nodes.noNodeSelected')} icon={null} />;
+  }
+
+  return <Content nodeId={data.nodeId} nodeVersion={data.nodeVersion} templateTitle={data.templateTitle} />;
 };
 
 export default memo(InspectorDetailsTab);
 
-const Content = (props: { data: NodeData; template: InvocationTemplate }) => {
-  const { data } = props;
+type ContentProps = {
+  nodeId: string;
+  nodeVersion: string;
+  templateTitle: string;
+};
 
+const Content = memo((props: ContentProps) => {
+  const { t } = useTranslation();
+  const needsUpdate = useNodeNeedsUpdate(props.nodeId);
   return (
-    <Box
-      sx={{
-        position: 'relative',
-        w: 'full',
-        h: 'full',
-      }}
-    >
+    <Box position="relative" w="full" h="full">
       <ScrollableContent>
-        <Flex
-          sx={{
-            flexDir: 'column',
-            position: 'relative',
-            p: 1,
-            gap: 2,
-            w: 'full',
-          }}
-        >
-          <NodeTitle nodeId={data.id} />
-          <NotesTextarea nodeId={data.id} />
+        <Flex flexDir="column" position="relative" w="full" h="full" p={1} gap={2}>
+          <EditableNodeTitle nodeId={props.nodeId} />
+          <HStack>
+            <FormControl>
+              <FormLabel>{t('nodes.nodeType')}</FormLabel>
+              <Text fontSize="sm" fontWeight="semibold">
+                {props.templateTitle}
+              </Text>
+            </FormControl>
+            <FormControl isInvalid={needsUpdate}>
+              <FormLabel>{t('nodes.nodeVersion')}</FormLabel>
+              <Text fontSize="sm" fontWeight="semibold">
+                {props.nodeVersion}
+              </Text>
+            </FormControl>
+          </HStack>
+          <NotesTextarea nodeId={props.nodeId} />
         </Flex>
       </ScrollableContent>
     </Box>
   );
-};
+});
+
+Content.displayName = 'Content';

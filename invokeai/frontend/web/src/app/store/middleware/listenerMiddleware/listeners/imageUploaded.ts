@@ -1,4 +1,4 @@
-import { UseToastOptions } from '@chakra-ui/react';
+import type { UseToastOptions } from '@invoke-ai/ui-library';
 import { logger } from 'app/logging/logger';
 import { setInitialCanvasImage } from 'features/canvas/store/canvasSlice';
 import {
@@ -6,13 +6,14 @@ import {
   controlAdapterIsEnabledChanged,
 } from 'features/controlAdapters/store/controlAdaptersSlice';
 import { fieldImageValueChanged } from 'features/nodes/store/nodesSlice';
-import { initialImageChanged } from 'features/parameters/store/generationSlice';
+import { initialImageChanged, selectOptimalDimension } from 'features/parameters/store/generationSlice';
 import { addToast } from 'features/system/store/systemSlice';
 import { t } from 'i18next';
 import { omit } from 'lodash-es';
 import { boardsApi } from 'services/api/endpoints/boards';
+import { imagesApi } from 'services/api/endpoints/images';
+
 import { startAppListening } from '..';
-import { imagesApi } from '../../../../../services/api/endpoints/images';
 
 export const addImageUploadedFulfilledListener = () => {
   startAppListening({
@@ -75,11 +76,11 @@ export const addImageUploadedFulfilledListener = () => {
       }
 
       if (postUploadAction?.type === 'SET_CANVAS_INITIAL_IMAGE') {
-        dispatch(setInitialCanvasImage(imageDTO));
+        dispatch(setInitialCanvasImage(imageDTO, selectOptimalDimension(state)));
         dispatch(
           addToast({
             ...DEFAULT_UPLOADED_TOAST,
-            description: t('toast.setCanvasInitialImage'),
+            description: t('toast.setAsCanvasInitialImage'),
           })
         );
         return;
@@ -121,9 +122,7 @@ export const addImageUploadedFulfilledListener = () => {
 
       if (postUploadAction?.type === 'SET_NODES_IMAGE') {
         const { nodeId, fieldName } = postUploadAction;
-        dispatch(
-          fieldImageValueChanged({ nodeId, fieldName, value: imageDTO })
-        );
+        dispatch(fieldImageValueChanged({ nodeId, fieldName, value: imageDTO }));
         dispatch(
           addToast({
             ...DEFAULT_UPLOADED_TOAST,

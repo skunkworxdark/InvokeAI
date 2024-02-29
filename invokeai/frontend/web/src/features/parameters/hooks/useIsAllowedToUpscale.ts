@@ -1,10 +1,10 @@
-import { createSelector } from '@reduxjs/toolkit';
-import { stateSelector } from 'app/store/store';
+import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppSelector } from 'app/store/storeHooks';
-import { defaultSelectorOptions } from 'app/store/util/defaultMemoizeOptions';
+import { selectPostprocessingSlice } from 'features/parameters/store/postprocessingSlice';
+import { selectConfigSlice } from 'features/system/store/configSlice';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ImageDTO } from 'services/api/types';
+import type { ImageDTO } from 'services/api/types';
 
 const getUpscaledPixels = (imageDTO?: ImageDTO, maxUpscalePixels?: number) => {
   if (!imageDTO) {
@@ -19,10 +19,7 @@ const getUpscaledPixels = (imageDTO?: ImageDTO, maxUpscalePixels?: number) => {
   return { x4, x2 };
 };
 
-const getIsAllowedToUpscale = (
-  upscaledPixels?: ReturnType<typeof getUpscaledPixels>,
-  maxUpscalePixels?: number
-) => {
+const getIsAllowedToUpscale = (upscaledPixels?: ReturnType<typeof getUpscaledPixels>, maxUpscalePixels?: number) => {
   if (!upscaledPixels || !maxUpscalePixels) {
     return { x4: true, x2: true };
   }
@@ -37,10 +34,7 @@ const getIsAllowedToUpscale = (
   return isAllowedToUpscale;
 };
 
-const getDetailTKey = (
-  isAllowedToUpscale?: ReturnType<typeof getIsAllowedToUpscale>,
-  scaleFactor?: number
-) => {
+const getDetailTKey = (isAllowedToUpscale?: ReturnType<typeof getIsAllowedToUpscale>, scaleFactor?: number) => {
   if (!isAllowedToUpscale || !scaleFactor) {
     return;
   }
@@ -61,37 +55,24 @@ const getDetailTKey = (
 };
 
 export const createIsAllowedToUpscaleSelector = (imageDTO?: ImageDTO) =>
-  createSelector(
-    stateSelector,
-    ({ postprocessing, config }) => {
-      const { esrganModelName } = postprocessing;
-      const { maxUpscalePixels } = config;
+  createMemoizedSelector(selectPostprocessingSlice, selectConfigSlice, (postprocessing, config) => {
+    const { esrganModelName } = postprocessing;
+    const { maxUpscalePixels } = config;
 
-      const upscaledPixels = getUpscaledPixels(imageDTO, maxUpscalePixels);
-      const isAllowedToUpscale = getIsAllowedToUpscale(
-        upscaledPixels,
-        maxUpscalePixels
-      );
-      const scaleFactor = esrganModelName.includes('x2') ? 2 : 4;
-      const detailTKey = getDetailTKey(isAllowedToUpscale, scaleFactor);
-      return {
-        isAllowedToUpscale:
-          scaleFactor === 2 ? isAllowedToUpscale.x2 : isAllowedToUpscale.x4,
-        detailTKey,
-      };
-    },
-    defaultSelectorOptions
-  );
+    const upscaledPixels = getUpscaledPixels(imageDTO, maxUpscalePixels);
+    const isAllowedToUpscale = getIsAllowedToUpscale(upscaledPixels, maxUpscalePixels);
+    const scaleFactor = esrganModelName.includes('x2') ? 2 : 4;
+    const detailTKey = getDetailTKey(isAllowedToUpscale, scaleFactor);
+    return {
+      isAllowedToUpscale: scaleFactor === 2 ? isAllowedToUpscale.x2 : isAllowedToUpscale.x4,
+      detailTKey,
+    };
+  });
 
 export const useIsAllowedToUpscale = (imageDTO?: ImageDTO) => {
   const { t } = useTranslation();
-  const selectIsAllowedToUpscale = useMemo(
-    () => createIsAllowedToUpscaleSelector(imageDTO),
-    [imageDTO]
-  );
-  const { isAllowedToUpscale, detailTKey } = useAppSelector(
-    selectIsAllowedToUpscale
-  );
+  const selectIsAllowedToUpscale = useMemo(() => createIsAllowedToUpscaleSelector(imageDTO), [imageDTO]);
+  const { isAllowedToUpscale, detailTKey } = useAppSelector(selectIsAllowedToUpscale);
 
   return {
     isAllowedToUpscale,

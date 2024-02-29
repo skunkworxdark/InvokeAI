@@ -1,4 +1,6 @@
-import { PayloadAction, createSlice } from '@reduxjs/toolkit';
+import type { PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
+import type { RootState } from 'app/store/store';
 
 export interface QueueState {
   listCursor: number | undefined;
@@ -30,20 +32,14 @@ export const queueSlice = createSlice({
       state.listCursor = undefined;
       state.listPriority = undefined;
     },
-    queueItemSelectionToggled: (
-      state,
-      action: PayloadAction<string | undefined>
-    ) => {
+    queueItemSelectionToggled: (state, action: PayloadAction<string | undefined>) => {
       if (state.selectedQueueItem === action.payload) {
         state.selectedQueueItem = undefined;
       } else {
         state.selectedQueueItem = action.payload;
       }
     },
-    resumeProcessorOnEnqueueChanged: (
-      state,
-      action: PayloadAction<boolean>
-    ) => {
+    resumeProcessorOnEnqueueChanged: (state, action: PayloadAction<boolean>) => {
       state.resumeProcessorOnEnqueue = action.payload;
     },
   },
@@ -57,4 +53,4 @@ export const {
   resumeProcessorOnEnqueueChanged,
 } = queueSlice.actions;
 
-export default queueSlice.reducer;
+export const selectQueueSlice = (state: RootState) => state.queue;

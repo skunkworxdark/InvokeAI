@@ -1,46 +1,24 @@
-import { createSelector } from '@reduxjs/toolkit';
+import { useStore } from '@nanostores/react';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import {
-  canvasSelector,
-  isStagingSelector,
-} from 'features/canvas/store/canvasSelectors';
-import {
-  // addPointToCurrentEraserLine,
-  addPointToCurrentLine,
-  setIsDrawing,
-  setIsMovingStage,
-} from 'features/canvas/store/canvasSlice';
-import { activeTabNameSelector } from 'features/ui/store/uiSelectors';
-import Konva from 'konva';
-import { isEqual } from 'lodash-es';
-
-import { MutableRefObject, useCallback } from 'react';
-import getScaledCursorPosition from '../util/getScaledCursorPosition';
-
-const selector = createSelector(
-  [activeTabNameSelector, canvasSelector, isStagingSelector],
-  (activeTabName, canvas, isStaging) => {
-    const { tool, isDrawing } = canvas;
-    return {
-      tool,
-      isDrawing,
-      activeTabName,
-      isStaging,
-    };
-  },
-  { memoizeOptions: { resultEqualityCheck: isEqual } }
-);
+import { $isDrawing, $isMovingStage, $tool } from 'features/canvas/store/canvasNanostore';
+import { isStagingSelector } from 'features/canvas/store/canvasSelectors';
+import { addPointToCurrentLine } from 'features/canvas/store/canvasSlice';
+import getScaledCursorPosition from 'features/canvas/util/getScaledCursorPosition';
+import type Konva from 'konva';
+import type { MutableRefObject } from 'react';
+import { useCallback } from 'react';
 
 const useCanvasMouseUp = (
   stageRef: MutableRefObject<Konva.Stage | null>,
   didMouseMoveRef: MutableRefObject<boolean>
 ) => {
   const dispatch = useAppDispatch();
-  const { tool, isDrawing, isStaging } = useAppSelector(selector);
+  const isDrawing = useStore($isDrawing);
+  const isStaging = useAppSelector(isStagingSelector);
 
   return useCallback(() => {
-    if (tool === 'move' || isStaging) {
-      dispatch(setIsMovingStage(false));
+    if ($tool.get() === 'move' || isStaging) {
+      $isMovingStage.set(false);
       return;
     }
 
@@ -57,14 +35,12 @@ const useCanvasMouseUp = (
        * the line's existing points. This allows the line to render as a circle
        * centered on that point.
        */
-      dispatch(
-        addPointToCurrentLine([scaledCursorPosition.x, scaledCursorPosition.y])
-      );
+      dispatch(addPointToCurrentLine([scaledCursorPosition.x, scaledCursorPosition.y]));
     } else {
       didMouseMoveRef.current = false;
     }
-    dispatch(setIsDrawing(false));
-  }, [didMouseMoveRef, dispatch, isDrawing, isStaging, stageRef, tool]);
+    $isDrawing.set(false);
+  }, [didMouseMoveRef, dispatch, isDrawing, isStaging, stageRef]);
 };
 
 export default useCanvasMouseUp;

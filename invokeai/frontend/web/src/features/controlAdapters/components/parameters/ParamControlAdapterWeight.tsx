@@ -1,6 +1,6 @@
-import { useAppDispatch } from 'app/store/storeHooks';
-import IAIInformationalPopover from 'common/components/IAIInformationalPopover/IAIInformationalPopover';
-import IAISlider from 'common/components/IAISlider';
+import { CompositeNumberInput, CompositeSlider, FormControl, FormLabel } from '@invoke-ai/ui-library';
+import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
+import { InformationalPopover } from 'common/components/InformationalPopover/InformationalPopover';
 import { useControlAdapterIsEnabled } from 'features/controlAdapters/hooks/useControlAdapterIsEnabled';
 import { useControlAdapterWeight } from 'features/controlAdapters/hooks/useControlAdapterWeight';
 import { controlAdapterWeightChanged } from 'features/controlAdapters/store/controlAdaptersSlice';
@@ -12,12 +12,22 @@ type ParamControlAdapterWeightProps = {
   id: string;
 };
 
+const formatValue = (v: number) => v.toFixed(2);
+
 const ParamControlAdapterWeight = ({ id }: ParamControlAdapterWeightProps) => {
+  const { t } = useTranslation();
+  const dispatch = useAppDispatch();
   const isEnabled = useControlAdapterIsEnabled(id);
   const weight = useControlAdapterWeight(id);
-  const dispatch = useAppDispatch();
-  const { t } = useTranslation();
-  const handleWeightChanged = useCallback(
+  const initial = useAppSelector((s) => s.config.sd.ca.weight.initial);
+  const sliderMin = useAppSelector((s) => s.config.sd.ca.weight.sliderMin);
+  const sliderMax = useAppSelector((s) => s.config.sd.ca.weight.sliderMax);
+  const numberInputMin = useAppSelector((s) => s.config.sd.ca.weight.numberInputMin);
+  const numberInputMax = useAppSelector((s) => s.config.sd.ca.weight.numberInputMax);
+  const coarseStep = useAppSelector((s) => s.config.sd.ca.weight.coarseStep);
+  const fineStep = useAppSelector((s) => s.config.sd.ca.weight.fineStep);
+
+  const onChange = useCallback(
     (weight: number) => {
       dispatch(controlAdapterWeightChanged({ id, weight }));
     },
@@ -30,20 +40,35 @@ const ParamControlAdapterWeight = ({ id }: ParamControlAdapterWeightProps) => {
   }
 
   return (
-    <IAIInformationalPopover feature="controlNetWeight">
-      <IAISlider
-        isDisabled={!isEnabled}
-        label={t('controlnet.weight')}
+    <FormControl isDisabled={!isEnabled}>
+      <InformationalPopover feature="controlNetWeight">
+        <FormLabel>{t('controlnet.weight')}</FormLabel>
+      </InformationalPopover>
+      <CompositeSlider
         value={weight}
-        onChange={handleWeightChanged}
-        min={0}
-        max={2}
-        step={0.01}
-        withSliderMarks
-        sliderMarks={[0, 1, 2]}
+        onChange={onChange}
+        defaultValue={initial}
+        min={sliderMin}
+        max={sliderMax}
+        step={coarseStep}
+        fineStep={fineStep}
+        marks={marks}
+        formatValue={formatValue}
       />
-    </IAIInformationalPopover>
+      <CompositeNumberInput
+        value={weight}
+        onChange={onChange}
+        min={numberInputMin}
+        max={numberInputMax}
+        step={coarseStep}
+        fineStep={fineStep}
+        maxW={20}
+        defaultValue={initial}
+      />
+    </FormControl>
   );
 };
 
 export default memo(ParamControlAdapterWeight);
+
+const marks = [0, 1, 2];

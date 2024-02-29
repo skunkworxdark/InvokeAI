@@ -1,14 +1,12 @@
 import { logger } from 'app/logging/logger';
-import { zT2IAdapterModel } from 'features/parameters/types/parameterSchemas';
-import { T2IAdapterModelField } from 'services/api/types';
+import { zParameterT2IAdapterModel } from 'features/parameters/types/parameterSchemas';
+import type { T2IAdapterModelField } from 'services/api/types';
 
-export const modelIdToT2IAdapterModelParam = (
-  t2iAdapterModelId: string
-): T2IAdapterModelField | undefined => {
+export const modelIdToT2IAdapterModelParam = (t2iAdapterModelId: string): T2IAdapterModelField | undefined => {
   const log = logger('models');
   const [base_model, _model_type, model_name] = t2iAdapterModelId.split('/');
 
-  const result = zT2IAdapterModel.safeParse({
+  const result = zParameterT2IAdapterModel.safeParse({
     base_model,
     model_name,
   });

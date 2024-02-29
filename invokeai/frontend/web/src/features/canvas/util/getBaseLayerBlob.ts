@@ -1,25 +1,19 @@
-import { RootState } from 'app/store/store';
-import { getCanvasBaseLayer } from './konvaInstanceProvider';
+import type { RootState } from 'app/store/store';
+import { $canvasBaseLayer } from 'features/canvas/store/canvasNanostore';
+
 import { konvaNodeToBlob } from './konvaNodeToBlob';
 
 /**
  * Get the canvas base layer blob, with or without bounding box according to `shouldCropToBoundingBoxOnSave`
  */
-export const getBaseLayerBlob = async (
-  state: RootState,
-  alwaysUseBoundingBox: boolean = false
-) => {
-  const canvasBaseLayer = getCanvasBaseLayer();
+export const getBaseLayerBlob = async (state: RootState, alwaysUseBoundingBox: boolean = false) => {
+  const canvasBaseLayer = $canvasBaseLayer.get();
 
   if (!canvasBaseLayer) {
     throw new Error('Problem getting base layer blob');
   }
 
-  const {
-    shouldCropToBoundingBoxOnSave,
-    boundingBoxCoordinates,
-    boundingBoxDimensions,
-  } = state.canvas;
+  const { shouldCropToBoundingBoxOnSave, boundingBoxCoordinates, boundingBoxDimensions } = state.canvas;
 
   const clonedBaseLayer = canvasBaseLayer.clone();
 

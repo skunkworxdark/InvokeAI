@@ -1,9 +1,8 @@
-import { ExternalLinkIcon } from '@chakra-ui/icons';
-import { Flex, IconButton, Link, Text, Tooltip } from '@chakra-ui/react';
-import { memo } from 'react';
+import { ExternalLink, Flex, IconButton, Text, Tooltip } from '@invoke-ai/ui-library';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaCopy } from 'react-icons/fa';
 import { IoArrowUndoCircleOutline } from 'react-icons/io5';
+import { PiCopyBold } from 'react-icons/pi';
 
 type MetadataItemProps = {
   isLink?: boolean;
@@ -17,15 +16,10 @@ type MetadataItemProps = {
 /**
  * Component to display an individual metadata item or parameter.
  */
-const ImageMetadataItem = ({
-  label,
-  value,
-  onClick,
-  isLink,
-  labelPosition,
-  withCopy = false,
-}: MetadataItemProps) => {
+const ImageMetadataItem = ({ label, value, onClick, isLink, labelPosition, withCopy = false }: MetadataItemProps) => {
   const { t } = useTranslation();
+
+  const handleCopy = useCallback(() => navigator.clipboard.writeText(value.toString()), [value]);
 
   if (!value) {
     return null;
@@ -49,11 +43,11 @@ const ImageMetadataItem = ({
         <Tooltip label={`Copy ${label}`}>
           <IconButton
             aria-label={`Copy ${label}`}
-            icon={<FaCopy />}
+            icon={<PiCopyBold />}
             size="xs"
             variant="ghost"
             fontSize={14}
-            onClick={() => navigator.clipboard.writeText(value.toString())}
+            onClick={handleCopy}
           />
         </Tooltip>
       )}
@@ -62,9 +56,7 @@ const ImageMetadataItem = ({
           {label}:
         </Text>
         {isLink ? (
-          <Link href={value.toString()} isExternal wordBreak="break-all">
-            {value.toString()} <ExternalLinkIcon mx="2px" />
-          </Link>
+          <ExternalLink href={value.toString()} label={value.toString()} />
         ) : (
           <Text overflowY="scroll" wordBreak="break-all">
             {value.toString()}

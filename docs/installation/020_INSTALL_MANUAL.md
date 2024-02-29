@@ -148,13 +148,13 @@ manager, please follow these steps:
     === "CUDA (NVidia)"
 
         ```bash
-        pip install "InvokeAI[xformers]" --use-pep517 --extra-index-url https://download.pytorch.org/whl/cu118
+        pip install "InvokeAI[xformers]" --use-pep517 --extra-index-url https://download.pytorch.org/whl/cu121
         ```
 
     === "ROCm (AMD)"
 
         ```bash
-        pip install InvokeAI --use-pep517 --extra-index-url https://download.pytorch.org/whl/rocm5.4.2
+        pip install InvokeAI --use-pep517 --extra-index-url https://download.pytorch.org/whl/rocm5.6
         ```
 
     === "CPU (Intel Macs & non-GPU systems)"
@@ -230,13 +230,13 @@ manager, please follow these steps:
         === "local Webserver"
 
             ```bash
-            invokeai --web
+            invokeai-web
             ```
 
         === "Public Webserver"
 
             ```bash
-            invokeai --web --host 0.0.0.0
+            invokeai-web --host 0.0.0.0
             ```
 
         === "CLI"
@@ -293,6 +293,19 @@ manager, please follow these steps:
 
 ## Developer Install
 
+!!! warning
+
+    InvokeAI uses a SQLite database. By running on `main`, you accept responsibility for your database. This
+    means making regular backups (especially before pulling) and/or fixing it yourself in the event that a
+    PR introduces a schema change.
+    
+    If you don't need persistent backend storage, you can use an ephemeral in-memory database by setting
+    `use_memory_db: true` under `Path:` in your `invokeai.yaml` file.
+
+    If this is untenable, you should run the application via the official installer or a manual install of the
+    python package from pypi. These releases will not break your database.
+
+
 If you have an interest in how InvokeAI works, or you would like to
 add features or bugfixes, you are encouraged to install the source
 code for InvokeAI. For this to work, you will need to install the
@@ -300,7 +313,7 @@ code for InvokeAI. For this to work, you will need to install the
 on your system, please see the [Git Installation
 Guide](https://github.com/git-guides/install-git)
 
-You will also need to install the [frontend development toolchain](https://github.com/invoke-ai/InvokeAI/blob/main/docs/contributing/contribution_guides/contributingToFrontend.md).
+You will also need to install the [frontend development toolchain](https://github.com/invoke-ai/InvokeAI/blob/main/invokeai/frontend/web/README.md).
 
 If you have a "normal" installation, you should create a totally separate virtual environment for the git-based installation, else the two may interfere.
 
@@ -327,12 +340,12 @@ installation protocol (important!)
 
     === "CUDA (NVidia)"
         ```bash
-        pip install -e .[xformers] --use-pep517 --extra-index-url https://download.pytorch.org/whl/cu118
+        pip install -e .[xformers] --use-pep517 --extra-index-url https://download.pytorch.org/whl/cu121
         ```
 
     === "ROCm (AMD)"
         ```bash
-        pip install -e . --use-pep517 --extra-index-url https://download.pytorch.org/whl/rocm5.4.2
+        pip install -e . --use-pep517 --extra-index-url https://download.pytorch.org/whl/rocm5.6
         ```
 
     === "CPU (Intel Macs & non-GPU systems)"
@@ -348,7 +361,7 @@ installation protocol (important!)
     Be sure to pass `-e` (for an editable install) and don't forget the
     dot ("."). It is part of the command.
 
-5.  Install the [frontend toolchain](https://github.com/invoke-ai/InvokeAI/blob/main/docs/contributing/contribution_guides/contributingToFrontend.md) and do a production build of the UI as described.
+5.  Install the [frontend toolchain](https://github.com/invoke-ai/InvokeAI/blob/main/invokeai/frontend/web/README.md) and do a production build of the UI as described.
 
 6.  You can now run `invokeai` and its related commands. The code will be
     read from the repository, so that you can edit the .py source files
@@ -375,7 +388,7 @@ you can do so using this unsupported recipe:
 mkdir ~/invokeai
 conda create -n invokeai python=3.10
 conda activate invokeai
-pip install InvokeAI[xformers] --use-pep517 --extra-index-url https://download.pytorch.org/whl/cu118
+pip install InvokeAI[xformers] --use-pep517 --extra-index-url https://download.pytorch.org/whl/cu121
 invokeai-configure --root ~/invokeai
 invokeai --root ~/invokeai --web
 ```
@@ -388,3 +401,5 @@ environment variable INVOKEAI_ROOT to point to the installation directory.
 
 Note that if you run into problems with the Conda installation, the InvokeAI
 staff will **not** be able to help you out. Caveat Emptor!
+
+[dev-chat]: https://discord.com/channels/1020123559063990373/1049495067846524939

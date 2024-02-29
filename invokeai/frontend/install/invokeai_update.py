@@ -4,14 +4,15 @@ pip install <path_to_git_source>.
 """
 import os
 import platform
+from distutils.version import LooseVersion
+from importlib.metadata import PackageNotFoundError, distribution, distributions
 
-import pkg_resources
 import psutil
 import requests
 from rich import box, print
 from rich.console import Console, group
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.style import Style
 
 from invokeai.version import __version__
@@ -31,10 +32,6 @@ else:
     console = Console(style=Style(color="grey74", bgcolor="grey19"))
 
 
-def get_versions() -> dict:
-    return requests.get(url=INVOKE_AI_REL).json()
-
-
 def invokeai_is_running() -> bool:
     for p in psutil.process_iter():
         try:
@@ -50,6 +47,79 @@ def invokeai_is_running() -> bool:
     return False
 
 
+def get_pypi_versions():
+    url = "https://pypi.org/pypi/invokeai/json"
+    try:
+        data = requests.get(url).json()
+    except Exception:
+        raise Exception("Unable to fetch version information from PyPi")
+
+    versions = list(data["releases"].keys())
+    versions.sort(key=LooseVersion, reverse=True)
+    latest_version = [v for v in versions if "rc" not in v][0]
+    latest_release_candidate = [v for v in versions if "rc" in v][0]
+    return latest_version, latest_release_candidate, versions
+
+
+def get_torch_extra_index_url() -> str | None:
+    """
+    Determine torch wheel source URL and optional modules based on the user's OS.
+    """
+
+    resolved_url = None
+
+    # In all other cases (like MacOS (MPS) or Linux+CUDA), there is no need to specify the extra index URL.
+    torch_package_urls = {
+        "windows_cuda": "https://download.pytorch.org/whl/cu121",
+        "linux_rocm": "https://download.pytorch.org/whl/rocm5.6",
+        "linux_cpu": "https://download.pytorch.org/whl/cpu",
+    }
+
+    nvidia_packages_present = (
+        len([d.metadata["Name"] for d in distributions() if d.metadata["Name"].startswith("nvidia")]) > 0
+    )
+    device = "cuda" if nvidia_packages_present else None
+    manual_gpu_selection_prompt = (
+        "[bold]We tried and failed to guess your GPU capabilities[/] :thinking_face:. Please select the GPU type:"
+    )
+
+    if OS == "Linux":
+        if not device:
+            # do we even need to offer a CPU-only install option?
+            print(manual_gpu_selection_prompt)
+            print("1: NVIDIA (CUDA)")
+            print("2: AMD (ROCm)")
+            print("3: No GPU - CPU only")
+            answer = Prompt.ask("Choice:", choices=["1", "2", "3"], default="1")
+            match answer:
+                case "1":
+                    device = "cuda"
+                case "2":
+                    device = "rocm"
+                case "3":
+                    device = "cpu"
+
+        if device != "cuda":
+            resolved_url = torch_package_urls[f"linux_{device}"]
+
+    if OS == "Windows":
+        if not device:
+            print(manual_gpu_selection_prompt)
+            print("1: NVIDIA (CUDA)")
+            print("2: No GPU - CPU only")
+            answer = Prompt.ask("Your choice:", choices=["1", "2"], default="1")
+            match answer:
+                case "1":
+                    device = "cuda"
+                case "2":
+                    device = "cpu"
+
+        if device == "cuda":
+            resolved_url = torch_package_urls[f"windows_{device}"]
+
+    return resolved_url
+
+
 def welcome(latest_release: str, latest_prerelease: str):
     @group()
     def text():
@@ -57,14 +127,10 @@ def welcome(latest_release: str, latest_prerelease: str):
         yield ""
         yield "This script will update InvokeAI to the latest release, or to the development version of your choice."
         yield ""
-        yield "When updating to an arbitrary tag or branch, be aware that the front end may be mismatched to the backend,"
-        yield "making the web frontend unusable. Please downgrade to the latest release if this happens."
-        yield ""
         yield "[bold yellow]Options:"
         yield f"""[1] Update to the latest [bold]official release[/bold] ([italic]{latest_release}[/italic])
-[2] Update to the latest [bold]pre-release[/bold] (may be buggy; caveat emptor!) ([italic]{latest_prerelease}[/italic])
-[2] Manually enter the [bold]tag name[/bold] for the version you wish to update to
-[3] Manually enter the [bold]branch name[/bold] for the version you wish to update to"""
+[2] Update to the latest [bold]pre-release[/bold] (may be buggy, database backups are recommended before installation; caveat emptor!) ([italic]{latest_prerelease}[/italic])
+[3] Manually enter the [bold]version[/bold] you wish to update to"""
 
     console.rule()
     print(
@@ -82,54 +148,58 @@ def welcome(latest_release: str, latest_prerelease: str):
 
 
 def get_extras():
-    extras = ""
     try:
-        _ = pkg_resources.get_distribution("xformers")
+        distribution("xformers")
         extras = "[xformers]"
-    except pkg_resources.DistributionNotFound:
-        pass
+    except PackageNotFoundError:
+        extras = ""
     return extras
 
 
 def main():
-    versions = get_versions()
-    released_versions = [x for x in versions if not (x["draft"] or x["prerelease"])]
-    prerelease_versions = [x for x in versions if not x["draft"] and x["prerelease"]]
-    latest_release = released_versions[0]["tag_name"] if len(released_versions) else None
-    latest_prerelease = prerelease_versions[0]["tag_name"] if len(prerelease_versions) else None
-
     if invokeai_is_running():
         print(":exclamation: [bold red]Please terminate all running instances of InvokeAI before updating.[/red bold]")
         input("Press any key to continue...")
         return
 
+    latest_release, latest_prerelease, versions = get_pypi_versions()
+
     welcome(latest_release, latest_prerelease)
 
-    tag = None
-    branch = None
-    release = None
-    choice = Prompt.ask("Choice:", choices=["1", "2", "3", "4"], default="1")
+    release = latest_release
+    choice = Prompt.ask("Choice:", choices=["1", "2", "3"], default="1")
 
     if choice == "1":
         release = latest_release
     elif choice == "2":
         release = latest_prerelease
     elif choice == "3":
-        while not tag:
-            tag = Prompt.ask("Enter an InvokeAI tag name")
-    elif choice == "4":
-        while not branch:
-            branch = Prompt.ask("Enter an InvokeAI branch name")
+        while True:
+            release = Prompt.ask("Enter an InvokeAI version")
+            release.strip()
+            if release in versions:
+                break
+            print(f":exclamation: [bold red]'{release}' is not a recognized InvokeAI release.[/red bold]")
 
     extras = get_extras()
 
-    print(f":crossed_fingers: Upgrading to [yellow]{tag or release or branch}[/yellow]")
-    if release:
-        cmd = f'pip install "invokeai{extras} @ {INVOKE_AI_SRC}/{release}.zip" --use-pep517 --upgrade'
-    elif tag:
-        cmd = f'pip install "invokeai{extras} @ {INVOKE_AI_TAG}/{tag}.zip" --use-pep517 --upgrade'
-    else:
-        cmd = f'pip install "invokeai{extras} @ {INVOKE_AI_BRANCH}/{branch}.zip" --use-pep517 --upgrade'
+    console.line()
+    force_reinstall = Confirm.ask(
+        "[bold]Force reinstallation of all dependencies?[/] This [i]may[/] help fix a broken upgrade, but is usually not necessary.",
+        default=False,
+    )
+
+    console.line()
+    flags = []
+    if (index_url := get_torch_extra_index_url()) is not None:
+        flags.append(f"--extra-index-url {index_url}")
+    if force_reinstall:
+        flags.append("--force-reinstall")
+    flags = " ".join(flags)
+
+    print(f":crossed_fingers: Upgrading to [yellow]{release}[/yellow]")
+    cmd = f'pip install "invokeai{extras}=={release}" --use-pep517 --upgrade {flags}'
+
     print("")
     print("")
     if os.system(cmd) == 0:

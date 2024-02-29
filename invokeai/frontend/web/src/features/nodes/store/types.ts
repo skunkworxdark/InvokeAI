@@ -1,30 +1,21 @@
-import {
-  Edge,
-  Node,
-  OnConnectStartParams,
-  SelectionMode,
-  Viewport,
-  XYPosition,
-} from 'reactflow';
-import {
-  FieldIdentifier,
-  FieldType,
-  InvocationEdgeExtra,
+import type { FieldIdentifier, FieldType, StatefulFieldValue } from 'features/nodes/types/field';
+import type {
+  AnyNode,
+  InvocationNodeEdge,
   InvocationTemplate,
-  NodeData,
   NodeExecutionState,
-  Workflow,
-} from '../types/types';
+} from 'features/nodes/types/invocation';
+import type { WorkflowV2 } from 'features/nodes/types/workflow';
+import type { OnConnectStartParams, SelectionMode, Viewport, XYPosition } from 'reactflow';
 
 export type NodesState = {
-  nodes: Node<NodeData>[];
-  edges: Edge<InvocationEdgeExtra>[];
-  nodeTemplates: Record<string, InvocationTemplate>;
+  _version: 1;
+  nodes: AnyNode[];
+  edges: InvocationNodeEdge[];
   connectionStartParams: OnConnectStartParams | null;
-  currentConnectionFieldType: FieldType | null;
+  connectionStartFieldType: FieldType | null;
   connectionMade: boolean;
   modifyingEdge: boolean;
-  shouldShowFieldTypeLegend: boolean;
   shouldShowMinimapPanel: boolean;
   shouldValidateGraph: boolean;
   shouldAnimateEdges: boolean;
@@ -33,15 +24,27 @@ export type NodesState = {
   shouldColorEdges: boolean;
   selectedNodes: string[];
   selectedEdges: string[];
-  workflow: Omit<Workflow, 'nodes' | 'edges'>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
   viewport: Viewport;
-  isReady: boolean;
-  mouseOverField: FieldIdentifier | null;
-  mouseOverNode: string | null;
-  nodesToCopy: Node<NodeData>[];
-  edgesToCopy: Edge<InvocationEdgeExtra>[];
+  nodesToCopy: AnyNode[];
+  edgesToCopy: InvocationNodeEdge[];
   isAddNodePopoverOpen: boolean;
   addNewNodePosition: XYPosition | null;
   selectionMode: SelectionMode;
+};
+
+export type WorkflowMode = 'edit' | 'view';
+export type FieldIdentifierWithValue = FieldIdentifier & {
+  value: StatefulFieldValue;
+};
+
+export type WorkflowsState = Omit<WorkflowV2, 'nodes' | 'edges'> & {
+  _version: 1;
+  isTouched: boolean;
+  mode: WorkflowMode;
+  originalExposedFieldValues: FieldIdentifierWithValue[];
+};
+
+export type NodeTemplatesState = {
+  templates: Record<string, InvocationTemplate>;
 };

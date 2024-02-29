@@ -1,17 +1,16 @@
 import { createAction } from '@reduxjs/toolkit';
 import { logger } from 'app/logging/logger';
 import { parseify } from 'common/util/serialize';
-import { buildAdHocUpscaleGraph } from 'features/nodes/util/graphBuilders/buildAdHocUpscaleGraph';
+import { buildAdHocUpscaleGraph } from 'features/nodes/util/graph/buildAdHocUpscaleGraph';
+import { createIsAllowedToUpscaleSelector } from 'features/parameters/hooks/useIsAllowedToUpscale';
 import { addToast } from 'features/system/store/systemSlice';
 import { t } from 'i18next';
 import { queueApi } from 'services/api/endpoints/queue';
-import { startAppListening } from '..';
-import { BatchConfig, ImageDTO } from 'services/api/types';
-import { createIsAllowedToUpscaleSelector } from 'features/parameters/hooks/useIsAllowedToUpscale';
+import type { BatchConfig, ImageDTO } from 'services/api/types';
 
-export const upscaleRequested = createAction<{ imageDTO: ImageDTO }>(
-  `upscale/upscaleRequested`
-);
+import { startAppListening } from '..';
+
+export const upscaleRequested = createAction<{ imageDTO: ImageDTO }>(`upscale/upscaleRequested`);
 
 export const addUpscaleRequestedListener = () => {
   startAppListening({
@@ -23,8 +22,7 @@ export const addUpscaleRequestedListener = () => {
       const { image_name } = imageDTO;
       const state = getState();
 
-      const { isAllowedToUpscale, detailTKey } =
-        createIsAllowedToUpscaleSelector(imageDTO)(state);
+      const { isAllowedToUpscale, detailTKey } = createIsAllowedToUpscaleSelector(imageDTO)(state);
 
       // if we can't upscale, show a toast and return
       if (!isAllowedToUpscale) {
@@ -65,41 +63,20 @@ export const addUpscaleRequestedListener = () => {
 
         const enqueueResult = await req.unwrap();
         req.reset();
-        log.debug(
-          { enqueueResult: parseify(enqueueResult) },
-          t('queue.graphQueued')
-        );
+        log.debug({ enqueueResult: parseify(enqueueResult) }, t('queue.graphQueued'));
       } catch (error) {
-        log.error(
-          { enqueueBatchArg: parseify(enqueueBatchArg) },
-          t('queue.graphFailedToQueue')
-        );
+        log.error({ enqueueBatchArg: parseify(enqueueBatchArg) }, t('queue.graphFailedToQueue'));
 
-        // handle usage-related errors
-        if (error instanceof Object) {
-          if ('data' in error && 'status' in error) {
-            if (error.status === 403) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const detail = (error.data as any)?.detail || 'Unknown Error';
-              dispatch(
-                addToast({
-                  title: t('queue.graphFailedToQueue'),
-                  status: 'error',
-                  description: detail,
-                  duration: 15000,
-                })
-              );
-              return;
-            }
-          }
+        if (error instanceof Object && 'status' in error && error.status === 403) {
+          return;
+        } else {
+          dispatch(
+            addToast({
+              title: t('queue.graphFailedToQueue'),
+              status: 'error',
+            })
+          );
         }
-
-        dispatch(
-          addToast({
-            title: t('queue.graphFailedToQueue'),
-            status: 'error',
-          })
-        );
       }
     },
   });

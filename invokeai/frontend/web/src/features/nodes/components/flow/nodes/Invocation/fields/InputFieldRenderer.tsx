@@ -1,23 +1,61 @@
-import { Box, Text } from '@chakra-ui/react';
-import { useFieldData } from 'features/nodes/hooks/useFieldData';
+import { Box, Text } from '@invoke-ai/ui-library';
+import { useFieldInstance } from 'features/nodes/hooks/useFieldData';
 import { useFieldTemplate } from 'features/nodes/hooks/useFieldTemplate';
+import {
+  isBoardFieldInputInstance,
+  isBoardFieldInputTemplate,
+  isBooleanFieldInputInstance,
+  isBooleanFieldInputTemplate,
+  isColorFieldInputInstance,
+  isColorFieldInputTemplate,
+  isControlNetModelFieldInputInstance,
+  isControlNetModelFieldInputTemplate,
+  isEnumFieldInputInstance,
+  isEnumFieldInputTemplate,
+  isFloatFieldInputInstance,
+  isFloatFieldInputTemplate,
+  isImageFieldInputInstance,
+  isImageFieldInputTemplate,
+  isIntegerFieldInputInstance,
+  isIntegerFieldInputTemplate,
+  isIPAdapterModelFieldInputInstance,
+  isIPAdapterModelFieldInputTemplate,
+  isLoRAModelFieldInputInstance,
+  isLoRAModelFieldInputTemplate,
+  isMainModelFieldInputInstance,
+  isMainModelFieldInputTemplate,
+  isSchedulerFieldInputInstance,
+  isSchedulerFieldInputTemplate,
+  isSDXLMainModelFieldInputInstance,
+  isSDXLMainModelFieldInputTemplate,
+  isSDXLRefinerModelFieldInputInstance,
+  isSDXLRefinerModelFieldInputTemplate,
+  isStringFieldInputInstance,
+  isStringFieldInputTemplate,
+  isT2IAdapterModelFieldInputInstance,
+  isT2IAdapterModelFieldInputTemplate,
+  isVAEModelFieldInputInstance,
+  isVAEModelFieldInputTemplate,
+} from 'features/nodes/types/field';
 import { memo } from 'react';
-import BooleanInputField from './inputs/BooleanInputField';
-import ColorInputField from './inputs/ColorInputField';
-import ControlNetModelInputField from './inputs/ControlNetModelInputField';
-import EnumInputField from './inputs/EnumInputField';
-import ImageInputField from './inputs/ImageInputField';
-import LoRAModelInputField from './inputs/LoRAModelInputField';
-import MainModelInputField from './inputs/MainModelInputField';
-import NumberInputField from './inputs/NumberInputField';
-import RefinerModelInputField from './inputs/RefinerModelInputField';
-import SDXLMainModelInputField from './inputs/SDXLMainModelInputField';
-import SchedulerInputField from './inputs/SchedulerInputField';
-import StringInputField from './inputs/StringInputField';
-import VaeModelInputField from './inputs/VaeModelInputField';
-import IPAdapterModelInputField from './inputs/IPAdapterModelInputField';
-import T2IAdapterModelInputField from './inputs/T2IAdapterModelInputField';
-import BoardInputField from './inputs/BoardInputField';
+import { useTranslation } from 'react-i18next';
+
+import BoardFieldInputComponent from './inputs/BoardFieldInputComponent';
+import BooleanFieldInputComponent from './inputs/BooleanFieldInputComponent';
+import ColorFieldInputComponent from './inputs/ColorFieldInputComponent';
+import ControlNetModelFieldInputComponent from './inputs/ControlNetModelFieldInputComponent';
+import EnumFieldInputComponent from './inputs/EnumFieldInputComponent';
+import ImageFieldInputComponent from './inputs/ImageFieldInputComponent';
+import IPAdapterModelFieldInputComponent from './inputs/IPAdapterModelFieldInputComponent';
+import LoRAModelFieldInputComponent from './inputs/LoRAModelFieldInputComponent';
+import MainModelFieldInputComponent from './inputs/MainModelFieldInputComponent';
+import NumberFieldInputComponent from './inputs/NumberFieldInputComponent';
+import RefinerModelFieldInputComponent from './inputs/RefinerModelFieldInputComponent';
+import SchedulerFieldInputComponent from './inputs/SchedulerFieldInputComponent';
+import SDXLMainModelFieldInputComponent from './inputs/SDXLMainModelFieldInputComponent';
+import StringFieldInputComponent from './inputs/StringFieldInputComponent';
+import T2IAdapterModelFieldInputComponent from './inputs/T2IAdapterModelFieldInputComponent';
+import VAEModelFieldInputComponent from './inputs/VAEModelFieldInputComponent';
 
 type InputFieldProps = {
   nodeId: string;
@@ -25,231 +63,93 @@ type InputFieldProps = {
 };
 
 const InputFieldRenderer = ({ nodeId, fieldName }: InputFieldProps) => {
-  const field = useFieldData(nodeId, fieldName);
+  const { t } = useTranslation();
+  const fieldInstance = useFieldInstance(nodeId, fieldName);
   const fieldTemplate = useFieldTemplate(nodeId, fieldName, 'input');
 
   if (fieldTemplate?.fieldKind === 'output') {
-    return <Box p={2}>Output field in input: {field?.type}</Box>;
+    return (
+      <Box p={2}>
+        {t('nodes.outputFieldInInput')}: {fieldInstance?.type.name}
+      </Box>
+    );
+  }
+
+  if (isStringFieldInputInstance(fieldInstance) && isStringFieldInputTemplate(fieldTemplate)) {
+    return <StringFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
+  }
+
+  if (isBooleanFieldInputInstance(fieldInstance) && isBooleanFieldInputTemplate(fieldTemplate)) {
+    return <BooleanFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
   if (
-    (field?.type === 'string' && fieldTemplate?.type === 'string') ||
-    (field?.type === 'StringPolymorphic' &&
-      fieldTemplate?.type === 'StringPolymorphic')
+    (isIntegerFieldInputInstance(fieldInstance) && isIntegerFieldInputTemplate(fieldTemplate)) ||
+    (isFloatFieldInputInstance(fieldInstance) && isFloatFieldInputTemplate(fieldTemplate))
   ) {
-    return (
-      <StringInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+    return <NumberFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    (field?.type === 'boolean' && fieldTemplate?.type === 'boolean') ||
-    (field?.type === 'BooleanPolymorphic' &&
-      fieldTemplate?.type === 'BooleanPolymorphic')
-  ) {
-    return (
-      <BooleanInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isEnumFieldInputInstance(fieldInstance) && isEnumFieldInputTemplate(fieldTemplate)) {
+    return <EnumFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    (field?.type === 'integer' && fieldTemplate?.type === 'integer') ||
-    (field?.type === 'float' && fieldTemplate?.type === 'float') ||
-    (field?.type === 'FloatPolymorphic' &&
-      fieldTemplate?.type === 'FloatPolymorphic') ||
-    (field?.type === 'IntegerPolymorphic' &&
-      fieldTemplate?.type === 'IntegerPolymorphic')
-  ) {
-    return (
-      <NumberInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isImageFieldInputInstance(fieldInstance) && isImageFieldInputTemplate(fieldTemplate)) {
+    return <ImageFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (field?.type === 'enum' && fieldTemplate?.type === 'enum') {
-    return (
-      <EnumInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isBoardFieldInputInstance(fieldInstance) && isBoardFieldInputTemplate(fieldTemplate)) {
+    return <BoardFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    (field?.type === 'ImageField' && fieldTemplate?.type === 'ImageField') ||
-    (field?.type === 'ImagePolymorphic' &&
-      fieldTemplate?.type === 'ImagePolymorphic')
-  ) {
-    return (
-      <ImageInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isMainModelFieldInputInstance(fieldInstance) && isMainModelFieldInputTemplate(fieldTemplate)) {
+    return <MainModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (field?.type === 'BoardField' && fieldTemplate?.type === 'BoardField') {
-    return (
-      <BoardInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isSDXLRefinerModelFieldInputInstance(fieldInstance) && isSDXLRefinerModelFieldInputTemplate(fieldTemplate)) {
+    return <RefinerModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'MainModelField' &&
-    fieldTemplate?.type === 'MainModelField'
-  ) {
-    return (
-      <MainModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isVAEModelFieldInputInstance(fieldInstance) && isVAEModelFieldInputTemplate(fieldTemplate)) {
+    return <VAEModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'SDXLRefinerModelField' &&
-    fieldTemplate?.type === 'SDXLRefinerModelField'
-  ) {
-    return (
-      <RefinerModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isLoRAModelFieldInputInstance(fieldInstance) && isLoRAModelFieldInputTemplate(fieldTemplate)) {
+    return <LoRAModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'VaeModelField' &&
-    fieldTemplate?.type === 'VaeModelField'
-  ) {
-    return (
-      <VaeModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isControlNetModelFieldInputInstance(fieldInstance) && isControlNetModelFieldInputTemplate(fieldTemplate)) {
+    return <ControlNetModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'LoRAModelField' &&
-    fieldTemplate?.type === 'LoRAModelField'
-  ) {
-    return (
-      <LoRAModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isIPAdapterModelFieldInputInstance(fieldInstance) && isIPAdapterModelFieldInputTemplate(fieldTemplate)) {
+    return <IPAdapterModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'ControlNetModelField' &&
-    fieldTemplate?.type === 'ControlNetModelField'
-  ) {
-    return (
-      <ControlNetModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isT2IAdapterModelFieldInputInstance(fieldInstance) && isT2IAdapterModelFieldInputTemplate(fieldTemplate)) {
+    return <T2IAdapterModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
+  }
+  if (isColorFieldInputInstance(fieldInstance) && isColorFieldInputTemplate(fieldTemplate)) {
+    return <ColorFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'IPAdapterModelField' &&
-    fieldTemplate?.type === 'IPAdapterModelField'
-  ) {
-    return (
-      <IPAdapterModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isSDXLMainModelFieldInputInstance(fieldInstance) && isSDXLMainModelFieldInputTemplate(fieldTemplate)) {
+    return <SDXLMainModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'T2IAdapterModelField' &&
-    fieldTemplate?.type === 'T2IAdapterModelField'
-  ) {
-    return (
-      <T2IAdapterModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
-  }
-  if (field?.type === 'ColorField' && fieldTemplate?.type === 'ColorField') {
-    return (
-      <ColorInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
+  if (isSchedulerFieldInputInstance(fieldInstance) && isSchedulerFieldInputTemplate(fieldTemplate)) {
+    return <SchedulerFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
-  if (
-    field?.type === 'SDXLMainModelField' &&
-    fieldTemplate?.type === 'SDXLMainModelField'
-  ) {
-    return (
-      <SDXLMainModelInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
-  }
-
-  if (field?.type === 'Scheduler' && fieldTemplate?.type === 'Scheduler') {
-    return (
-      <SchedulerInputField
-        nodeId={nodeId}
-        field={field}
-        fieldTemplate={fieldTemplate}
-      />
-    );
-  }
-
-  if (field && fieldTemplate) {
+  if (fieldInstance && fieldTemplate) {
     // Fallback for when there is no component for the type
     return null;
   }
 
   return (
     <Box p={1}>
-      <Text
-        sx={{
-          fontSize: 'sm',
-          fontWeight: 600,
-          color: 'error.400',
-          _dark: { color: 'error.300' },
-        }}
-      >
-        Unknown field type: {field?.type}
+      <Text fontSize="sm" fontWeight="semibold" color="error.300">
+        {t('nodes.unknownFieldType', { type: fieldInstance?.type.name })}
       </Text>
     </Box>
   );

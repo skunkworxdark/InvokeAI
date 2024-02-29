@@ -1,10 +1,12 @@
-import { Box } from '@chakra-ui/react';
+import { Box } from '@invoke-ai/ui-library';
 import { useDroppableTypesafe } from 'features/dnd/hooks/typesafeHooks';
-import { TypesafeDroppableData } from 'features/dnd/types';
+import type { TypesafeDroppableData } from 'features/dnd/types';
 import { isValidDrop } from 'features/dnd/util/isValidDrop';
 import { AnimatePresence } from 'framer-motion';
-import { ReactNode, memo, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { memo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+
 import IAIDropOverlay from './IAIDropOverlay';
 
 type IAIDroppableProps = {
@@ -34,9 +36,7 @@ const IAIDroppable = (props: IAIDroppableProps) => {
       pointerEvents={active ? 'auto' : 'none'}
     >
       <AnimatePresence>
-        {isValidDrop(data, active) && (
-          <IAIDropOverlay isOver={isOver} label={dropLabel} />
-        )}
+        {isValidDrop(data, active) && <IAIDropOverlay isOver={isOver} label={dropLabel} />}
       </AnimatePresence>
     </Box>
   );

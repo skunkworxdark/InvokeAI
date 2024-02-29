@@ -1,18 +1,13 @@
-import { Tooltip } from '@chakra-ui/react';
+import { Tooltip } from '@invoke-ai/ui-library';
 import { colorTokenToCssVar } from 'common/util/colorTokenToCssVar';
-import {
-  COLLECTION_TYPES,
-  FIELDS,
-  HANDLE_TOOLTIP_OPEN_DELAY,
-  MODEL_TYPES,
-  POLYMORPHIC_TYPES,
-} from 'features/nodes/types/constants';
-import {
-  InputFieldTemplate,
-  OutputFieldTemplate,
-} from 'features/nodes/types/types';
-import { CSSProperties, memo, useMemo } from 'react';
-import { Handle, HandleType, Position } from 'reactflow';
+import { getFieldColor } from 'features/nodes/components/flow/edges/util/getEdgeColor';
+import { useFieldTypeName } from 'features/nodes/hooks/usePrettyFieldType';
+import { HANDLE_TOOLTIP_OPEN_DELAY, MODEL_TYPES } from 'features/nodes/types/constants';
+import type { FieldInputTemplate, FieldOutputTemplate } from 'features/nodes/types/field';
+import type { CSSProperties } from 'react';
+import { memo, useMemo } from 'react';
+import type { HandleType } from 'reactflow';
+import { Handle, Position } from 'reactflow';
 
 export const handleBaseStyles: CSSProperties = {
   position: 'absolute',
@@ -32,38 +27,27 @@ export const outputHandleStyles: CSSProperties = {
 };
 
 type FieldHandleProps = {
-  fieldTemplate: InputFieldTemplate | OutputFieldTemplate;
+  fieldTemplate: FieldInputTemplate | FieldOutputTemplate;
   handleType: HandleType;
   isConnectionInProgress: boolean;
   isConnectionStartField: boolean;
-  connectionError: string | null;
+  connectionError?: string;
 };
 
 const FieldHandle = (props: FieldHandleProps) => {
-  const {
-    fieldTemplate,
-    handleType,
-    isConnectionInProgress,
-    isConnectionStartField,
-    connectionError,
-  } = props;
-  const { name, type } = fieldTemplate;
-  const { color: typeColor, title } = FIELDS[type];
-
+  const { fieldTemplate, handleType, isConnectionInProgress, isConnectionStartField, connectionError } = props;
+  const { name } = fieldTemplate;
+  const type = fieldTemplate.type;
+  const fieldTypeName = useFieldTypeName(type);
   const styles: CSSProperties = useMemo(() => {
-    const isCollectionType = COLLECTION_TYPES.includes(type);
-    const isPolymorphicType = POLYMORPHIC_TYPES.includes(type);
-    const isModelType = MODEL_TYPES.includes(type);
-    const color = colorTokenToCssVar(typeColor);
+    const isModelType = MODEL_TYPES.some((t) => t === type.name);
+    const color = getFieldColor(type);
     const s: CSSProperties = {
-      backgroundColor:
-        isCollectionType || isPolymorphicType
-          ? 'var(--invokeai-colors-base-900)'
-          : color,
+      backgroundColor: type.isCollection || type.isCollectionOrScalar ? colorTokenToCssVar('base.900') : color,
       position: 'absolute',
       width: '1rem',
       height: '1rem',
-      borderWidth: isCollectionType || isPolymorphicType ? 4 : 0,
+      borderWidth: type.isCollection || type.isCollectionOrScalar ? 4 : 0,
       borderStyle: 'solid',
       borderColor: color,
       borderRadius: isModelType ? 4 : '100%',
@@ -91,30 +75,19 @@ const FieldHandle = (props: FieldHandleProps) => {
     }
 
     return s;
-  }, [
-    connectionError,
-    handleType,
-    isConnectionInProgress,
-    isConnectionStartField,
-    type,
-    typeColor,
-  ]);
+  }, [connectionError, handleType, isConnectionInProgress, isConnectionStartField, type]);
 
   const tooltip = useMemo(() => {
-    if (isConnectionInProgress && isConnectionStartField) {
-      return title;
-    }
     if (isConnectionInProgress && connectionError) {
-      return connectionError ?? title;
+      return connectionError;
     }
-    return title;
-  }, [connectionError, isConnectionInProgress, isConnectionStartField, title]);
+    return fieldTypeName;
+  }, [connectionError, fieldTypeName, isConnectionInProgress]);
 
   return (
     <Tooltip
       label={tooltip}
       placement={handleType === 'target' ? 'start' : 'end'}
-      hasArrow
       openDelay={HANDLE_TOOLTIP_OPEN_DELAY}
     >
       <Handle

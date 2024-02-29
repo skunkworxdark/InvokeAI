@@ -2,19 +2,17 @@ import { logger } from 'app/logging/logger';
 import { enqueueRequested } from 'app/store/actions';
 import openBase64ImageInTab from 'common/util/openBase64ImageInTab';
 import { parseify } from 'common/util/serialize';
-import {
-  canvasBatchIdAdded,
-  stagingAreaInitialized,
-} from 'features/canvas/store/canvasSlice';
+import { canvasBatchIdAdded, stagingAreaInitialized } from 'features/canvas/store/canvasSlice';
 import { blobToDataURL } from 'features/canvas/util/blobToDataURL';
 import { getCanvasData } from 'features/canvas/util/getCanvasData';
 import { getCanvasGenerationMode } from 'features/canvas/util/getCanvasGenerationMode';
 import { canvasGraphBuilt } from 'features/nodes/store/actions';
-import { buildCanvasGraph } from 'features/nodes/util/graphBuilders/buildCanvasGraph';
-import { prepareLinearUIBatch } from 'features/nodes/util/graphBuilders/buildLinearBatchConfig';
+import { buildCanvasGraph } from 'features/nodes/util/graph/buildCanvasGraph';
+import { prepareLinearUIBatch } from 'features/nodes/util/graph/buildLinearBatchConfig';
 import { imagesApi } from 'services/api/endpoints/images';
 import { queueApi } from 'services/api/endpoints/queue';
-import { ImageDTO } from 'services/api/types';
+import type { ImageDTO } from 'services/api/types';
+
 import { startAppListening } from '..';
 
 /**
@@ -33,20 +31,14 @@ import { startAppListening } from '..';
 export const addEnqueueRequestedCanvasListener = () => {
   startAppListening({
     predicate: (action): action is ReturnType<typeof enqueueRequested> =>
-      enqueueRequested.match(action) &&
-      action.payload.tabName === 'unifiedCanvas',
+      enqueueRequested.match(action) && action.payload.tabName === 'unifiedCanvas',
     effect: async (action, { getState, dispatch }) => {
       const log = logger('queue');
       const { prepend } = action.payload;
       const state = getState();
 
-      const {
-        layerState,
-        boundingBoxCoordinates,
-        boundingBoxDimensions,
-        isMaskEnabled,
-        shouldPreserveMaskedArea,
-      } = state.canvas;
+      const { layerState, boundingBoxCoordinates, boundingBoxDimensions, isMaskEnabled, shouldPreserveMaskedArea } =
+        state.canvas;
 
       // Build canvas blobs
       const canvasBlobsAndImageData = await getCanvasData(
@@ -62,14 +54,10 @@ export const addEnqueueRequestedCanvasListener = () => {
         return;
       }
 
-      const { baseBlob, baseImageData, maskBlob, maskImageData } =
-        canvasBlobsAndImageData;
+      const { baseBlob, baseImageData, maskBlob, maskImageData } = canvasBlobsAndImageData;
 
       // Determine the generation mode
-      const generationMode = getCanvasGenerationMode(
-        baseImageData,
-        maskImageData
-      );
+      const generationMode = getCanvasGenerationMode(baseImageData, maskImageData);
 
       if (state.system.enableImageDebugging) {
         const baseDataURL = await blobToDataURL(baseBlob);
@@ -114,12 +102,7 @@ export const addEnqueueRequestedCanvasListener = () => {
         ).unwrap();
       }
 
-      const graph = buildCanvasGraph(
-        state,
-        generationMode,
-        canvasInitImage,
-        canvasMaskImage
-      );
+      const graph = buildCanvasGraph(state, generationMode, canvasInitImage, canvasMaskImage);
 
       log.debug({ graph: parseify(graph) }, `Canvas graph built`);
 

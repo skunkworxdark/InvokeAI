@@ -1,20 +1,18 @@
 // type-safe dnd from https://github.com/clauderic/dnd-kit/issues/935
-import {
+import type {
   Active,
   Collision,
   DndContextProps,
   Over,
   Translate,
-  UseDraggableArguments,
-  UseDroppableArguments,
   useDraggable as useOriginalDraggable,
+  UseDraggableArguments,
   useDroppable as useOriginalDroppable,
+  UseDroppableArguments,
 } from '@dnd-kit/core';
-import {
-  InputFieldTemplate,
-  InputFieldValue,
-} from 'features/nodes/types/types';
-import { ImageDTO } from 'services/api/types';
+import type { BoardId } from 'features/gallery/store/types';
+import type { FieldInputInstance, FieldInputTemplate } from 'features/nodes/types/field';
+import type { ImageDTO } from 'services/api/types';
 
 type BaseDropData = {
   id: string;
@@ -51,15 +49,6 @@ export type NodesImageDropData = BaseDropData & {
   };
 };
 
-export type NodesMultiImageDropData = BaseDropData & {
-  actionType: 'SET_MULTI_NODES_IMAGE';
-  context: { nodeId: string; fieldName: string };
-};
-
-export type AddToBatchDropData = BaseDropData & {
-  actionType: 'ADD_TO_BATCH';
-};
-
 export type AddToBoardDropData = BaseDropData & {
   actionType: 'ADD_TO_BOARD';
   context: { boardId: string };
@@ -69,21 +58,14 @@ export type RemoveFromBoardDropData = BaseDropData & {
   actionType: 'REMOVE_FROM_BOARD';
 };
 
-export type AddFieldToLinearViewDropData = BaseDropData & {
-  actionType: 'ADD_FIELD_TO_LINEAR';
-};
-
 export type TypesafeDroppableData =
   | CurrentImageDropData
   | InitialImageDropData
   | ControlAdapterDropData
   | CanvasInitialImageDropData
   | NodesImageDropData
-  | AddToBatchDropData
-  | NodesMultiImageDropData
   | AddToBoardDropData
-  | RemoveFromBoardDropData
-  | AddFieldToLinearViewDropData;
+  | RemoveFromBoardDropData;
 
 type BaseDragData = {
   id: string;
@@ -93,8 +75,8 @@ export type NodeFieldDraggableData = BaseDragData & {
   payloadType: 'NODE_FIELD';
   payload: {
     nodeId: string;
-    field: InputFieldValue;
-    fieldTemplate: InputFieldTemplate;
+    field: FieldInputInstance;
+    fieldTemplate: FieldInputTemplate;
   };
 };
 
@@ -103,38 +85,27 @@ export type ImageDraggableData = BaseDragData & {
   payload: { imageDTO: ImageDTO };
 };
 
-export type ImageDTOsDraggableData = BaseDragData & {
-  payloadType: 'IMAGE_DTOS';
-  payload: { imageDTOs: ImageDTO[] };
+export type GallerySelectionDraggableData = BaseDragData & {
+  payloadType: 'GALLERY_SELECTION';
+  payload: { boardId: BoardId };
 };
 
-export type TypesafeDraggableData =
-  | NodeFieldDraggableData
-  | ImageDraggableData
-  | ImageDTOsDraggableData;
+export type TypesafeDraggableData = NodeFieldDraggableData | ImageDraggableData | GallerySelectionDraggableData;
 
-export interface UseDroppableTypesafeArguments
-  extends Omit<UseDroppableArguments, 'data'> {
+export interface UseDroppableTypesafeArguments extends Omit<UseDroppableArguments, 'data'> {
   data?: TypesafeDroppableData;
 }
 
-export type UseDroppableTypesafeReturnValue = Omit<
-  ReturnType<typeof useOriginalDroppable>,
-  'active' | 'over'
-> & {
+export type UseDroppableTypesafeReturnValue = Omit<ReturnType<typeof useOriginalDroppable>, 'active' | 'over'> & {
   active: TypesafeActive | null;
   over: TypesafeOver | null;
 };
 
-export interface UseDraggableTypesafeArguments
-  extends Omit<UseDraggableArguments, 'data'> {
+export interface UseDraggableTypesafeArguments extends Omit<UseDraggableArguments, 'data'> {
   data?: TypesafeDraggableData;
 }
 
-export type UseDraggableTypesafeReturnValue = Omit<
-  ReturnType<typeof useOriginalDraggable>,
-  'active' | 'over'
-> & {
+export type UseDraggableTypesafeReturnValue = Omit<ReturnType<typeof useOriginalDraggable>, 'active' | 'over'> & {
   active: TypesafeActive | null;
   over: TypesafeOver | null;
 };
@@ -162,10 +133,7 @@ export interface DragEndEvent extends DragEvent {}
 export interface DragCancelEvent extends DragEndEvent {}
 
 export interface DndContextTypesafeProps
-  extends Omit<
-    DndContextProps,
-    'onDragStart' | 'onDragMove' | 'onDragOver' | 'onDragEnd' | 'onDragCancel'
-  > {
+  extends Omit<DndContextProps, 'onDragStart' | 'onDragMove' | 'onDragOver' | 'onDragEnd' | 'onDragCancel'> {
   onDragStart?(event: DragStartEvent): void;
   onDragMove?(event: DragMoveEvent): void;
   onDragOver?(event: DragOverEvent): void;

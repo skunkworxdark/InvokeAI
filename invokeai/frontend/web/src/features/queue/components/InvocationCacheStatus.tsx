@@ -1,11 +1,12 @@
-import { ButtonGroup } from '@chakra-ui/react';
+import { ButtonGroup } from '@invoke-ai/ui-library';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGetInvocationCacheStatusQuery } from 'services/api/endpoints/appInfo';
+
 import ClearInvocationCacheButton from './ClearInvocationCacheButton';
-import ToggleInvocationCacheButton from './ToggleInvocationCacheButton';
 import StatusStatGroup from './common/StatusStatGroup';
 import StatusStatItem from './common/StatusStatItem';
+import ToggleInvocationCacheButton from './ToggleInvocationCacheButton';
 
 const InvocationCacheStatus = () => {
   const { t } = useTranslation();
@@ -33,7 +34,7 @@ const InvocationCacheStatus = () => {
         label={t('invocationCache.maxCacheSize')}
         value={cacheStatus?.max_size ?? 0}
       />
-      <ButtonGroup w={24} orientation="vertical" size="xs">
+      <ButtonGroup w={24} orientation="vertical" size="sm">
         <ClearInvocationCacheButton />
         <ToggleInvocationCacheButton />
       </ButtonGroup>

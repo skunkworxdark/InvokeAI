@@ -1,14 +1,12 @@
 import { logger } from 'app/logging/logger';
-import { zIPAdapterModel } from 'features/parameters/types/parameterSchemas';
-import { IPAdapterModelField } from 'services/api/types';
+import { zParameterIPAdapterModel } from 'features/parameters/types/parameterSchemas';
+import type { IPAdapterModelField } from 'services/api/types';
 
-export const modelIdToIPAdapterModelParam = (
-  ipAdapterModelId: string
-): IPAdapterModelField | undefined => {
+export const modelIdToIPAdapterModelParam = (ipAdapterModelId: string): IPAdapterModelField | undefined => {
   const log = logger('models');
   const [base_model, _model_type, model_name] = ipAdapterModelId.split('/');
 
-  const result = zIPAdapterModel.safeParse({
+  const result = zParameterIPAdapterModel.safeParse({
     base_model,
     model_name,
   });

@@ -30,7 +30,7 @@ methodology for details on why running applications in such a stateless fashion 
 The container is configured for CUDA by default, but can be built to support AMD GPUs
 by setting the `GPU_DRIVER=rocm` environment variable at Docker image build time.
 
-Developers on Apple silicon (M1/M2): You
+Developers on Apple silicon (M1/M2/M3): You
 [can't access your GPU cores from Docker containers](https://github.com/pytorch/pytorch/issues/81224)
 and performance is reduced compared with running it directly on macOS but for
 development purposes it's fine. Once you're done with development tasks on your
@@ -69,7 +69,7 @@ a token and copy it, since you will need in for the next step.
 
 ### Setup
 
-Set up your environmnent variables. In the `docker` directory, make a copy of `env.sample` and name it `.env`. Make changes as necessary.
+Set up your environmnent variables. In the `docker` directory, make a copy of `.env.sample` and name it `.env`. Make changes as necessary.
 
 Any environment variables supported by InvokeAI can be set here - please see the [CONFIGURATION](../features/CONFIGURATION.md) for further detail.
 
