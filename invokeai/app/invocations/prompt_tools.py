@@ -1,5 +1,7 @@
-# 2023 skunkworxdark (https://github.com/skunkworxdark)
+# 2024 skunkworxdark (https://github.com/skunkworxdark)
 
+import csv
+import io
 import json
 import random
 from typing import Literal, Optional, Union
@@ -9,18 +11,28 @@ from pydantic import BaseModel
 from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
     BaseInvocationOutput,
-    FieldDescriptions,
     Input,
-    InputField,
     InvocationContext,
-    OutputField,
-    UIComponent,
-    UIType,
     invocation,
     invocation_output,
 )
-from invokeai.app.invocations.latent import SAMPLER_NAME_VALUES
+from invokeai.app.invocations.constants import SCHEDULER_NAME_VALUES
+from invokeai.app.invocations.fields import FieldDescriptions, InputField, OutputField, UIComponent
 from invokeai.app.invocations.primitives import StringOutput
+
+
+def csv_line_to_list(csv_string: str) -> list[str]:
+    """Converts the first line of a CSV into a list of strings"""
+
+    reader = csv.reader(io.StringIO(csv_string))
+    return next(reader)
+
+
+def csv_to_list(csv_string: str) -> list[list[str]]:
+    """Converts a CSV into a list of list of strings"""
+
+    reader = csv.reader(io.StringIO(csv_string))
+    return [list(row) for row in reader]
 
 
 @invocation_output("prompt_to_file_output")
@@ -64,18 +76,18 @@ class PromptsToFileInvocation(BaseInvocation):
 class PTFields(BaseModel):
     """Prompt Tools Fields for an image generated in InvokeAI."""
 
-    positive_prompt: str
-    positive_style_prompt: str
-    negative_prompt: str
-    negative_style_prompt: str
-    seed: int
-    width: int
-    height: int
-    steps: int
-    cfg_scale: float
-    denoising_start: float
-    denoising_end: float
-    scheduler: SAMPLER_NAME_VALUES
+    positive_prompt: Optional[str]
+    positive_style_prompt: Optional[str]
+    negative_prompt: Optional[str]
+    negative_style_prompt: Optional[str]
+    seed: Optional[int]
+    width: Optional[int]
+    height: Optional[int]
+    steps: Optional[int]
+    cfg_scale: Optional[float]
+    denoising_start: Optional[float]
+    denoising_end: Optional[float]
+    scheduler: SCHEDULER_NAME_VALUES
 
 
 @invocation_output("pt_fields_collect_output")
@@ -128,9 +140,8 @@ class PTFieldsCollectInvocation(BaseInvocation):
     denoising_end: Optional[float] = InputField(
         description=FieldDescriptions.denoising_end,
     )
-    scheduler: Optional[SAMPLER_NAME_VALUES] = InputField(
+    scheduler: Optional[SCHEDULER_NAME_VALUES] = InputField(
         description=FieldDescriptions.scheduler,
-        ui_type=UIType.Scheduler,
     )
 
     def invoke(self, context: InvocationContext) -> PTFieldsCollectOutput:
@@ -149,7 +160,7 @@ class PTFieldsCollectInvocation(BaseInvocation):
                     denoising_start=self.denoising_start,
                     denoising_end=self.denoising_end,
                     scheduler=self.scheduler,
-                ).dict()
+                ).model_dump()
             )
         )
         return PTFieldsCollectOutput(pt_fields=x)
@@ -192,9 +203,8 @@ class PTFieldsExpandOutput(BaseInvocationOutput):
     denoising_end: float = OutputField(
         description=FieldDescriptions.denoising_end,
     )
-    scheduler: SAMPLER_NAME_VALUES = OutputField(
+    scheduler: SCHEDULER_NAME_VALUES = OutputField(
         description=FieldDescriptions.scheduler,
-        ui_type=UIType.Scheduler,
     )
 
 
@@ -276,8 +286,8 @@ class PromptStrengthsCombineInvocation(BaseInvocation):
     )
 
     def invoke(self, context: InvocationContext) -> StringOutput:
-        strings = []
-        numbers = []
+        strings: list[str] = []
+        numbers: list[float] = []
         for item in self.prompt_strengths:
             string, number = item.rsplit(")", 1)
             string = string[1:].strip()
@@ -285,9 +295,7 @@ class PromptStrengthsCombineInvocation(BaseInvocation):
             if len(string) > 0:
                 strings.append(f'"{string}"')
                 numbers.append(number)
-        return StringOutput(
-            value=f'({",".join(strings)}){self.combine_type}({",".join(map(str, numbers))})'
-        )
+        return StringOutput(value=f'({",".join(strings)}){self.combine_type}({",".join(map(str, numbers))})')
 
 
 @invocation(
@@ -295,13 +303,13 @@ class PromptStrengthsCombineInvocation(BaseInvocation):
     title="CSV To Index String",
     tags=["random", "string", "csv"],
     category="util",
-    version="1.0.0",
+    version="1.1.0",
     use_cache=False,
 )
 class CSVToIndexStringInvocation(BaseInvocation):
     """CSVToIndexString converts a CSV to a String at index with a random option"""
 
-    csv: str = InputField(
+    csv_string: str = InputField(
         default="",
         description="csv string",
         ui_component=UIComponent.Textarea,
@@ -316,7 +324,7 @@ class CSVToIndexStringInvocation(BaseInvocation):
     )
 
     def invoke(self, context: InvocationContext) -> StringOutput:
-        strings = self.csv.split(",")
+        strings = csv_line_to_list(self.csv_string)
         if self.random:
             output = random.choice(strings)
         else:
