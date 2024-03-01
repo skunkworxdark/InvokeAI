@@ -10,10 +10,10 @@ import type {
 } from 'features/nodes/store/types';
 import type { FieldIdentifier } from 'features/nodes/types/field';
 import { isInvocationNode } from 'features/nodes/types/invocation';
-import type { WorkflowCategory, WorkflowV2 } from 'features/nodes/types/workflow';
+import type { WorkflowCategory, WorkflowV3 } from 'features/nodes/types/workflow';
 import { cloneDeep, isEqual, omit, uniqBy } from 'lodash-es';
 
-export const blankWorkflow: Omit<WorkflowV2, 'nodes' | 'edges'> = {
+const blankWorkflow: Omit<WorkflowV3, 'nodes' | 'edges'> = {
   name: '',
   author: '',
   description: '',
@@ -22,11 +22,11 @@ export const blankWorkflow: Omit<WorkflowV2, 'nodes' | 'edges'> = {
   tags: '',
   notes: '',
   exposedFields: [],
-  meta: { version: '2.0.0', category: 'user' },
+  meta: { version: '3.0.0', category: 'user' },
   id: undefined,
 };
 
-export const initialWorkflowState: WorkflowState = {
+const initialWorkflowState: WorkflowState = {
   _version: 1,
   isTouched: false,
   mode: 'view',
@@ -195,7 +195,7 @@ export const {
 export const selectWorkflowSlice = (state: RootState) => state.workflow;
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-export const migrateWorkflowState = (state: any): any => {
+const migrateWorkflowState = (state: any): any => {
   if (!('_version' in state)) {
     state._version = 1;
   }

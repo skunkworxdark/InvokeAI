@@ -3,16 +3,17 @@ import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import { InformationalPopover } from 'common/components/InformationalPopover/InformationalPopover';
 import { useModelCombobox } from 'common/hooks/useModelCombobox';
+import { getModelKeyAndBase } from 'features/metadata/util/modelFetchingHelpers';
 import { refinerModelChanged, selectSdxlSlice } from 'features/sdxl/store/sdxlSlice';
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { REFINER_BASE_MODELS } from 'services/api/constants';
-import type { MainModelConfigEntity } from 'services/api/endpoints/models';
 import { useGetMainModelsQuery } from 'services/api/endpoints/models';
+import type { MainModelConfig } from 'services/api/types';
 
 const selectModel = createMemoizedSelector(selectSdxlSlice, (sdxl) => sdxl.refinerModel);
 
-const optionsFilter = (model: MainModelConfigEntity) => model.base_model === 'sdxl-refiner';
+const optionsFilter = (model: MainModelConfig) => model.base === 'sdxl-refiner';
 
 const ParamSDXLRefinerModelSelect = () => {
   const dispatch = useAppDispatch();
@@ -20,18 +21,12 @@ const ParamSDXLRefinerModelSelect = () => {
   const { t } = useTranslation();
   const { data, isLoading } = useGetMainModelsQuery(REFINER_BASE_MODELS);
   const _onChange = useCallback(
-    (model: MainModelConfigEntity | null) => {
+    (model: MainModelConfig | null) => {
       if (!model) {
         dispatch(refinerModelChanged(null));
         return;
       }
-      dispatch(
-        refinerModelChanged({
-          base_model: 'sdxl-refiner',
-          model_name: model.model_name,
-          model_type: model.model_type,
-        })
-      );
+      dispatch(refinerModelChanged(getModelKeyAndBase(model)));
     },
     [dispatch]
   );

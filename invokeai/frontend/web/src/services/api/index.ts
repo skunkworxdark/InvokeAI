@@ -1,6 +1,7 @@
+import { createSelectorCreator, lruMemoize } from '@reduxjs/toolkit';
 import type { FetchBaseQueryArgs } from '@reduxjs/toolkit/dist/query/fetchBaseQuery';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError, TagDescription } from '@reduxjs/toolkit/query/react';
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { buildCreateApi, coreModule, fetchBaseQuery, reactHooksModule } from '@reduxjs/toolkit/query/react';
 import { $authToken } from 'app/store/nanostores/authToken';
 import { $baseUrl } from 'app/store/nanostores/baseUrl';
 import { $projectId } from 'app/store/nanostores/projectId';
@@ -26,6 +27,8 @@ export const tagTypes = [
   'BatchStatus',
   'InvocationCacheStatus',
   'Model',
+  'ModelConfig',
+  'ModelImports',
   'T2IAdapterModel',
   'MainModel',
   'VaeModel',
@@ -57,7 +60,7 @@ const dynamicBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryE
     (typeof args === 'string' && args.includes('openapi.json'));
 
   const fetchBaseQueryArgs: FetchBaseQueryArgs = {
-    baseUrl: baseUrl ? `${baseUrl}/api/v1` : `${window.location.href.replace(/\/$/, '')}/api/v1`,
+    baseUrl: baseUrl || window.location.href.replace(/\/$/, ''),
   };
 
   // When fetching the openapi.json, we need to remove circular references from the JSON.
@@ -84,7 +87,14 @@ const dynamicBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryE
   return rawBaseQuery(args, api, extraOptions);
 };
 
-export const api = createApi({
+const createLruSelector = createSelectorCreator(lruMemoize);
+
+const customCreateApi = buildCreateApi(
+  coreModule({ createSelector: createLruSelector }),
+  reactHooksModule({ createSelector: createLruSelector })
+);
+
+export const api = customCreateApi({
   baseQuery: dynamicBaseQuery,
   reducerPath: 'api',
   tagTypes,
@@ -112,3 +122,6 @@ function getCircularReplacer() {
     return value;
   };
 }
+
+export const buildV1Url = (path: string): string => `api/v1/${path}`;
+export const buildV2Url = (path: string): string => `api/v2/${path}`;
