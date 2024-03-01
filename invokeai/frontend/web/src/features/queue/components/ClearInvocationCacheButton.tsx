@@ -1,21 +1,16 @@
-import IAIButton from 'common/components/IAIButton';
+import { Button } from '@invoke-ai/ui-library';
+import { useClearInvocationCache } from 'features/queue/hooks/useClearInvocationCache';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useClearInvocationCache } from 'features/queue/hooks/useClearInvocationCache';
 
 const ClearInvocationCacheButton = () => {
   const { t } = useTranslation();
-  const { clearInvocationCache, isDisabled, isLoading } =
-    useClearInvocationCache();
+  const { clearInvocationCache, isDisabled, isLoading } = useClearInvocationCache();
 
   return (
-    <IAIButton
-      isDisabled={isDisabled}
-      isLoading={isLoading}
-      onClick={clearInvocationCache}
-    >
+    <Button isDisabled={isDisabled} isLoading={isLoading} onClick={clearInvocationCache}>
       {t('invocationCache.clear')}
-    </IAIButton>
+    </Button>
   );
 };
 

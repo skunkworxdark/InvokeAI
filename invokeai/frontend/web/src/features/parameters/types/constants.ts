@@ -1,8 +1,7 @@
-import { SchedulerField } from 'features/nodes/types/common';
-import { LoRAModelFormat } from 'services/api/types';
+import type { ComboboxOption } from '@invoke-ai/ui-library';
 
 /**
- * Mapping of model type to human readable name
+ * Mapping of base model to human readable name
  */
 export const MODEL_TYPE_MAP = {
   any: 'Any',
@@ -13,18 +12,18 @@ export const MODEL_TYPE_MAP = {
 };
 
 /**
- * Mapping of model type to (short) human readable name
+ * Mapping of base model to (short) human readable name
  */
 export const MODEL_TYPE_SHORT_MAP = {
   any: 'Any',
-  'sd-1': 'SD1',
-  'sd-2': 'SD2',
+  'sd-1': 'SD1.X',
+  'sd-2': 'SD2.X',
   sdxl: 'SDXL',
   'sdxl-refiner': 'SDXLR',
 };
 
 /**
- * Mapping of model type to CLIP skip parameter constraints
+ * Mapping of base model to CLIP skip parameter constraints
  */
 export const CLIP_SKIP_MAP = {
   any: {
@@ -50,40 +49,30 @@ export const CLIP_SKIP_MAP = {
 };
 
 /**
- * Mapping of LoRA format to human readable name
- */
-export const LORA_MODEL_FORMAT_MAP: {
-  [key in LoRAModelFormat]: string;
-} = {
-  lycoris: 'LyCORIS',
-  diffusers: 'Diffusers',
-};
-
-/**
  * Mapping of schedulers to human readable name
  */
-export const SCHEDULER_LABEL_MAP: Record<SchedulerField, string> = {
-  euler: 'Euler',
-  deis: 'DEIS',
-  ddim: 'DDIM',
-  ddpm: 'DDPM',
-  dpmpp_sde: 'DPM++ SDE',
-  dpmpp_2s: 'DPM++ 2S',
-  dpmpp_2m: 'DPM++ 2M',
-  dpmpp_2m_sde: 'DPM++ 2M SDE',
-  heun: 'Heun',
-  kdpm_2: 'KDPM 2',
-  lms: 'LMS',
-  pndm: 'PNDM',
-  unipc: 'UniPC',
-  euler_k: 'Euler Karras',
-  dpmpp_sde_k: 'DPM++ SDE Karras',
-  dpmpp_2s_k: 'DPM++ 2S Karras',
-  dpmpp_2m_k: 'DPM++ 2M Karras',
-  dpmpp_2m_sde_k: 'DPM++ 2M SDE Karras',
-  heun_k: 'Heun Karras',
-  lms_k: 'LMS Karras',
-  euler_a: 'Euler Ancestral',
-  kdpm_2_a: 'KDPM 2 Ancestral',
-  lcm: 'LCM',
-};
+export const SCHEDULER_OPTIONS: ComboboxOption[] = [
+  { value: 'euler', label: 'Euler' },
+  { value: 'deis', label: 'DEIS' },
+  { value: 'ddim', label: 'DDIM' },
+  { value: 'ddpm', label: 'DDPM' },
+  { value: 'dpmpp_sde', label: 'DPM++ SDE' },
+  { value: 'dpmpp_2s', label: 'DPM++ 2S' },
+  { value: 'dpmpp_2m', label: 'DPM++ 2M' },
+  { value: 'dpmpp_2m_sde', label: 'DPM++ 2M SDE' },
+  { value: 'heun', label: 'Heun' },
+  { value: 'kdpm_2', label: 'KDPM 2' },
+  { value: 'lms', label: 'LMS' },
+  { value: 'pndm', label: 'PNDM' },
+  { value: 'unipc', label: 'UniPC' },
+  { value: 'euler_k', label: 'Euler Karras' },
+  { value: 'dpmpp_sde_k', label: 'DPM++ SDE Karras' },
+  { value: 'dpmpp_2s_k', label: 'DPM++ 2S Karras' },
+  { value: 'dpmpp_2m_k', label: 'DPM++ 2M Karras' },
+  { value: 'dpmpp_2m_sde_k', label: 'DPM++ 2M SDE Karras' },
+  { value: 'heun_k', label: 'Heun Karras' },
+  { value: 'lms_k', label: 'LMS Karras' },
+  { value: 'euler_a', label: 'Euler Ancestral' },
+  { value: 'kdpm_2_a', label: 'KDPM 2 Ancestral' },
+  { value: 'lcm', label: 'LCM' },
+].sort((a, b) => a.label.localeCompare(b.label));

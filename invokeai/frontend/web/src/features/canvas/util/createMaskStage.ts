@@ -1,6 +1,6 @@
-import { CanvasMaskLine } from 'features/canvas/store/canvasTypes';
+import type { CanvasMaskLine } from 'features/canvas/store/canvasTypes';
 import Konva from 'konva';
-import { IRect } from 'konva/lib/types';
+import type { IRect } from 'konva/lib/types';
 
 /**
  * Creates a stage from array of mask objects.
@@ -44,8 +44,7 @@ const createMaskStage = async (
         lineCap: 'round',
         lineJoin: 'round',
         shadowForStrokeEnabled: false,
-        globalCompositeOperation:
-          line.tool === 'brush' ? 'source-over' : 'destination-out',
+        globalCompositeOperation: line.tool === 'brush' ? 'source-over' : 'destination-out',
       })
     )
   );

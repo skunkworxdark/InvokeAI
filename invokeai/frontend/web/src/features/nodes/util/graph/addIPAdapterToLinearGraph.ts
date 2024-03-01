@@ -1,26 +1,20 @@
-import { RootState } from 'app/store/store';
+import type { RootState } from 'app/store/store';
 import { selectValidIPAdapters } from 'features/controlAdapters/store/controlAdaptersSlice';
 import { omit } from 'lodash-es';
-import {
+import type {
   CollectInvocation,
   CoreMetadataInvocation,
   IPAdapterInvocation,
   IPAdapterMetadataField,
   NonNullableGraph,
 } from 'services/api/types';
-import {
-  CANVAS_COHERENCE_DENOISE_LATENTS,
-  IP_ADAPTER_COLLECT,
-} from './constants';
+
+import { IP_ADAPTER_COLLECT } from './constants';
 import { upsertMetadata } from './metadata';
 
-export const addIPAdapterToLinearGraph = (
-  state: RootState,
-  graph: NonNullableGraph,
-  baseNodeId: string
-): void => {
+export const addIPAdapterToLinearGraph = (state: RootState, graph: NonNullableGraph, baseNodeId: string): void => {
   const validIPAdapters = selectValidIPAdapters(state.controlAdapters).filter(
-    (ca) => ca.model?.base_model === state.generation.model?.base_model
+    (ca) => ca.model?.base === state.generation.model?.base
   );
 
   if (validIPAdapters.length) {
@@ -39,15 +33,6 @@ export const addIPAdapterToLinearGraph = (
       },
     });
 
-    if (CANVAS_COHERENCE_DENOISE_LATENTS in graph.nodes) {
-      graph.edges.push({
-        source: { node_id: IP_ADAPTER_COLLECT, field: 'collection' },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 'ip_adapter',
-        },
-      });
-    }
     const ipAdapterMetdata: CoreMetadataInvocation['ipAdapters'] = [];
 
     validIPAdapters.forEach((ipAdapter) => {
@@ -75,13 +60,7 @@ export const addIPAdapterToLinearGraph = (
 
       graph.nodes[ipAdapterNode.id] = ipAdapterNode as IPAdapterInvocation;
 
-      ipAdapterMetdata.push(
-        omit(ipAdapterNode, [
-          'id',
-          'type',
-          'is_intermediate',
-        ]) as IPAdapterMetadataField
-      );
+      ipAdapterMetdata.push(omit(ipAdapterNode, ['id', 'type', 'is_intermediate']) as IPAdapterMetadataField);
 
       graph.edges.push({
         source: { node_id: ipAdapterNode.id, field: 'ip_adapter' },

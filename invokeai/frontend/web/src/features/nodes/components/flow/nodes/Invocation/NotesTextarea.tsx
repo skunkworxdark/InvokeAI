@@ -1,10 +1,10 @@
-import { FormControl, FormLabel } from '@chakra-ui/react';
+import { FormControl, FormLabel, Textarea } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
-import IAITextarea from 'common/components/IAITextarea';
 import { useNodeData } from 'features/nodes/hooks/useNodeData';
 import { nodeNotesChanged } from 'features/nodes/store/nodesSlice';
 import { isInvocationNodeData } from 'features/nodes/types/invocation';
-import { ChangeEvent, memo, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const NotesTextarea = ({ nodeId }: { nodeId: string }) => {
@@ -21,13 +21,9 @@ const NotesTextarea = ({ nodeId }: { nodeId: string }) => {
     return null;
   }
   return (
-    <FormControl>
+    <FormControl orientation="vertical" h="full">
       <FormLabel>{t('nodes.notes')}</FormLabel>
-      <IAITextarea
-        value={data?.notes}
-        onChange={handleNotesChanged}
-        rows={10}
-      />
+      <Textarea value={data?.notes} onChange={handleNotesChanged} rows={10} resize="none" />
     </FormControl>
   );
 };

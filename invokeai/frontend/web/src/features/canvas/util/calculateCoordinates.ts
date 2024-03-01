@@ -1,4 +1,4 @@
-import { Vector2d } from 'konva/lib/types';
+import type { Vector2d } from 'konva/lib/types';
 
 const calculateCoordinates = (
   containerWidth: number,
@@ -9,12 +9,8 @@ const calculateCoordinates = (
   contentHeight: number,
   scale: number
 ): Vector2d => {
-  const x = Math.floor(
-    containerWidth / 2 - (containerX + contentWidth / 2) * scale
-  );
-  const y = Math.floor(
-    containerHeight / 2 - (containerY + contentHeight / 2) * scale
-  );
+  const x = Math.floor(containerWidth / 2 - (containerX + contentWidth / 2) * scale);
+  const y = Math.floor(containerHeight / 2 - (containerY + contentHeight / 2) * scale);
   return { x, y };
 };
 

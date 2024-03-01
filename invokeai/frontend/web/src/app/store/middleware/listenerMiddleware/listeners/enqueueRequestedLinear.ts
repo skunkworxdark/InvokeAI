@@ -1,18 +1,16 @@
 import { enqueueRequested } from 'app/store/actions';
+import type { AppStartListening } from 'app/store/middleware/listenerMiddleware';
 import { prepareLinearUIBatch } from 'features/nodes/util/graph/buildLinearBatchConfig';
 import { buildLinearImageToImageGraph } from 'features/nodes/util/graph/buildLinearImageToImageGraph';
 import { buildLinearSDXLImageToImageGraph } from 'features/nodes/util/graph/buildLinearSDXLImageToImageGraph';
 import { buildLinearSDXLTextToImageGraph } from 'features/nodes/util/graph/buildLinearSDXLTextToImageGraph';
 import { buildLinearTextToImageGraph } from 'features/nodes/util/graph/buildLinearTextToImageGraph';
 import { queueApi } from 'services/api/endpoints/queue';
-import { startAppListening } from '..';
 
-export const addEnqueueRequestedLinear = () => {
+export const addEnqueueRequestedLinear = (startAppListening: AppStartListening) => {
   startAppListening({
     predicate: (action): action is ReturnType<typeof enqueueRequested> =>
-      enqueueRequested.match(action) &&
-      (action.payload.tabName === 'txt2img' ||
-        action.payload.tabName === 'img2img'),
+      enqueueRequested.match(action) && (action.payload.tabName === 'txt2img' || action.payload.tabName === 'img2img'),
     effect: async (action, { getState, dispatch }) => {
       const state = getState();
       const model = state.generation.model;
@@ -20,7 +18,7 @@ export const addEnqueueRequestedLinear = () => {
 
       let graph;
 
-      if (model && model.base_model === 'sdxl') {
+      if (model && model.base === 'sdxl') {
         if (action.payload.tabName === 'txt2img') {
           graph = buildLinearSDXLTextToImageGraph(state);
         } else {

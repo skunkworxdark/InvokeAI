@@ -1,4 +1,5 @@
 import { isAnyOf } from '@reduxjs/toolkit';
+import type { AppStartListening } from 'app/store/middleware/listenerMiddleware';
 import {
   combinatorialToggled,
   isErrorChanged,
@@ -8,40 +9,50 @@ import {
   parsingErrorChanged,
   promptsChanged,
 } from 'features/dynamicPrompts/store/dynamicPromptsSlice';
+import { getShouldProcessPrompt } from 'features/dynamicPrompts/util/getShouldProcessPrompt';
 import { setPositivePrompt } from 'features/parameters/store/generationSlice';
 import { utilitiesApi } from 'services/api/endpoints/utilities';
-import { appSocketConnected } from 'services/events/actions';
-import { startAppListening } from '..';
+import { socketConnected } from 'services/events/actions';
 
-const matcher = isAnyOf(
-  setPositivePrompt,
-  combinatorialToggled,
-  maxPromptsChanged,
-  maxPromptsReset,
-  appSocketConnected
-);
+const matcher = isAnyOf(setPositivePrompt, combinatorialToggled, maxPromptsChanged, maxPromptsReset, socketConnected);
 
-export const addDynamicPromptsListener = () => {
+export const addDynamicPromptsListener = (startAppListening: AppStartListening) => {
   startAppListening({
     matcher,
-    effect: async (
-      action,
-      { dispatch, getState, cancelActiveListeners, delay }
-    ) => {
-      // debounce request
+    effect: async (action, { dispatch, getState, cancelActiveListeners, delay }) => {
       cancelActiveListeners();
-      await delay(1000);
-
       const state = getState();
+      const { positivePrompt } = state.generation;
+      const { maxPrompts } = state.dynamicPrompts;
 
       if (state.config.disabledFeatures.includes('dynamicPrompting')) {
         return;
       }
 
-      const { positivePrompt } = state.generation;
-      const { maxPrompts } = state.dynamicPrompts;
+      const cachedPrompts = utilitiesApi.endpoints.dynamicPrompts.select({
+        prompt: positivePrompt,
+        max_prompts: maxPrompts,
+      })(getState()).data;
 
-      dispatch(isLoadingChanged(true));
+      if (cachedPrompts) {
+        dispatch(promptsChanged(cachedPrompts.prompts));
+        dispatch(parsingErrorChanged(cachedPrompts.error));
+        return;
+      }
+
+      if (!getShouldProcessPrompt(state.generation.positivePrompt)) {
+        dispatch(promptsChanged([state.generation.positivePrompt]));
+        dispatch(parsingErrorChanged(undefined));
+        dispatch(isErrorChanged(false));
+        return;
+      }
+
+      if (!state.dynamicPrompts.isLoading) {
+        dispatch(isLoadingChanged(true));
+      }
+
+      // debounce request
+      await delay(1000);
 
       try {
         const req = dispatch(
@@ -57,7 +68,6 @@ export const addDynamicPromptsListener = () => {
         dispatch(promptsChanged(res.prompts));
         dispatch(parsingErrorChanged(res.error));
         dispatch(isErrorChanged(false));
-        dispatch(isLoadingChanged(false));
       } catch {
         dispatch(isErrorChanged(true));
         dispatch(isLoadingChanged(false));

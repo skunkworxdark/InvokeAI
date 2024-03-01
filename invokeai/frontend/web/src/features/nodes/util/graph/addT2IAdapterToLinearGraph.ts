@@ -1,26 +1,20 @@
-import { RootState } from 'app/store/store';
+import type { RootState } from 'app/store/store';
 import { selectValidT2IAdapters } from 'features/controlAdapters/store/controlAdaptersSlice';
 import { omit } from 'lodash-es';
-import {
+import type {
   CollectInvocation,
   CoreMetadataInvocation,
   NonNullableGraph,
   T2IAdapterField,
   T2IAdapterInvocation,
 } from 'services/api/types';
-import {
-  CANVAS_COHERENCE_DENOISE_LATENTS,
-  T2I_ADAPTER_COLLECT,
-} from './constants';
+
+import { T2I_ADAPTER_COLLECT } from './constants';
 import { upsertMetadata } from './metadata';
 
-export const addT2IAdaptersToLinearGraph = (
-  state: RootState,
-  graph: NonNullableGraph,
-  baseNodeId: string
-): void => {
+export const addT2IAdaptersToLinearGraph = (state: RootState, graph: NonNullableGraph, baseNodeId: string): void => {
   const validT2IAdapters = selectValidT2IAdapters(state.controlAdapters).filter(
-    (ca) => ca.model?.base_model === state.generation.model?.base_model
+    (ca) => ca.model?.base === state.generation.model?.base
   );
 
   if (validT2IAdapters.length) {
@@ -39,15 +33,6 @@ export const addT2IAdaptersToLinearGraph = (
       },
     });
 
-    if (CANVAS_COHERENCE_DENOISE_LATENTS in graph.nodes) {
-      graph.edges.push({
-        source: { node_id: T2I_ADAPTER_COLLECT, field: 'collection' },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 't2i_adapter',
-        },
-      });
-    }
     const t2iAdapterMetdata: CoreMetadataInvocation['t2iAdapters'] = [];
 
     validT2IAdapters.forEach((t2iAdapter) => {
@@ -94,13 +79,7 @@ export const addT2IAdaptersToLinearGraph = (
 
       graph.nodes[t2iAdapterNode.id] = t2iAdapterNode as T2IAdapterInvocation;
 
-      t2iAdapterMetdata.push(
-        omit(t2iAdapterNode, [
-          'id',
-          'type',
-          'is_intermediate',
-        ]) as T2IAdapterField
-      );
+      t2iAdapterMetdata.push(omit(t2iAdapterNode, ['id', 'type', 'is_intermediate']) as T2IAdapterField);
 
       graph.edges.push({
         source: { node_id: t2iAdapterNode.id, field: 't2i_adapter' },

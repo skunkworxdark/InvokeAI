@@ -1,13 +1,13 @@
-import IAISlider from 'common/components/IAISlider';
+import { CompositeNumberInput, CompositeSlider, FormControl, FormLabel } from '@invoke-ai/ui-library';
+import { useProcessorNodeChanged } from 'features/controlAdapters/components/hooks/useProcessorNodeChanged';
 import { CONTROLNET_PROCESSORS } from 'features/controlAdapters/store/constants';
-import { RequiredColorMapImageProcessorInvocation } from 'features/controlAdapters/store/types';
+import type { RequiredColorMapImageProcessorInvocation } from 'features/controlAdapters/store/types';
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProcessorNodeChanged } from 'features/controlAdapters/components/hooks/useProcessorNodeChanged';
+
 import ProcessorWrapper from './common/ProcessorWrapper';
 
-const DEFAULTS = CONTROLNET_PROCESSORS.color_map_image_processor
-  .default as RequiredColorMapImageProcessorInvocation;
+const DEFAULTS = CONTROLNET_PROCESSORS.color_map_image_processor.default as RequiredColorMapImageProcessorInvocation;
 
 type ColorMapProcessorProps = {
   controlNetId: string;
@@ -28,30 +28,28 @@ const ColorMapProcessor = (props: ColorMapProcessorProps) => {
     [controlNetId, processorChanged]
   );
 
-  const handleColorMapTileSizeReset = useCallback(() => {
-    processorChanged(controlNetId, {
-      color_map_tile_size: DEFAULTS.color_map_tile_size,
-    });
-  }, [controlNetId, processorChanged]);
-
   return (
     <ProcessorWrapper>
-      <IAISlider
-        isDisabled={!isEnabled}
-        label={t('controlnet.colorMapTileSize')}
-        value={color_map_tile_size}
-        onChange={handleColorMapTileSizeChanged}
-        handleReset={handleColorMapTileSizeReset}
-        withReset
-        min={1}
-        max={256}
-        step={1}
-        withInput
-        withSliderMarks
-        sliderNumberInputProps={{
-          max: 4096,
-        }}
-      />
+      <FormControl isDisabled={!isEnabled}>
+        <FormLabel>{t('controlnet.colorMapTileSize')}</FormLabel>
+        <CompositeSlider
+          value={color_map_tile_size}
+          defaultValue={DEFAULTS.color_map_tile_size}
+          onChange={handleColorMapTileSizeChanged}
+          min={1}
+          max={256}
+          step={1}
+          marks
+        />
+        <CompositeNumberInput
+          value={color_map_tile_size}
+          defaultValue={DEFAULTS.color_map_tile_size}
+          onChange={handleColorMapTileSizeChanged}
+          min={1}
+          max={4096}
+          step={1}
+        />
+      </FormControl>
     </ProcessorWrapper>
   );
 };

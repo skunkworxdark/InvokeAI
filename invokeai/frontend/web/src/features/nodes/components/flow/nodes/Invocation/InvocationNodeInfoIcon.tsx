@@ -1,12 +1,12 @@
-import { Flex, Icon, Text, Tooltip } from '@chakra-ui/react';
+import { Flex, Icon, Text, Tooltip } from '@invoke-ai/ui-library';
 import { compare } from 'compare-versions';
 import { useNodeData } from 'features/nodes/hooks/useNodeData';
-import { useNodeTemplate } from 'features/nodes/hooks/useNodeTemplate';
 import { useNodeNeedsUpdate } from 'features/nodes/hooks/useNodeNeedsUpdate';
+import { useNodeTemplate } from 'features/nodes/hooks/useNodeTemplate';
 import { isInvocationNodeData } from 'features/nodes/types/invocation';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaInfoCircle } from 'react-icons/fa';
+import { PiInfoBold } from 'react-icons/pi';
 
 interface Props {
   nodeId: string;
@@ -16,20 +16,8 @@ const InvocationNodeInfoIcon = ({ nodeId }: Props) => {
   const needsUpdate = useNodeNeedsUpdate(nodeId);
 
   return (
-    <Tooltip
-      label={<TooltipContent nodeId={nodeId} />}
-      placement="top"
-      shouldWrapChildren
-    >
-      <Icon
-        as={FaInfoCircle}
-        sx={{
-          display: 'block',
-          boxSize: 4,
-          w: 8,
-          color: needsUpdate ? 'error.400' : 'base.400',
-        }}
-      />
+    <Tooltip label={<TooltipContent nodeId={nodeId} />} placement="top" shouldWrapChildren>
+      <Icon as={PiInfoBold} display="block" boxSize={4} w={8} color={needsUpdate ? 'error.400' : 'base.400'} />
     </Tooltip>
   );
 };
@@ -64,7 +52,7 @@ const TooltipContent = memo(({ nodeId }: { nodeId: string }) => {
 
     if (!data.version) {
       return (
-        <Text as="span" sx={{ color: 'error.500' }}>
+        <Text as="span" color="error.500">
           {t('nodes.versionUnknown')}
         </Text>
       );
@@ -72,7 +60,7 @@ const TooltipContent = memo(({ nodeId }: { nodeId: string }) => {
 
     if (!nodeTemplate.version) {
       return (
-        <Text as="span" sx={{ color: 'error.500' }}>
+        <Text as="span" color="error.500">
           {t('nodes.version')} {data.version} ({t('nodes.unknownTemplate')})
         </Text>
       );
@@ -80,7 +68,7 @@ const TooltipContent = memo(({ nodeId }: { nodeId: string }) => {
 
     if (compare(data.version, nodeTemplate.version, '<')) {
       return (
-        <Text as="span" sx={{ color: 'error.500' }}>
+        <Text as="span" color="error.500">
           {t('nodes.version')} {data.version} ({t('nodes.updateNode')})
         </Text>
       );
@@ -88,7 +76,7 @@ const TooltipContent = memo(({ nodeId }: { nodeId: string }) => {
 
     if (compare(data.version, nodeTemplate.version, '>')) {
       return (
-        <Text as="span" sx={{ color: 'error.500' }}>
+        <Text as="span" color="error.500">
           {t('nodes.version')} {data.version} ({t('nodes.updateApp')})
         </Text>
       );
@@ -102,12 +90,12 @@ const TooltipContent = memo(({ nodeId }: { nodeId: string }) => {
   }, [data, nodeTemplate, t]);
 
   if (!isInvocationNodeData(data)) {
-    return <Text sx={{ fontWeight: 600 }}>{t('nodes.unknownNode')}</Text>;
+    return <Text fontWeight="semibold">{t('nodes.unknownNode')}</Text>;
   }
 
   return (
-    <Flex sx={{ flexDir: 'column' }}>
-      <Text as="span" sx={{ fontWeight: 600 }}>
+    <Flex flexDir="column">
+      <Text as="span" fontWeight="semibold">
         {title}
       </Text>
       {nodeTemplate?.nodePack && (
@@ -115,7 +103,7 @@ const TooltipContent = memo(({ nodeId }: { nodeId: string }) => {
           {t('nodes.nodePack')}: {nodeTemplate.nodePack}
         </Text>
       )}
-      <Text sx={{ opacity: 0.7, fontStyle: 'oblique 5deg' }}>
+      <Text opacity={0.7} fontStyle="oblique 5deg">
         {nodeTemplate?.description}
       </Text>
       {versionComponent}

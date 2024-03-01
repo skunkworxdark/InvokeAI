@@ -1,9 +1,4 @@
-import {
-  Editable,
-  EditableInput,
-  EditablePreview,
-  Flex,
-} from '@chakra-ui/react';
+import { Editable, EditableInput, EditablePreview, Flex } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
 import { useNodeLabel } from 'features/nodes/hooks/useNodeLabel';
 import { useNodeTemplateTitle } from 'features/nodes/hooks/useNodeTemplateTitle';
@@ -26,9 +21,7 @@ const EditableNodeTitle = ({ nodeId, title }: Props) => {
   const handleSubmit = useCallback(
     async (newTitle: string) => {
       dispatch(nodeLabelChanged({ nodeId, label: newTitle }));
-      setLocalTitle(
-        label || title || templateTitle || t('nodes.problemSettingTitle')
-      );
+      setLocalTitle(label || title || templateTitle || t('nodes.problemSettingTitle'));
     },
     [dispatch, nodeId, title, templateTitle, label, t]
   );
@@ -39,33 +32,21 @@ const EditableNodeTitle = ({ nodeId, title }: Props) => {
 
   useEffect(() => {
     // Another component may change the title; sync local title with global state
-    setLocalTitle(
-      label || title || templateTitle || t('nodes.problemSettingTitle')
-    );
+    setLocalTitle(label || title || templateTitle || t('nodes.problemSettingTitle'));
   }, [label, templateTitle, title, t]);
 
   return (
-    <Flex
-      sx={{
-        w: 'full',
-        h: 'full',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
+    <Flex w="full" alignItems="center" justifyContent="center">
       <Editable
         as={Flex}
         value={localTitle}
         onChange={handleChange}
         onSubmit={handleSubmit}
         w="full"
-        fontWeight={600}
+        fontWeight="semibold"
       >
         <EditablePreview noOfLines={1} />
-        <EditableInput
-          className="nodrag"
-          _focusVisible={{ boxShadow: 'none' }}
-        />
+        <EditableInput className="nodrag" />
       </Editable>
     </Flex>
   );

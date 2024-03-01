@@ -1,18 +1,14 @@
 import { logger } from 'app/logging/logger';
-import {
-  appSocketGraphExecutionStateComplete,
-  socketGraphExecutionStateComplete,
-} from 'services/events/actions';
-import { startAppListening } from '../..';
+import type { AppStartListening } from 'app/store/middleware/listenerMiddleware';
+import { socketGraphExecutionStateComplete } from 'services/events/actions';
 
-export const addGraphExecutionStateCompleteEventListener = () => {
+const log = logger('socketio');
+
+export const addGraphExecutionStateCompleteEventListener = (startAppListening: AppStartListening) => {
   startAppListening({
     actionCreator: socketGraphExecutionStateComplete,
-    effect: (action, { dispatch }) => {
-      const log = logger('socketio');
+    effect: (action) => {
       log.debug(action.payload, 'Session complete');
-      // pass along the socket event as an application action
-      dispatch(appSocketGraphExecutionStateComplete(action.payload));
     },
   });
 };

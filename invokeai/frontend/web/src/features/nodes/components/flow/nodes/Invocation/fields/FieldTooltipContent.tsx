@@ -1,22 +1,19 @@
-import { Flex, Text } from '@chakra-ui/react';
-import { useFieldInstance } from 'features/nodes/hooks/useFieldData';
+import { Flex, Text } from '@invoke-ai/ui-library';
+import { useFieldInputInstance } from 'features/nodes/hooks/useFieldInputInstance';
 import { useFieldTemplate } from 'features/nodes/hooks/useFieldTemplate';
 import { useFieldTypeName } from 'features/nodes/hooks/usePrettyFieldType';
-import {
-  isFieldInputInstance,
-  isFieldInputTemplate,
-} from 'features/nodes/types/field';
+import { isFieldInputInstance, isFieldInputTemplate } from 'features/nodes/types/field';
 import { startCase } from 'lodash-es';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 interface Props {
   nodeId: string;
   fieldName: string;
-  kind: 'input' | 'output';
+  kind: 'inputs' | 'outputs';
 }
 
 const FieldTooltipContent = ({ nodeId, fieldName, kind }: Props) => {
-  const field = useFieldInstance(nodeId, fieldName);
+  const field = useFieldInputInstance(nodeId, fieldName);
   const fieldTemplate = useFieldTemplate(nodeId, fieldName, kind);
   const isInputTemplate = isFieldInputTemplate(fieldTemplate);
   const fieldTypeName = useFieldTypeName(fieldTemplate?.type);
@@ -42,10 +39,10 @@ const FieldTooltipContent = ({ nodeId, fieldName, kind }: Props) => {
   }, [field, fieldTemplate, t]);
 
   return (
-    <Flex sx={{ flexDir: 'column' }}>
-      <Text sx={{ fontWeight: 600 }}>{fieldTitle}</Text>
+    <Flex flexDir="column">
+      <Text fontWeight="semibold">{fieldTitle}</Text>
       {fieldTemplate && (
-        <Text sx={{ opacity: 0.7, fontStyle: 'oblique 5deg' }}>
+        <Text opacity={0.7} fontStyle="oblique 5deg">
           {fieldTemplate.description}
         </Text>
       )}

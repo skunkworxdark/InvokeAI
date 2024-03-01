@@ -1,33 +1,24 @@
-import { Flex, Text } from '@chakra-ui/react';
+import { Flex, Text } from '@invoke-ai/ui-library';
 import { skipToken } from '@reduxjs/toolkit/query';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import IAIDndImage from 'common/components/IAIDndImage';
 import IAIDndImageIcon from 'common/components/IAIDndImageIcon';
-import {
-  TypesafeDraggableData,
-  TypesafeDroppableData,
-} from 'features/dnd/types';
+import type { TypesafeDraggableData, TypesafeDroppableData } from 'features/dnd/types';
 import { fieldImageValueChanged } from 'features/nodes/store/nodesSlice';
-import {
-  ImageFieldInputInstance,
-  ImageFieldInputTemplate,
-} from 'features/nodes/types/field';
-import { FieldComponentProps } from './types';
+import type { ImageFieldInputInstance, ImageFieldInputTemplate } from 'features/nodes/types/field';
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaUndo } from 'react-icons/fa';
+import { PiArrowCounterClockwiseBold } from 'react-icons/pi';
 import { useGetImageDTOQuery } from 'services/api/endpoints/images';
-import { PostUploadAction } from 'services/api/types';
+import type { PostUploadAction } from 'services/api/types';
 
-const ImageFieldInputComponent = (
-  props: FieldComponentProps<ImageFieldInputInstance, ImageFieldInputTemplate>
-) => {
+import type { FieldComponentProps } from './types';
+
+const ImageFieldInputComponent = (props: FieldComponentProps<ImageFieldInputInstance, ImageFieldInputTemplate>) => {
   const { nodeId, field } = props;
   const dispatch = useAppDispatch();
-  const isConnected = useAppSelector((state) => state.system.isConnected);
-  const { currentData: imageDTO, isError } = useGetImageDTOQuery(
-    field.value?.image_name ?? skipToken
-  );
+  const isConnected = useAppSelector((s) => s.system.isConnected);
+  const { currentData: imageDTO, isError } = useGetImageDTOQuery(field.value?.image_name ?? skipToken);
 
   const handleReset = useCallback(() => {
     dispatch(
@@ -74,15 +65,7 @@ const ImageFieldInputComponent = (
   }, [handleReset, isConnected, isError]);
 
   return (
-    <Flex
-      className="nodrag"
-      sx={{
-        w: 'full',
-        h: 'full',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
+    <Flex className="nodrag" w="full" h="full" alignItems="center" justifyContent="center">
       <IAIDndImage
         imageDTO={imageDTO}
         droppableData={droppableData}
@@ -95,7 +78,7 @@ const ImageFieldInputComponent = (
       >
         <IAIDndImageIcon
           onClick={handleReset}
-          icon={imageDTO ? <FaUndo /> : undefined}
+          icon={imageDTO ? <PiArrowCounterClockwiseBold /> : undefined}
           tooltip="Reset Image"
         />
       </IAIDndImage>
@@ -108,7 +91,7 @@ export default memo(ImageFieldInputComponent);
 const UploadElement = memo(() => {
   const { t } = useTranslation();
   return (
-    <Text fontSize={16} fontWeight={600}>
+    <Text fontSize={16} fontWeight="semibold">
       {t('gallery.dropOrUpload')}
     </Text>
   );
@@ -119,7 +102,7 @@ UploadElement.displayName = 'UploadElement';
 const DropLabel = memo(() => {
   const { t } = useTranslation();
   return (
-    <Text fontSize={16} fontWeight={600}>
+    <Text fontSize={16} fontWeight="semibold">
       {t('gallery.drop')}
     </Text>
   );

@@ -1,79 +1,69 @@
+import type { ComboboxOnChange, ComboboxOption } from '@invoke-ai/ui-library';
+import { Combobox, FormControl, FormLabel } from '@invoke-ai/ui-library';
 import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import IAIMantineSearchableSelect, {
-  IAISelectDataType,
-} from 'common/components/IAIMantineSearchableSelect';
+import { InformationalPopover } from 'common/components/InformationalPopover/InformationalPopover';
 import { useControlAdapterIsEnabled } from 'features/controlAdapters/hooks/useControlAdapterIsEnabled';
 import { useControlAdapterProcessorNode } from 'features/controlAdapters/hooks/useControlAdapterProcessorNode';
 import { CONTROLNET_PROCESSORS } from 'features/controlAdapters/store/constants';
 import { controlAdapterProcessortTypeChanged } from 'features/controlAdapters/store/controlAdaptersSlice';
-import { ControlAdapterProcessorType } from 'features/controlAdapters/store/types';
+import type { ControlAdapterProcessorType } from 'features/controlAdapters/store/types';
 import { configSelector } from 'features/system/store/configSelectors';
 import { map } from 'lodash-es';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type Props = {
   id: string;
 };
 
-const selector = createMemoizedSelector(configSelector, (config) => {
-  const controlNetProcessors: IAISelectDataType[] = map(
-    CONTROLNET_PROCESSORS,
-    (p) => ({
-      value: p.type,
-      label: p.label,
-    })
-  )
+const selectOptions = createMemoizedSelector(configSelector, (config) => {
+  const options: ComboboxOption[] = map(CONTROLNET_PROCESSORS, (p) => ({
+    value: p.type,
+    label: p.label,
+  }))
     .sort((a, b) =>
       // sort 'none' to the top
-      a.value === 'none'
-        ? -1
-        : b.value === 'none'
-          ? 1
-          : a.label.localeCompare(b.label)
+      a.value === 'none' ? -1 : b.value === 'none' ? 1 : a.label.localeCompare(b.label)
     )
-    .filter(
-      (d) =>
-        !config.sd.disabledControlNetProcessors.includes(
-          d.value as ControlAdapterProcessorType
-        )
-    );
+    .filter((d) => !config.sd.disabledControlNetProcessors.includes(d.value as ControlAdapterProcessorType));
 
-  return controlNetProcessors;
+  return options;
 });
 
 const ParamControlAdapterProcessorSelect = ({ id }: Props) => {
   const isEnabled = useControlAdapterIsEnabled(id);
   const processorNode = useControlAdapterProcessorNode(id);
   const dispatch = useAppDispatch();
-  const controlNetProcessors = useAppSelector(selector);
+  const options = useAppSelector(selectOptions);
   const { t } = useTranslation();
 
-  const handleProcessorTypeChanged = useCallback(
-    (v: string | null) => {
+  const onChange = useCallback<ComboboxOnChange>(
+    (v) => {
+      if (!v) {
+        return;
+      }
       dispatch(
         controlAdapterProcessortTypeChanged({
           id,
-          processorType: v as ControlAdapterProcessorType,
+          processorType: v.value as ControlAdapterProcessorType, // TODO: need runtime check...
         })
       );
     },
     [id, dispatch]
   );
+  const value = useMemo(() => options.find((o) => o.value === processorNode?.type), [options, processorNode]);
 
   if (!processorNode) {
     return null;
   }
-
   return (
-    <IAIMantineSearchableSelect
-      label={t('controlnet.processor')}
-      value={processorNode.type ?? 'canny_image_processor'}
-      data={controlNetProcessors}
-      onChange={handleProcessorTypeChanged}
-      disabled={!isEnabled}
-    />
+    <FormControl isDisabled={!isEnabled}>
+      <InformationalPopover feature="controlNetProcessor">
+        <FormLabel>{t('controlnet.processor')}</FormLabel>
+      </InformationalPopover>
+      <Combobox value={value} options={options} onChange={onChange} />
+    </FormControl>
   );
 };
 

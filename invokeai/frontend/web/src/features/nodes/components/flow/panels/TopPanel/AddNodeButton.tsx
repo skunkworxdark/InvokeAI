@@ -1,9 +1,9 @@
+import { IconButton } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
-import IAIIconButton from 'common/components/IAIIconButton';
 import { addNodePopoverOpened } from 'features/nodes/store/nodesSlice';
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaPlus } from 'react-icons/fa';
+import { PiPlusBold } from 'react-icons/pi';
 
 const AddNodeButton = () => {
   const dispatch = useAppDispatch();
@@ -13,10 +13,10 @@ const AddNodeButton = () => {
   }, [dispatch]);
 
   return (
-    <IAIIconButton
+    <IconButton
       tooltip={t('nodes.addNodeToolTip')}
       aria-label={t('nodes.addNode')}
-      icon={<FaPlus />}
+      icon={<PiPlusBold />}
       onClick={handleOpenAddNodePopover}
       pointerEvents="auto"
     />

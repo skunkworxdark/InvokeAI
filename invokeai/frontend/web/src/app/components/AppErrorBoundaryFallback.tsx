@@ -1,10 +1,8 @@
-import { Flex, Heading, Link, Text, useToast } from '@chakra-ui/react';
-import IAIButton from 'common/components/IAIButton';
+import { Button, Flex, Heading, Link, Text, useToast } from '@invoke-ai/ui-library';
 import newGithubIssueUrl from 'new-github-issue-url';
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaCopy, FaExternalLinkAlt } from 'react-icons/fa';
-import { FaArrowRotateLeft } from 'react-icons/fa6';
+import { PiArrowCounterClockwiseBold, PiArrowSquareOutBold, PiCopyBold } from 'react-icons/pi';
 import { serializeError } from 'serialize-error';
 
 type Props = {
@@ -35,62 +33,31 @@ const AppErrorBoundaryFallback = ({ error, resetErrorBoundary }: Props) => {
     [error.message, error.name]
   );
   return (
-    <Flex
-      layerStyle="body"
-      sx={{
-        w: '100vw',
-        h: '100vh',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 4,
-      }}
-    >
-      <Flex
-        layerStyle="first"
-        sx={{
-          flexDir: 'column',
-          borderRadius: 'base',
-          justifyContent: 'center',
-          gap: 8,
-          p: 16,
-        }}
-      >
+    <Flex layerStyle="body" w="100vw" h="100vh" alignItems="center" justifyContent="center" p={4}>
+      <Flex layerStyle="first" flexDir="column" borderRadius="base" justifyContent="center" gap={8} p={16}>
         <Heading>{t('common.somethingWentWrong')}</Heading>
         <Flex
           layerStyle="second"
-          sx={{
-            px: 8,
-            py: 4,
-            borderRadius: 'base',
-            gap: 4,
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
+          px={8}
+          py={4}
+          gap={4}
+          borderRadius="base"
+          justifyContent="space-between"
+          alignItems="center"
         >
-          <Text
-            sx={{
-              fontWeight: 600,
-              color: 'error.500',
-              _dark: { color: 'error.400' },
-            }}
-          >
+          <Text fontWeight="semibold" color="error.400">
             {error.name}: {error.message}
           </Text>
         </Flex>
-        <Flex sx={{ gap: 4 }}>
-          <IAIButton
-            leftIcon={<FaArrowRotateLeft />}
-            onClick={resetErrorBoundary}
-          >
+        <Flex gap={4}>
+          <Button leftIcon={<PiArrowCounterClockwiseBold />} onClick={resetErrorBoundary}>
             {t('accessibility.resetUI')}
-          </IAIButton>
-          <IAIButton leftIcon={<FaCopy />} onClick={handleCopy}>
+          </Button>
+          <Button leftIcon={<PiCopyBold />} onClick={handleCopy}>
             {t('common.copyError')}
-          </IAIButton>
+          </Button>
           <Link href={url} isExternal>
-            <IAIButton leftIcon={<FaExternalLinkAlt />}>
-              {t('accessibility.createIssue')}
-            </IAIButton>
+            <Button leftIcon={<PiArrowSquareOutBold />}>{t('accessibility.createIssue')}</Button>
           </Link>
         </Flex>
       </Flex>

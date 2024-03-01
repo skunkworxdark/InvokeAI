@@ -7,7 +7,6 @@
         "img2img": "Изображение в изображение (img2img)",
         "unifiedCanvas": "Единый холст",
         "nodes": "Редактор рабочего процесса",
-        "langRussian": "Русский",
         "nodesDesc": "Cистема генерации изображений на основе нодов (узлов) уже разрабатывается. Следите за новостями об этой замечательной функции.",
         "postProcessing": "Постобработка",
         "postProcessDesc1": "Invoke AI предлагает широкий спектр функций постобработки. Увеличение изображения (upscale) и восстановление лиц уже доступны в интерфейсе. Получите доступ к ним из меню 'Дополнительные параметры' на вкладках 'Текст в изображение' и 'Изображение в изображение'. Обрабатывайте изображения напрямую, используя кнопки действий с изображениями над текущим изображением или в режиме просмотра.",
@@ -51,23 +50,8 @@
         "statusConvertingModel": "Конвертация модели",
         "cancel": "Отменить",
         "accept": "Принять",
-        "langUkranian": "Украї́нська",
-        "langEnglish": "English",
         "postprocessing": "Постобработка",
-        "langArabic": "العربية",
-        "langSpanish": "Español",
-        "langSimplifiedChinese": "简体中文",
-        "langDutch": "Nederlands",
-        "langFrench": "Français",
-        "langGerman": "German",
-        "langHebrew": "Hebrew",
-        "langItalian": "Italiano",
-        "langJapanese": "日本語",
-        "langKorean": "한국어",
-        "langPolish": "Polski",
-        "langPortuguese": "Português",
         "txt2img": "Текст в изображение (txt2img)",
-        "langBrPortuguese": "Português do Brasil",
         "linear": "Линейная обработка",
         "dontAskMeAgain": "Больше не спрашивать",
         "areYouSure": "Вы уверены?",
@@ -76,7 +60,6 @@
         "openInNewTab": "Открыть в новой вкладке",
         "imagePrompt": "Запрос",
         "communityLabel": "Сообщество",
-        "lightMode": "Светлая тема",
         "batch": "Пакетный менеджер",
         "modelManager": "Менеджер моделей",
         "darkMode": "Темная тема",
@@ -121,7 +104,20 @@
         "unsaved": "несохраненный",
         "input": "Вход",
         "details": "Детали",
-        "notInstalled": "Нет $t(common.installed)"
+        "notInstalled": "Нет $t(common.installed)",
+        "preferencesLabel": "Предпочтения",
+        "or": "или",
+        "advancedOptions": "Расширенные настройки",
+        "free": "Свободно",
+        "aboutHeading": "Владей своей творческой силой",
+        "red": "Красный",
+        "green": "Зеленый",
+        "blue": "Синий",
+        "alpha": "Альфа",
+        "toResolve": "Чтоб решить",
+        "copy": "Копировать",
+        "localSystem": "Локальная система",
+        "aboutDesc": "Используя Invoke для работы? Проверьте это:"
     },
     "gallery": {
         "generations": "Генерации",
@@ -165,17 +161,17 @@
     },
     "hotkeys": {
         "keyboardShortcuts": "Горячие клавиши",
-        "appHotkeys": "Горячие клавиши приложения",
-        "generalHotkeys": "Общие горячие клавиши",
-        "galleryHotkeys": "Горячие клавиши галереи",
-        "unifiedCanvasHotkeys": "Горячие клавиши Единого холста",
+        "appHotkeys": "Приложение",
+        "generalHotkeys": "Общее",
+        "galleryHotkeys": "Галлерея",
+        "unifiedCanvasHotkeys": "Единый холст",
         "invoke": {
             "title": "Invoke",
             "desc": "Сгенерировать изображение"
         },
         "cancel": {
             "title": "Отменить",
-            "desc": "Отменить генерацию изображения"
+            "desc": "Отменить текущий элемент"
         },
         "focusPrompt": {
             "title": "Переключиться на ввод запроса",
@@ -188,10 +184,6 @@
         "pinOptions": {
             "title": "Закрепить параметры",
             "desc": "Закрепить панель параметров"
-        },
-        "toggleViewer": {
-            "title": "Показать просмотр",
-            "desc": "Открывать и закрывать просмотрщик изображений"
         },
         "toggleGallery": {
             "title": "Показать галерею",
@@ -252,10 +244,6 @@
         "nextImage": {
             "title": "Следующее изображение",
             "desc": "Отображение следующего изображения в галерее"
-        },
-        "toggleGalleryPin": {
-            "title": "Закрепить галерею",
-            "desc": "Закрепляет и открепляет галерею"
         },
         "increaseGalleryThumbSize": {
             "title": "Увеличить размер миниатюр галереи",
@@ -373,7 +361,26 @@
             "desc": "Открывает меню добавления узла",
             "title": "Добавление узлов"
         },
-        "nodesHotkeys": "Горячие клавиши узлов"
+        "nodesHotkeys": "Узлы",
+        "cancelAndClear": {
+            "desc": "Отмена текущего элемента очереди и очистка всех ожидающих элементов",
+            "title": "Отменить и очистить"
+        },
+        "resetOptionsAndGallery": {
+            "title": "Сброс настроек и галереи",
+            "desc": "Сброс панелей галереи и настроек"
+        },
+        "searchHotkeys": "Поиск горячих клавиш",
+        "noHotkeysFound": "Горячие клавиши не найдены",
+        "toggleOptionsAndGallery": {
+            "desc": "Открытие и закрытие панели опций и галереи",
+            "title": "Переключить опции и галерею"
+        },
+        "clearSearch": "Очистить поиск",
+        "remixImage": {
+            "desc": "Используйте все параметры, кроме сида из текущего изображения",
+            "title": "Ремикс изображения"
+        }
     },
     "modelManager": {
         "modelManager": "Менеджер моделей",
@@ -518,12 +525,13 @@
         "modelType": "Тип модели",
         "customConfigFileLocation": "Расположение пользовательского файла конфигурации",
         "vaePrecision": "Точность VAE",
-        "noModelSelected": "Модель не выбрана"
+        "noModelSelected": "Модель не выбрана",
+        "configFile": "Файл конфигурации"
     },
     "parameters": {
         "images": "Изображения",
         "steps": "Шаги",
-        "cfgScale": "Точность следования запросу (CFG)",
+        "cfgScale": "Шкала точности (CFG)",
         "width": "Ширина",
         "height": "Высота",
         "seed": "Сид",
@@ -589,8 +597,8 @@
         "copyImage": "Скопировать изображение",
         "showPreview": "Показать предпросмотр",
         "noiseSettings": "Шум",
-        "seamlessXAxis": "Горизонтальная",
-        "seamlessYAxis": "Вертикальная",
+        "seamlessXAxis": "Бесшовность по оси X",
+        "seamlessYAxis": "Бесшовность по оси Y",
         "scheduler": "Планировщик",
         "boundingBoxWidth": "Ширина ограничивающей рамки",
         "boundingBoxHeight": "Высота ограничивающей рамки",
@@ -618,12 +626,13 @@
             "noControlImageForControlAdapter": "Адаптер контроля #{{number}} не имеет изображения",
             "noModelForControlAdapter": "Не выбрана модель адаптера контроля #{{number}}.",
             "unableToInvoke": "Невозможно вызвать",
-            "incompatibleBaseModelForControlAdapter": "Модель контрольного адаптера №{{number}} недействительна для основной модели.",
+            "incompatibleBaseModelForControlAdapter": "Адаптер контроля №{{number}} несовместим с основной моделью.",
             "systemDisconnected": "Система отключена",
             "missingNodeTemplate": "Отсутствует шаблон узла",
             "readyToInvoke": "Готово к вызову",
             "missingFieldTemplate": "Отсутствует шаблон поля",
-            "addingImagesTo": "Добавление изображений в"
+            "addingImagesTo": "Добавление изображений в",
+            "invoke": "Создать"
         },
         "seamlessX&Y": "Бесшовный X & Y",
         "isAllowedToUpscale": {
@@ -651,7 +660,17 @@
         "useSize": "Использовать размер",
         "unmasked": "Без маски",
         "enableNoiseSettings": "Включить настройки шума",
-        "coherenceMode": "Режим"
+        "coherenceMode": "Режим",
+        "aspect": "Соотношение",
+        "imageSize": "Размер изображения",
+        "swapDimensions": "Поменять местами",
+        "setToOptimalSize": "Установить оптимальный для модели размер",
+        "setToOptimalSizeTooSmall": "$t(parameters.setToOptimalSize) (может быть слишком маленьким)",
+        "setToOptimalSizeTooLarge": "$t(parameters.setToOptimalSize) (может быть слишком большим)",
+        "lockAspectRatio": "Заблокировать соотношение",
+        "boxBlur": "Размытие прямоугольника",
+        "gaussianBlur": "Размытие по Гауссу",
+        "remixImage": "Ремикс изображения"
     },
     "settings": {
         "models": "Модели",
@@ -785,7 +804,10 @@
         "canvasSavedGallery": "Холст сохранен в галерею",
         "imageUploadFailed": "Не удалось загрузить изображение",
         "modelAdded": "Добавлена модель: {{modelName}}",
-        "problemImportingMask": "Проблема с импортом маски"
+        "problemImportingMask": "Проблема с импортом маски",
+        "problemDownloadingImage": "Не удается скачать изображение",
+        "uploadInitialImage": "Загрузить начальное изображение",
+        "resetInitialImage": "Сбросить начальное изображение"
     },
     "tooltip": {
         "feature": {
@@ -890,7 +912,8 @@
         "mode": "Режим",
         "loadMore": "Загрузить больше",
         "resetUI": "$t(accessibility.reset) интерфейс",
-        "createIssue": "Сообщить о проблеме"
+        "createIssue": "Сообщить о проблеме",
+        "about": "Об этом"
     },
     "ui": {
         "showProgressImages": "Показывать промежуточный итог",
@@ -1115,7 +1138,18 @@
         "unableToParseEdge": "Невозможно разобрать край",
         "unknownInput": "Неизвестный вход: {{name}}",
         "oNNXModelFieldDescription": "Поле модели ONNX.",
-        "imageCollection": "Коллекция изображений"
+        "imageCollection": "Коллекция изображений",
+        "newWorkflow": "Новый рабочий процесс",
+        "newWorkflowDesc": "Создать новый рабочий процесс?",
+        "clearWorkflow": "Очистить рабочий процесс",
+        "newWorkflowDesc2": "Текущий рабочий процесс имеет несохраненные изменения.",
+        "latentsCollection": "Коллекция латентов",
+        "clearWorkflowDesc": "Очистить этот рабочий процесс и создать новый?",
+        "clearWorkflowDesc2": "Текущий рабочий процесс имеет несохраненные измерения.",
+        "reorderLinearView": "Изменить порядок линейного просмотра",
+        "viewMode": "Использовать в линейном представлении",
+        "editMode": "Открыть в редакторе узлов",
+        "resetToDefaultValue": "Сбросить к стандартному значкнию"
     },
     "controlnet": {
         "amult": "a_mult",
@@ -1153,7 +1187,6 @@
         "resetControlImage": "Сбросить контрольное изображение",
         "prompt": "Запрос",
         "controlnet": "$t(controlnet.controlAdapter_one) №{{number}} $t(common.controlNet)",
-        "openPoseDescription": "Оценка позы человека с помощью Openpose",
         "resizeMode": "Режим изменения размера",
         "t2iEnabledControlNetDisabled": "$t(common.t2iAdapter) включен, $t(common.controlNet)s отключен",
         "weight": "Вес",
@@ -1162,7 +1195,6 @@
         "processor": "Процессор",
         "addControlNet": "Добавить $t(common.controlNet)",
         "none": "ничего",
-        "incompatibleBaseModel": "Несовместимая базовая модель:",
         "controlNetT2IMutexDesc": "$t(common.controlNet) и $t(common.t2iAdapter) одновременно в настоящее время не поддерживаются.",
         "ip_adapter": "$t(controlnet.controlAdapter_one) №{{number}} $t(common.ipAdapter)",
         "pidiDescription": "PIDI-обработка изображений",
@@ -1197,7 +1229,19 @@
         "handAndFace": "Руки и Лицо",
         "enableIPAdapter": "Включить IP Adapter",
         "maxFaces": "Макс Лица",
-        "mlsdDescription": "Минималистичный детектор отрезков линии"
+        "mlsdDescription": "Минималистичный детектор отрезков линии",
+        "resizeSimple": "Изменить размер (простой)",
+        "megaControl": "Mega контроль",
+        "base": "Базовый",
+        "depthAnything": "Глубина всего",
+        "depthAnythingDescription": "Создание карты глубины с использованием метода Depth Anything",
+        "face": "Лицо",
+        "dwOpenposeDescription": "Оценка позы человека с помощью DW Openpose",
+        "large": "Большой",
+        "modelSize": "Размер модели",
+        "small": "Маленький",
+        "body": "Тело",
+        "hands": "Руки"
     },
     "boards": {
         "autoAddBoard": "Авто добавление Доски",
@@ -1239,7 +1283,9 @@
         "promptsWithCount_one": "{{count}} Запрос",
         "promptsWithCount_few": "{{count}} Запроса",
         "promptsWithCount_many": "{{count}} Запросов",
-        "dynamicPrompts": "Динамические запросы"
+        "dynamicPrompts": "Динамические запросы",
+        "loading": "Создание динамических запросов...",
+        "showDynamicPrompts": "Показать динамические запросы"
     },
     "popovers": {
         "noiseUseCPU": {
@@ -1278,7 +1324,7 @@
         "compositingCoherenceSteps": {
             "heading": "Шаги",
             "paragraphs": [
-                null,
+                "Количество шагов снижения шума, используемых при прохождении когерентности.",
                 "То же, что и основной параметр «Шаги»."
             ]
         },
@@ -1316,7 +1362,10 @@
             ]
         },
         "compositingCoherenceMode": {
-            "heading": "Режим"
+            "heading": "Режим",
+            "paragraphs": [
+                "Режим прохождения когерентности."
+            ]
         },
         "paramSeed": {
             "paragraphs": [
@@ -1350,16 +1399,14 @@
         "clipSkip": {
             "paragraphs": [
                 "Выберите, сколько слоев модели CLIP нужно пропустить.",
-                "Некоторые модели работают лучше с определенными настройками пропуска CLIP.",
-                "Более высокое значение обычно приводит к менее детализированному изображению."
+                "Некоторые модели работают лучше с определенными настройками пропуска CLIP."
             ],
             "heading": "CLIP пропуск"
         },
         "paramModel": {
             "heading": "Модель",
             "paragraphs": [
-                "Модель, используемая для шагов шумоподавления.",
-                "Различные модели обычно обучаются, чтобы специализироваться на достижении определенных эстетических результатов и содержания."
+                "Модель, используемая для шагов шумоподавления."
             ]
         },
         "compositingCoherencePass": {
@@ -1502,7 +1549,7 @@
         "queueBack": "Добавить в очередь",
         "batchValues": "Пакетные значения",
         "cancelFailed": "Проблема с отменой элемента",
-        "queueCountPrediction": "Добавить {{predicted}} в очередь",
+        "queueCountPrediction": "{{promptsCount}} запросов × {{iterations}} изображений -> {{count}} генераций",
         "batchQueued": "Пакетная очередь",
         "pauseFailed": "Проблема с приостановкой рендеринга",
         "clearFailed": "Проблема с очисткой очереди",
@@ -1549,7 +1596,8 @@
         "cancelBatchFailed": "Проблема с отменой пакета",
         "clearQueueAlertDialog2": "Вы уверены, что хотите очистить очередь?",
         "item": "Элемент",
-        "graphFailedToQueue": "Не удалось поставить график в очередь"
+        "graphFailedToQueue": "Не удалось поставить график в очередь",
+        "openQueue": "Открыть очередь"
     },
     "sdxl": {
         "refinerStart": "Запуск перерисовщика",
@@ -1597,7 +1645,7 @@
         "openWorkflow": "Открытый рабочий процесс",
         "clearWorkflowSearchFilter": "Очистить фильтр поиска рабочих процессов",
         "workflowLibrary": "Библиотека",
-        "downloadWorkflow": "Скачать рабочий процесс",
+        "downloadWorkflow": "Сохранить в файл",
         "noRecentWorkflows": "Нет недавних рабочих процессов",
         "workflowSaved": "Рабочий процесс сохранен",
         "workflowIsOpen": "Рабочий процесс открыт",
@@ -1610,8 +1658,12 @@
         "deleteWorkflow": "Удалить рабочий процесс",
         "workflows": "Рабочие процессы",
         "noDescription": "Без описания",
-        "uploadWorkflow": "Загрузить рабочий процесс",
-        "userWorkflows": "Мои рабочие процессы"
+        "uploadWorkflow": "Загрузить из файла",
+        "userWorkflows": "Мои рабочие процессы",
+        "newWorkflowCreated": "Создан новый рабочий процесс",
+        "saveWorkflowToProject": "Сохранить рабочий процесс в проект",
+        "workflowCleared": "Рабочий процесс очищен",
+        "noWorkflows": "Нет рабочих процессов"
     },
     "embedding": {
         "noEmbeddingsLoaded": "встраивания не загружены",
@@ -1644,9 +1696,38 @@
         "selectModel": "Выберите модель",
         "noRefinerModelsInstalled": "Модели SDXL Refiner не установлены",
         "noLoRAsInstalled": "Нет установленных LoRA",
-        "selectLoRA": "Выберите LoRA"
+        "selectLoRA": "Выберите LoRA",
+        "noMainModelSelected": "Базовая модель не выбрана",
+        "lora": "LoRA",
+        "allLoRAsAdded": "Все LoRA добавлены",
+        "defaultVAE": "Стандартное VAE",
+        "incompatibleBaseModel": "Несовместимая базовая модель",
+        "loraAlreadyAdded": "LoRA уже добавлена"
     },
     "app": {
         "storeNotInitialized": "Магазин не инициализирован"
+    },
+    "accordions": {
+        "compositing": {
+            "infillTab": "Заполнение",
+            "coherenceTab": "Согласованность",
+            "title": "Композиция"
+        },
+        "control": {
+            "controlAdaptersTab": "Адаптеры контроля",
+            "ipTab": "Запросы изображений",
+            "title": "Контроль"
+        },
+        "generation": {
+            "title": "Генерация",
+            "conceptsTab": "Концепты",
+            "modelTab": "Модель"
+        },
+        "advanced": {
+            "title": "Расширенные"
+        },
+        "image": {
+            "title": "Изображение"
+        }
     }
 }

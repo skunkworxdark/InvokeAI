@@ -1,5 +1,3 @@
-import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
 import { useAppSelector } from 'app/store/storeHooks';
 import {
   isCanvasBaseImage,
@@ -10,23 +8,11 @@ import {
 import { rgbaColorToString } from 'features/canvas/util/colorToString';
 import { memo } from 'react';
 import { Group, Line, Rect } from 'react-konva';
+
 import IAICanvasImage from './IAICanvasImage';
 
-const selector = createMemoizedSelector([stateSelector], ({ canvas }) => {
-  const {
-    layerState: { objects },
-  } = canvas;
-  return {
-    objects,
-  };
-});
-
 const IAICanvasObjectRenderer = () => {
-  const { objects } = useAppSelector(selector);
-
-  if (!objects) {
-    return null;
-  }
+  const objects = useAppSelector((s) => s.canvas.layerState.objects);
 
   return (
     <Group name="outpainting-objects" listening={false}>
@@ -45,9 +31,7 @@ const IAICanvasObjectRenderer = () => {
               lineJoin="round"
               shadowForStrokeEnabled={false}
               listening={false}
-              globalCompositeOperation={
-                obj.tool === 'brush' ? 'source-over' : 'destination-out'
-              }
+              globalCompositeOperation={obj.tool === 'brush' ? 'source-over' : 'destination-out'}
             />
           );
           if (obj.clip) {
@@ -58,6 +42,7 @@ const IAICanvasObjectRenderer = () => {
                 clipY={obj.clip.y}
                 clipWidth={obj.clip.width}
                 clipHeight={obj.clip.height}
+                listening={false}
               >
                 {line}
               </Group>
@@ -74,6 +59,7 @@ const IAICanvasObjectRenderer = () => {
               width={obj.width}
               height={obj.height}
               fill={rgbaColorToString(obj.color)}
+              listening={false}
             />
           );
         } else if (isCanvasEraseRect(obj)) {
@@ -86,6 +72,7 @@ const IAICanvasObjectRenderer = () => {
               height={obj.height}
               fill="rgb(255, 255, 255)"
               globalCompositeOperation="destination-out"
+              listening={false}
             />
           );
         }

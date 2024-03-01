@@ -1,28 +1,17 @@
+import type { ComboboxOnChange, ComboboxOption } from '@invoke-ai/ui-library';
+import { Combobox, FormControl, FormLabel } from '@invoke-ai/ui-library';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import IAIMantineSelect from 'common/components/IAIMantineSelect';
+import { InformationalPopover } from 'common/components/InformationalPopover/InformationalPopover';
+import { isSeedBehaviour, seedBehaviourChanged } from 'features/dynamicPrompts/store/dynamicPromptsSlice';
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  SeedBehaviour,
-  seedBehaviourChanged,
-} from 'features/dynamicPrompts/store/dynamicPromptsSlice';
-import IAIMantineSelectItemWithDescription from 'common/components/IAIMantineSelectItemWithDescription';
-import IAIInformationalPopover from 'common/components/IAIInformationalPopover/IAIInformationalPopover';
-
-type Item = {
-  label: string;
-  value: SeedBehaviour;
-  description: string;
-};
 
 const ParamDynamicPromptsSeedBehaviour = () => {
   const dispatch = useAppDispatch();
   const { t } = useTranslation();
-  const seedBehaviour = useAppSelector(
-    (state) => state.dynamicPrompts.seedBehaviour
-  );
+  const seedBehaviour = useAppSelector((s) => s.dynamicPrompts.seedBehaviour);
 
-  const data = useMemo<Item[]>(() => {
+  const options = useMemo<ComboboxOption[]>(() => {
     return [
       {
         value: 'PER_ITERATION',
@@ -37,26 +26,25 @@ const ParamDynamicPromptsSeedBehaviour = () => {
     ];
   }, [t]);
 
-  const handleChange = useCallback(
-    (v: string | null) => {
-      if (!v) {
+  const handleChange = useCallback<ComboboxOnChange>(
+    (v) => {
+      if (!isSeedBehaviour(v?.value)) {
         return;
       }
-      dispatch(seedBehaviourChanged(v as SeedBehaviour));
+      dispatch(seedBehaviourChanged(v.value));
     },
     [dispatch]
   );
 
+  const value = useMemo(() => options.find((o) => o.value === seedBehaviour), [options, seedBehaviour]);
+
   return (
-    <IAIInformationalPopover feature="dynamicPromptsSeedBehaviour">
-      <IAIMantineSelect
-        label={t('dynamicPrompts.seedBehaviour.label')}
-        value={seedBehaviour}
-        data={data}
-        itemComponent={IAIMantineSelectItemWithDescription}
-        onChange={handleChange}
-      />
-    </IAIInformationalPopover>
+    <FormControl>
+      <InformationalPopover feature="dynamicPromptsSeedBehaviour" inPortal={false}>
+        <FormLabel>{t('dynamicPrompts.seedBehaviour.label')}</FormLabel>
+      </InformationalPopover>
+      <Combobox value={value} options={options} onChange={handleChange} />
+    </FormControl>
   );
 };
 

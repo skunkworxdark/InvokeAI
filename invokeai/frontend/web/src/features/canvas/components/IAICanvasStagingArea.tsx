@@ -1,12 +1,15 @@
 import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
 import { useAppSelector } from 'app/store/storeHooks';
-import { GroupConfig } from 'konva/lib/Group';
+import { selectCanvasSlice } from 'features/canvas/store/canvasSlice';
+import type { GroupConfig } from 'konva/lib/Group';
 import { memo } from 'react';
 import { Group, Rect } from 'react-konva';
+
 import IAICanvasImage from './IAICanvasImage';
 
-const selector = createMemoizedSelector([stateSelector], ({ canvas }) => {
+const dash = [4, 4];
+
+const selector = createMemoizedSelector(selectCanvasSlice, (canvas) => {
   const {
     layerState,
     shouldShowStagingImage,
@@ -19,9 +22,7 @@ const selector = createMemoizedSelector([stateSelector], ({ canvas }) => {
 
   return {
     currentStagingAreaImage:
-      images.length > 0 && selectedImageIndex !== undefined
-        ? images[selectedImageIndex]
-        : undefined,
+      images.length > 0 && selectedImageIndex !== undefined ? images[selectedImageIndex] : undefined,
     isOnFirstImage: selectedImageIndex === 0,
     isOnLastImage: selectedImageIndex === images.length - 1,
     shouldShowStagingImage,
@@ -36,24 +37,14 @@ const selector = createMemoizedSelector([stateSelector], ({ canvas }) => {
 type Props = GroupConfig;
 
 const IAICanvasStagingArea = (props: Props) => {
-  const { ...rest } = props;
-  const {
-    currentStagingAreaImage,
-    shouldShowStagingImage,
-    shouldShowStagingOutline,
-    x,
-    y,
-    width,
-    height,
-  } = useAppSelector(selector);
+  const { currentStagingAreaImage, shouldShowStagingImage, shouldShowStagingOutline, x, y, width, height } =
+    useAppSelector(selector);
 
   return (
-    <Group {...rest}>
-      {shouldShowStagingImage && currentStagingAreaImage && (
-        <IAICanvasImage canvasImage={currentStagingAreaImage} />
-      )}
+    <Group {...props}>
+      {shouldShowStagingImage && currentStagingAreaImage && <IAICanvasImage canvasImage={currentStagingAreaImage} />}
       {shouldShowStagingOutline && (
-        <Group>
+        <Group listening={false}>
           <Rect
             x={x}
             y={y}
@@ -62,16 +53,18 @@ const IAICanvasStagingArea = (props: Props) => {
             strokeWidth={1}
             stroke="white"
             strokeScaleEnabled={false}
+            listening={false}
           />
           <Rect
             x={x}
             y={y}
             width={width}
             height={height}
-            dash={[4, 4]}
+            dash={dash}
             strokeWidth={1}
             stroke="black"
             strokeScaleEnabled={false}
+            listening={false}
           />
         </Group>
       )}

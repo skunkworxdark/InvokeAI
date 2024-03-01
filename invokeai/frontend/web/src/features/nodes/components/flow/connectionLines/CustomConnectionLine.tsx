@@ -1,40 +1,26 @@
-import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
+import { createSelector } from '@reduxjs/toolkit';
 import { useAppSelector } from 'app/store/storeHooks';
 import { colorTokenToCssVar } from 'common/util/colorTokenToCssVar';
 import { getFieldColor } from 'features/nodes/components/flow/edges/util/getEdgeColor';
+import { selectNodesSlice } from 'features/nodes/store/nodesSlice';
+import type { CSSProperties } from 'react';
 import { memo } from 'react';
-import { ConnectionLineComponentProps, getBezierPath } from 'reactflow';
+import type { ConnectionLineComponentProps } from 'reactflow';
+import { getBezierPath } from 'reactflow';
 
-const selector = createMemoizedSelector(stateSelector, ({ nodes }) => {
-  const { shouldAnimateEdges, connectionStartFieldType, shouldColorEdges } =
-    nodes;
+const selectStroke = createSelector(selectNodesSlice, (nodes) =>
+  nodes.shouldColorEdges ? getFieldColor(nodes.connectionStartFieldType) : colorTokenToCssVar('base.500')
+);
 
-  const stroke = shouldColorEdges
-    ? getFieldColor(connectionStartFieldType)
-    : colorTokenToCssVar('base.500');
+const selectClassName = createSelector(selectNodesSlice, (nodes) =>
+  nodes.shouldAnimateEdges ? 'react-flow__custom_connection-path animated' : 'react-flow__custom_connection-path'
+);
 
-  let className = 'react-flow__custom_connection-path';
+const pathStyles: CSSProperties = { opacity: 0.8 };
 
-  if (shouldAnimateEdges) {
-    className = className.concat(' animated');
-  }
-
-  return {
-    stroke,
-    className,
-  };
-});
-
-const CustomConnectionLine = ({
-  fromX,
-  fromY,
-  fromPosition,
-  toX,
-  toY,
-  toPosition,
-}: ConnectionLineComponentProps) => {
-  const { stroke, className } = useAppSelector(selector);
+const CustomConnectionLine = ({ fromX, fromY, fromPosition, toX, toY, toPosition }: ConnectionLineComponentProps) => {
+  const stroke = useAppSelector(selectStroke);
+  const className = useAppSelector(selectClassName);
 
   const pathParams = {
     sourceX: fromX,
@@ -49,14 +35,7 @@ const CustomConnectionLine = ({
 
   return (
     <g>
-      <path
-        fill="none"
-        stroke={stroke}
-        strokeWidth={2}
-        className={className}
-        d={dAttr}
-        style={{ opacity: 0.8 }}
-      />
+      <path fill="none" stroke={stroke} strokeWidth={2} className={className} d={dAttr} style={pathStyles} />
     </g>
   );
 };

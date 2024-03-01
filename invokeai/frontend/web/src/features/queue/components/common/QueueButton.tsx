@@ -1,7 +1,7 @@
-import { ChakraProps, ThemeTypings } from '@chakra-ui/react';
-import IAIButton from 'common/components/IAIButton';
-import IAIIconButton from 'common/components/IAIIconButton';
-import { ReactElement, ReactNode, memo } from 'react';
+import type { ChakraProps, ThemeTypings } from '@invoke-ai/ui-library';
+import { Button, IconButton } from '@invoke-ai/ui-library';
+import type { ReactElement, ReactNode } from 'react';
+import { memo } from 'react';
 
 type Props = {
   label: string;
@@ -30,7 +30,7 @@ const QueueButton = ({
 }: Props) => {
   if (asIconButton) {
     return (
-      <IAIIconButton
+      <IconButton
         aria-label={label}
         tooltip={tooltip}
         icon={icon}
@@ -45,7 +45,7 @@ const QueueButton = ({
   }
 
   return (
-    <IAIButton
+    <Button
       aria-label={label}
       tooltip={tooltip}
       leftIcon={icon}
@@ -59,7 +59,7 @@ const QueueButton = ({
       data-testid={label}
     >
       {label}
-    </IAIButton>
+    </Button>
   );
 };
 

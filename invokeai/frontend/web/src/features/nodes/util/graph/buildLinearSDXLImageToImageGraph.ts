@@ -1,13 +1,9 @@
 import { logger } from 'app/logging/logger';
-import { RootState } from 'app/store/store';
-import {
-  ImageResizeInvocation,
-  ImageToLatentsInvocation,
-  NonNullableGraph,
-} from 'services/api/types';
+import type { RootState } from 'app/store/store';
+import type { ImageResizeInvocation, ImageToLatentsInvocation, NonNullableGraph } from 'services/api/types';
+
 import { addControlNetToLinearGraph } from './addControlNetToLinearGraph';
 import { addIPAdapterToLinearGraph } from './addIPAdapterToLinearGraph';
-import { addLinearUIOutputNode } from './addLinearUIOutputNode';
 import { addNSFWCheckerToGraph } from './addNSFWCheckerToGraph';
 import { addSDXLLoRAsToGraph } from './addSDXLLoRAstoGraph';
 import { addSDXLRefinerToGraph } from './addSDXLRefinerToGraph';
@@ -28,15 +24,13 @@ import {
   SDXL_REFINER_SEAMLESS,
   SEAMLESS,
 } from './constants';
-import { buildSDXLStylePrompts } from './helpers/craftSDXLStylePrompt';
+import { getBoardField, getIsIntermediate, getSDXLStylePrompts } from './graphBuilderUtils';
 import { addCoreMetadataNode } from './metadata';
 
 /**
  * Builds the Image to Image tab graph.
  */
-export const buildLinearSDXLImageToImageGraph = (
-  state: RootState
-): NonNullableGraph => {
+export const buildLinearSDXLImageToImageGraph = (state: RootState): NonNullableGraph => {
   const log = logger('nodes');
   const {
     positivePrompt,
@@ -55,15 +49,10 @@ export const buildLinearSDXLImageToImageGraph = (
     vaePrecision,
     seamlessXAxis,
     seamlessYAxis,
+    img2imgStrength: strength,
   } = state.generation;
 
-  const {
-    positiveStylePrompt,
-    negativeStylePrompt,
-    shouldUseSDXLRefiner,
-    refinerStart,
-    sdxlImg2ImgDenoisingStrength: strength,
-  } = state.sdxl;
+  const { refinerModel, refinerStart } = state.sdxl;
 
   /**
    * The easiest way to build linear graphs is to do it in the node editor, then copy and paste the
@@ -93,8 +82,7 @@ export const buildLinearSDXLImageToImageGraph = (
   const use_cpu = shouldUseCpuNoise;
 
   // Construct Style Prompt
-  const { joinedPositiveStylePrompt, joinedNegativeStylePrompt } =
-    buildSDXLStylePrompts(state);
+  const { positiveStylePrompt, negativeStylePrompt } = getSDXLStylePrompts(state);
 
   // copy-pasted graph from node editor, filled in with state values & friendly node ids
   const graph: NonNullableGraph = {
@@ -110,14 +98,14 @@ export const buildLinearSDXLImageToImageGraph = (
         type: 'sdxl_compel_prompt',
         id: POSITIVE_CONDITIONING,
         prompt: positivePrompt,
-        style: joinedPositiveStylePrompt,
+        style: positiveStylePrompt,
         is_intermediate,
       },
       [NEGATIVE_CONDITIONING]: {
         type: 'sdxl_compel_prompt',
         id: NEGATIVE_CONDITIONING,
         prompt: negativePrompt,
-        style: joinedNegativeStylePrompt,
+        style: negativeStylePrompt,
         is_intermediate,
       },
       [NOISE]: {
@@ -131,18 +119,18 @@ export const buildLinearSDXLImageToImageGraph = (
         type: 'l2i',
         id: LATENTS_TO_IMAGE,
         fp32,
-        is_intermediate,
+        is_intermediate: getIsIntermediate(state),
+        board: getBoardField(state),
       },
       [SDXL_DENOISE_LATENTS]: {
         type: 'denoise_latents',
         id: SDXL_DENOISE_LATENTS,
         cfg_scale,
+        cfg_rescale_multiplier,
         scheduler,
         steps,
-        denoising_start: shouldUseSDXLRefiner
-          ? Math.min(refinerStart, 1 - strength)
-          : 1 - strength,
-        denoising_end: shouldUseSDXLRefiner ? refinerStart : 1,
+        denoising_start: refinerModel ? Math.min(refinerStart, 1 - strength) : 1 - strength,
+        denoising_end: refinerModel ? refinerStart : 1,
         is_intermediate,
       },
       [IMAGE_TO_LATENTS]: {
@@ -265,10 +253,7 @@ export const buildLinearSDXLImageToImageGraph = (
   };
 
   // handle `fit`
-  if (
-    shouldFitToWidthHeight &&
-    (initialImage.width !== width || initialImage.height !== height)
-  ) {
+  if (shouldFitToWidthHeight && (initialImage.width !== width || initialImage.height !== height)) {
     // The init image needs to be resized to the specified width and height before being passed to `IMAGE_TO_LATENTS`
 
     // Create a resize node, explicitly setting its image
@@ -363,7 +348,7 @@ export const buildLinearSDXLImageToImageGraph = (
   }
 
   // Add Refiner if enabled
-  if (shouldUseSDXLRefiner) {
+  if (refinerModel) {
     addSDXLRefinerToGraph(state, graph, SDXL_DENOISE_LATENTS);
     if (seamlessXAxis || seamlessYAxis) {
       modelLoaderNodeId = SDXL_REFINER_SEAMLESS;
@@ -394,8 +379,6 @@ export const buildLinearSDXLImageToImageGraph = (
     // must add after nsfw checker!
     addWatermarkerToGraph(state, graph);
   }
-
-  addLinearUIOutputNode(state, graph);
 
   return graph;
 };

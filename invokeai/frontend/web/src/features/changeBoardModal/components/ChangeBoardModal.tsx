@@ -1,64 +1,42 @@
-import {
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogOverlay,
-  Flex,
-  Text,
-} from '@chakra-ui/react';
+import type { ComboboxOnChange, ComboboxOption } from '@invoke-ai/ui-library';
+import { Combobox, ConfirmationAlertDialog, Flex, FormControl, Text } from '@invoke-ai/ui-library';
 import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import IAIButton from 'common/components/IAIButton';
-import IAIMantineSearchableSelect from 'common/components/IAIMantineSearchableSelect';
 import {
   changeBoardReset,
   isModalOpenChanged,
+  selectChangeBoardModalSlice,
 } from 'features/changeBoardModal/store/slice';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useListAllBoardsQuery } from 'services/api/endpoints/boards';
-import {
-  useAddImagesToBoardMutation,
-  useRemoveImagesFromBoardMutation,
-} from 'services/api/endpoints/images';
+import { useAddImagesToBoardMutation, useRemoveImagesFromBoardMutation } from 'services/api/endpoints/images';
 
-const selector = createMemoizedSelector(
-  [stateSelector],
-  ({ changeBoardModal }) => {
-    const { isModalOpen, imagesToChange } = changeBoardModal;
-
-    return {
-      isModalOpen,
-      imagesToChange,
-    };
-  }
+const selectImagesToChange = createMemoizedSelector(
+  selectChangeBoardModalSlice,
+  (changeBoardModal) => changeBoardModal.imagesToChange
 );
 
 const ChangeBoardModal = () => {
   const dispatch = useAppDispatch();
   const [selectedBoard, setSelectedBoard] = useState<string | null>();
   const { data: boards, isFetching } = useListAllBoardsQuery();
-  const { imagesToChange, isModalOpen } = useAppSelector(selector);
+  const isModalOpen = useAppSelector((s) => s.changeBoardModal.isModalOpen);
+  const imagesToChange = useAppSelector(selectImagesToChange);
   const [addImagesToBoard] = useAddImagesToBoardMutation();
   const [removeImagesFromBoard] = useRemoveImagesFromBoardMutation();
   const { t } = useTranslation();
 
-  const data = useMemo(() => {
-    const data: { label: string; value: string }[] = [
-      { label: t('boards.uncategorized'), value: 'none' },
-    ];
-    (boards ?? []).forEach((board) =>
-      data.push({
+  const options = useMemo<ComboboxOption[]>(() => {
+    return [{ label: t('boards.uncategorized'), value: 'none' }].concat(
+      (boards ?? []).map((board) => ({
         label: board.board_name,
         value: board.board_id,
-      })
+      }))
     );
-
-    return data;
   }, [boards, t]);
+
+  const value = useMemo(() => options.find((o) => o.value === selectedBoard), [options, selectedBoard]);
 
   const handleClose = useCallback(() => {
     dispatch(changeBoardReset());
@@ -80,64 +58,41 @@ const ChangeBoardModal = () => {
     }
     setSelectedBoard(null);
     dispatch(changeBoardReset());
-  }, [
-    addImagesToBoard,
-    dispatch,
-    imagesToChange,
-    removeImagesFromBoard,
-    selectedBoard,
-  ]);
+  }, [addImagesToBoard, dispatch, imagesToChange, removeImagesFromBoard, selectedBoard]);
 
-  const handleSetSelectedBoard = useCallback(
-    (v: string | null) => setSelectedBoard(v),
-    []
-  );
-
-  const cancelRef = useRef<HTMLButtonElement>(null);
+  const onChange = useCallback<ComboboxOnChange>((v) => {
+    if (!v) {
+      return;
+    }
+    setSelectedBoard(v.value);
+  }, []);
 
   return (
-    <AlertDialog
+    <ConfirmationAlertDialog
       isOpen={isModalOpen}
       onClose={handleClose}
-      leastDestructiveRef={cancelRef}
-      isCentered
+      title={t('boards.changeBoard')}
+      acceptCallback={handleChangeBoard}
+      acceptButtonText={t('boards.move')}
+      cancelButtonText={t('boards.cancel')}
     >
-      <AlertDialogOverlay>
-        <AlertDialogContent>
-          <AlertDialogHeader fontSize="lg" fontWeight="bold">
-            {t('boards.changeBoard')}
-          </AlertDialogHeader>
-
-          <AlertDialogBody>
-            <Flex sx={{ flexDir: 'column', gap: 4 }}>
-              <Text>
-                {t('boards.movingImagesToBoard', {
-                  count: imagesToChange.length,
-                })}
-                :
-              </Text>
-              <IAIMantineSearchableSelect
-                placeholder={
-                  isFetching ? t('boards.loading') : t('boards.selectBoard')
-                }
-                disabled={isFetching}
-                onChange={handleSetSelectedBoard}
-                value={selectedBoard}
-                data={data}
-              />
-            </Flex>
-          </AlertDialogBody>
-          <AlertDialogFooter>
-            <IAIButton ref={cancelRef} onClick={handleClose}>
-              {t('boards.cancel')}
-            </IAIButton>
-            <IAIButton colorScheme="accent" onClick={handleChangeBoard} ml={3}>
-              {t('boards.move')}
-            </IAIButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialogOverlay>
-    </AlertDialog>
+      <Flex flexDir="column" gap={4}>
+        <Text>
+          {t('boards.movingImagesToBoard', {
+            count: imagesToChange.length,
+          })}
+          :
+        </Text>
+        <FormControl isDisabled={isFetching}>
+          <Combobox
+            placeholder={isFetching ? t('boards.loading') : t('boards.selectBoard')}
+            onChange={onChange}
+            value={value}
+            options={options}
+          />
+        </FormControl>
+      </Flex>
+    </ConfirmationAlertDialog>
   );
 };
 

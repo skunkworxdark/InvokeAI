@@ -1,8 +1,10 @@
-import { Box, ChakraProps, Flex, IconButton, Spinner } from '@chakra-ui/react';
+import type { ChakraProps } from '@invoke-ai/ui-library';
+import { Box, Flex, IconButton, Spinner } from '@invoke-ai/ui-library';
+import { useGalleryImages } from 'features/gallery/hooks/useGalleryImages';
+import { useGalleryNavigation } from 'features/gallery/hooks/useGalleryNavigation';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaAngleDoubleRight, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
-import { useNextPrevImage } from 'features/gallery/hooks/useNextPrevImage';
+import { PiCaretDoubleRightBold, PiCaretLeftBold, PiCaretRightBold } from 'react-icons/pi';
 
 const nextPrevButtonStyles: ChakraProps['sx'] = {
   color: 'base.100',
@@ -12,57 +14,35 @@ const nextPrevButtonStyles: ChakraProps['sx'] = {
 const NextPrevImageButtons = () => {
   const { t } = useTranslation();
 
+  const { handleLeftImage, handleRightImage, isOnFirstImage, isOnLastImage } = useGalleryNavigation();
+
   const {
-    handlePrevImage,
-    handleNextImage,
-    isOnFirstImage,
-    isOnLastImage,
-    handleLoadMoreImages,
     areMoreImagesAvailable,
-    isFetching,
-  } = useNextPrevImage();
+    handleLoadMoreImages,
+    queryResult: { isFetching },
+  } = useGalleryImages();
 
   return (
-    <Box
-      sx={{
-        position: 'relative',
-        height: '100%',
-        width: '100%',
-      }}
-    >
-      <Box
-        sx={{
-          pos: 'absolute',
-          top: '50%',
-          transform: 'translate(0, -50%)',
-          insetInlineStart: 0,
-        }}
-      >
+    <Box pos="relative" h="full" w="full">
+      <Box pos="absolute" top="50%" transform="translate(0, -50%)" insetInlineStart={1}>
         {!isOnFirstImage && (
           <IconButton
             aria-label={t('accessibility.previousImage')}
-            icon={<FaAngleLeft size={64} />}
+            icon={<PiCaretLeftBold size={64} />}
             variant="unstyled"
-            onClick={handlePrevImage}
+            onClick={handleLeftImage}
             boxSize={16}
             sx={nextPrevButtonStyles}
           />
         )}
       </Box>
-      <Box
-        sx={{
-          pos: 'absolute',
-          top: '50%',
-          transform: 'translate(0, -50%)',
-          insetInlineEnd: 0,
-        }}
-      >
+      <Box pos="absolute" top="50%" transform="translate(0, -50%)" insetInlineEnd={6}>
         {!isOnLastImage && (
           <IconButton
             aria-label={t('accessibility.nextImage')}
-            icon={<FaAngleRight size={64} />}
+            icon={<PiCaretRightBold size={64} />}
             variant="unstyled"
-            onClick={handleNextImage}
+            onClick={handleRightImage}
             boxSize={16}
             sx={nextPrevButtonStyles}
           />
@@ -70,7 +50,7 @@ const NextPrevImageButtons = () => {
         {isOnLastImage && areMoreImagesAvailable && !isFetching && (
           <IconButton
             aria-label={t('accessibility.loadMore')}
-            icon={<FaAngleDoubleRight size={64} />}
+            icon={<PiCaretDoubleRightBold size={64} />}
             variant="unstyled"
             onClick={handleLoadMoreImages}
             boxSize={16}
@@ -78,14 +58,7 @@ const NextPrevImageButtons = () => {
           />
         )}
         {isOnLastImage && areMoreImagesAvailable && isFetching && (
-          <Flex
-            sx={{
-              w: 16,
-              h: 16,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <Flex w={16} h={16} alignItems="center" justifyContent="center">
             <Spinner opacity={0.5} size="xl" />
           </Flex>
         )}

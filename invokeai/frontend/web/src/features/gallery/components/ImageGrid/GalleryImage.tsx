@@ -1,4 +1,5 @@
-import { Box, Flex } from '@chakra-ui/react';
+import type { SystemStyleObject } from '@invoke-ai/ui-library';
+import { Box, Flex, useShiftModifier } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { $customStarUI } from 'app/store/nanostores/customStarUI';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
@@ -6,48 +7,38 @@ import IAIDndImage from 'common/components/IAIDndImage';
 import IAIDndImageIcon from 'common/components/IAIDndImageIcon';
 import IAIFillSkeleton from 'common/components/IAIFillSkeleton';
 import { imagesToDeleteSelected } from 'features/deleteImageModal/store/slice';
-import {
-  ImageDTOsDraggableData,
-  ImageDraggableData,
-  TypesafeDraggableData,
-} from 'features/dnd/types';
-import { VirtuosoGalleryContext } from 'features/gallery/components/ImageGrid/types';
+import type { GallerySelectionDraggableData, ImageDraggableData, TypesafeDraggableData } from 'features/dnd/types';
+import { getGalleryImageDataTestId } from 'features/gallery/components/ImageGrid/getGalleryImageDataTestId';
 import { useMultiselect } from 'features/gallery/hooks/useMultiselect';
-import { useScrollToVisible } from 'features/gallery/hooks/useScrollToVisible';
-import { MouseEvent, memo, useCallback, useMemo, useState } from 'react';
+import { useScrollIntoView } from 'features/gallery/hooks/useScrollIntoView';
+import type { MouseEvent } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaTrash } from 'react-icons/fa';
-import { MdStar, MdStarBorder } from 'react-icons/md';
-import {
-  useGetImageDTOQuery,
-  useStarImagesMutation,
-  useUnstarImagesMutation,
-} from 'services/api/endpoints/images';
+import { PiStarBold, PiStarFill, PiTrashSimpleFill } from 'react-icons/pi';
+import { useGetImageDTOQuery, useStarImagesMutation, useUnstarImagesMutation } from 'services/api/endpoints/images';
 
+const imageSx: SystemStyleObject = { w: 'full', h: 'full' };
+const imageIconStyleOverrides: SystemStyleObject = {
+  bottom: 2,
+  top: 'auto',
+};
 interface HoverableImageProps {
   imageName: string;
   index: number;
-  virtuosoContext: VirtuosoGalleryContext;
 }
 
 const GalleryImage = (props: HoverableImageProps) => {
   const dispatch = useAppDispatch();
-  const { imageName, virtuosoContext } = props;
+  const { imageName } = props;
   const { currentData: imageDTO } = useGetImageDTOQuery(imageName);
-  const shift = useAppSelector((state) => state.hotkeys.shift);
+  const shift = useShiftModifier();
   const { t } = useTranslation();
-
-  const { handleClick, isSelected, selection, selectionCount } =
-    useMultiselect(imageDTO);
+  const selectedBoardId = useAppSelector((s) => s.gallery.selectedBoardId);
+  const { handleClick, isSelected, areMultiplesSelected } = useMultiselect(imageDTO);
 
   const customStarUi = useStore($customStarUI);
 
-  const imageContainerRef = useScrollToVisible(
-    isSelected,
-    props.index,
-    selectionCount,
-    virtuosoContext
-  );
+  const imageContainerRef = useScrollIntoView(isSelected, props.index, areMultiplesSelected);
 
   const handleDelete = useCallback(
     (e: MouseEvent<HTMLButtonElement>) => {
@@ -61,11 +52,11 @@ const GalleryImage = (props: HoverableImageProps) => {
   );
 
   const draggableData = useMemo<TypesafeDraggableData | undefined>(() => {
-    if (selectionCount > 1) {
-      const data: ImageDTOsDraggableData = {
+    if (areMultiplesSelected) {
+      const data: GallerySelectionDraggableData = {
         id: 'gallery-image',
-        payloadType: 'IMAGE_DTOS',
-        payload: { imageDTOs: selection },
+        payloadType: 'GALLERY_SELECTION',
+        payload: { boardId: selectedBoardId },
       };
       return data;
     }
@@ -78,7 +69,7 @@ const GalleryImage = (props: HoverableImageProps) => {
       };
       return data;
     }
-  }, [imageDTO, selection, selectionCount]);
+  }, [imageDTO, selectedBoardId, areMultiplesSelected]);
 
   const [starImages] = useStarImagesMutation();
   const [unstarImages] = useUnstarImagesMutation();
@@ -106,10 +97,10 @@ const GalleryImage = (props: HoverableImageProps) => {
 
   const starIcon = useMemo(() => {
     if (imageDTO?.starred) {
-      return customStarUi ? customStarUi.on.icon : <MdStar size="20" />;
+      return customStarUi ? customStarUi.on.icon : <PiStarFill size="20" />;
     }
     if (!imageDTO?.starred && isHovered) {
-      return customStarUi ? customStarUi.off.icon : <MdStarBorder size="20" />;
+      return customStarUi ? customStarUi.off.icon : <PiStarBold size="20" />;
     }
   }, [imageDTO?.starred, isHovered, customStarUi]);
 
@@ -123,24 +114,21 @@ const GalleryImage = (props: HoverableImageProps) => {
     return '';
   }, [imageDTO?.starred, customStarUi]);
 
+  const dataTestId = useMemo(() => getGalleryImageDataTestId(imageDTO?.image_name), [imageDTO?.image_name]);
+
   if (!imageDTO) {
     return <IAIFillSkeleton />;
   }
 
   return (
-    <Box
-      sx={{ w: 'full', h: 'full', touchAction: 'none' }}
-      data-testid={`image-${imageDTO.image_name}`}
-    >
+    <Box w="full" h="full" className="gallerygrid-image" data-testid={dataTestId}>
       <Flex
         ref={imageContainerRef}
         userSelect="none"
-        sx={{
-          position: 'relative',
-          justifyContent: 'center',
-          alignItems: 'center',
-          aspectRatio: '1/1',
-        }}
+        position="relative"
+        justifyContent="center"
+        alignItems="center"
+        aspectRatio="1/1"
       >
         <IAIDndImage
           onClick={handleClick}
@@ -148,7 +136,7 @@ const GalleryImage = (props: HoverableImageProps) => {
           draggableData={draggableData}
           isSelected={isSelected}
           minSize={0}
-          imageSx={{ w: 'full', h: 'full' }}
+          imageSx={imageSx}
           isDropDisabled={true}
           isUploadDisabled={true}
           thumbnail={true}
@@ -157,21 +145,14 @@ const GalleryImage = (props: HoverableImageProps) => {
           onMouseOut={handleMouseOut}
         >
           <>
-            <IAIDndImageIcon
-              onClick={toggleStarredState}
-              icon={starIcon}
-              tooltip={starTooltip}
-            />
+            <IAIDndImageIcon onClick={toggleStarredState} icon={starIcon} tooltip={starTooltip} />
 
             {isHovered && shift && (
               <IAIDndImageIcon
                 onClick={handleDelete}
-                icon={<FaTrash />}
+                icon={<PiTrashSimpleFill size="16px" />}
                 tooltip={t('gallery.deleteImage')}
-                styleOverrides={{
-                  bottom: 2,
-                  top: 'auto',
-                }}
+                styleOverrides={imageIconStyleOverrides}
               />
             )}
           </>

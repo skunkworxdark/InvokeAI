@@ -1,28 +1,14 @@
 import { createLogWriter } from '@roarr/browser-log-writer';
-import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
 import { useAppSelector } from 'app/store/storeHooks';
 import { useEffect, useMemo } from 'react';
 import { ROARR, Roarr } from 'roarr';
-import {
-  $logger,
-  BASE_CONTEXT,
-  LOG_LEVEL_MAP,
-  LoggerNamespace,
-  logger,
-} from './logger';
 
-const selector = createMemoizedSelector(stateSelector, ({ system }) => {
-  const { consoleLogLevel, shouldLogToConsole } = system;
-
-  return {
-    consoleLogLevel,
-    shouldLogToConsole,
-  };
-});
+import type { LoggerNamespace } from './logger';
+import { $logger, BASE_CONTEXT, LOG_LEVEL_MAP, logger } from './logger';
 
 export const useLogger = (namespace: LoggerNamespace) => {
-  const { consoleLogLevel, shouldLogToConsole } = useAppSelector(selector);
+  const consoleLogLevel = useAppSelector((s) => s.system.consoleLogLevel);
+  const shouldLogToConsole = useAppSelector((s) => s.system.shouldLogToConsole);
 
   // The provided Roarr browser log writer uses localStorage to config logging to console
   useEffect(() => {
@@ -31,10 +17,7 @@ export const useLogger = (namespace: LoggerNamespace) => {
       localStorage.setItem('ROARR_LOG', 'true');
 
       // Use a filter to show only logs of the given level
-      localStorage.setItem(
-        'ROARR_FILTER',
-        `context.logLevel:>=${LOG_LEVEL_MAP[consoleLogLevel]}`
-      );
+      localStorage.setItem('ROARR_FILTER', `context.logLevel:>=${LOG_LEVEL_MAP[consoleLogLevel]}`);
     } else {
       // Disable console log output
       localStorage.setItem('ROARR_LOG', 'false');

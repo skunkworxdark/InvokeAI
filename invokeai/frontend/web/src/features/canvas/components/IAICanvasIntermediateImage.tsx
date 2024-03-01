@@ -1,31 +1,24 @@
-import { createSelector } from '@reduxjs/toolkit';
-import { stateSelector } from 'app/store/store';
+import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import { useAppSelector } from 'app/store/storeHooks';
-import { ImageConfig } from 'konva/lib/shapes/Image';
+import { selectCanvasSlice } from 'features/canvas/store/canvasSlice';
+import { selectSystemSlice } from 'features/system/store/systemSlice';
 import { memo, useEffect, useState } from 'react';
 import { Image as KonvaImage } from 'react-konva';
 
-const selector = createSelector([stateSelector], ({ system, canvas }) => {
+const progressImageSelector = createMemoizedSelector([selectSystemSlice, selectCanvasSlice], (system, canvas) => {
   const { denoiseProgress } = system;
-  const { boundingBox } = canvas.layerState.stagingArea;
   const { batchIds } = canvas;
 
   return {
-    boundingBox,
     progressImage:
-      denoiseProgress && batchIds.includes(denoiseProgress.batch_id)
-        ? denoiseProgress.progress_image
-        : undefined,
+      denoiseProgress && batchIds.includes(denoiseProgress.batch_id) ? denoiseProgress.progress_image : undefined,
+    boundingBox: canvas.layerState.stagingArea.boundingBox,
   };
 });
 
-type Props = Omit<ImageConfig, 'image'>;
-
-const IAICanvasIntermediateImage = (props: Props) => {
-  const { ...rest } = props;
-  const { progressImage, boundingBox } = useAppSelector(selector);
-  const [loadedImageElement, setLoadedImageElement] =
-    useState<HTMLImageElement | null>(null);
+const IAICanvasIntermediateImage = () => {
+  const { progressImage, boundingBox } = useAppSelector(progressImageSelector);
+  const [loadedImageElement, setLoadedImageElement] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
     if (!progressImage) {
@@ -41,11 +34,11 @@ const IAICanvasIntermediateImage = (props: Props) => {
     tempImage.src = progressImage.dataURL;
   }, [progressImage]);
 
-  if (!(progressImage && boundingBox)) {
+  if (!(progressImage && boundingBox) || !loadedImageElement) {
     return null;
   }
 
-  return loadedImageElement ? (
+  return (
     <KonvaImage
       x={boundingBox.x}
       y={boundingBox.y}
@@ -53,9 +46,8 @@ const IAICanvasIntermediateImage = (props: Props) => {
       height={boundingBox.height}
       image={loadedImageElement}
       listening={false}
-      {...rest}
     />
-  ) : null;
+  );
 };
 
 export default memo(IAICanvasIntermediateImage);

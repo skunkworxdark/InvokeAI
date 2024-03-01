@@ -1,50 +1,44 @@
-import {
-  Icon,
-  Spacer,
-  Tab,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Tabs,
-  Tooltip,
-  VisuallyHidden,
-} from '@chakra-ui/react';
+import { Flex, IconButton, Spacer, Tab, TabList, TabPanel, TabPanels, Tabs, Tooltip } from '@invoke-ai/ui-library';
+import { useStore } from '@nanostores/react';
 import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
+import { $customNavComponent } from 'app/store/nanostores/customNavComponent';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import ImageGalleryContent from 'features/gallery/components/ImageGalleryContent';
 import NodeEditorPanelGroup from 'features/nodes/components/sidePanel/NodeEditorPanelGroup';
+import InvokeAILogoComponent from 'features/system/components/InvokeAILogoComponent';
+import SettingsMenu from 'features/system/components/SettingsModal/SettingsMenu';
+import StatusIndicator from 'features/system/components/StatusIndicator';
+import { selectConfigSlice } from 'features/system/store/configSlice';
+import FloatingGalleryButton from 'features/ui/components/FloatingGalleryButton';
+import FloatingParametersPanelButtons from 'features/ui/components/FloatingParametersPanelButtons';
+import type { UsePanelOptions } from 'features/ui/hooks/usePanel';
 import { usePanel } from 'features/ui/hooks/usePanel';
 import { usePanelStorage } from 'features/ui/hooks/usePanelStorage';
-import { InvokeTabName } from 'features/ui/store/tabMap';
-import {
-  activeTabIndexSelector,
-  activeTabNameSelector,
-} from 'features/ui/store/uiSelectors';
+import type { InvokeTabName } from 'features/ui/store/tabMap';
+import { activeTabIndexSelector, activeTabNameSelector } from 'features/ui/store/uiSelectors';
 import { setActiveTab } from 'features/ui/store/uiSlice';
-import { ResourceKey } from 'i18next';
-import { MouseEvent, ReactNode, memo, useCallback, useMemo } from 'react';
+import type { CSSProperties, MouseEvent, ReactElement, ReactNode } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
-import { FaCube, FaFont, FaImage, FaStream } from 'react-icons/fa';
-import { FaCircleNodes } from 'react-icons/fa6';
-import { MdGridOn } from 'react-icons/md';
+import { PiFlowArrowBold } from 'react-icons/pi';
+import { RiBox2Line, RiBrushLine, RiImage2Line, RiInputMethodLine, RiPlayList2Fill } from 'react-icons/ri';
+import type { ImperativePanelGroupHandle } from 'react-resizable-panels';
 import { Panel, PanelGroup } from 'react-resizable-panels';
-import FloatingGalleryButton from './FloatingGalleryButton';
-import FloatingSidePanelButtons from './FloatingParametersPanelButtons';
-import ParametersPanel from './ParametersPanel';
-import ImageTab from './tabs/ImageToImage/ImageToImageTab';
-import ModelManagerTab from './tabs/ModelManager/ModelManagerTab';
-import NodesTab from './tabs/Nodes/NodesTab';
-import QueueTab from './tabs/Queue/QueueTab';
-import ResizeHandle from './tabs/ResizeHandle';
-import TextToImageTab from './tabs/TextToImage/TextToImageTab';
-import UnifiedCanvasTab from './tabs/UnifiedCanvas/UnifiedCanvasTab';
 
-export interface InvokeTabInfo {
+import ParametersPanel from './ParametersPanel';
+import ImageTab from './tabs/ImageToImageTab';
+import ModelManagerTab from './tabs/ModelManagerTab';
+import NodesTab from './tabs/NodesTab';
+import QueueTab from './tabs/QueueTab';
+import ResizeHandle from './tabs/ResizeHandle';
+import TextToImageTab from './tabs/TextToImageTab';
+import UnifiedCanvasTab from './tabs/UnifiedCanvasTab';
+
+interface InvokeTabInfo {
   id: InvokeTabName;
   translationKey: string;
-  icon: ReactNode;
+  icon: ReactElement;
   content: ReactNode;
 }
 
@@ -52,58 +46,54 @@ const tabs: InvokeTabInfo[] = [
   {
     id: 'txt2img',
     translationKey: 'common.txt2img',
-    icon: <Icon as={FaFont} sx={{ boxSize: 6, pointerEvents: 'none' }} />,
+    icon: <RiInputMethodLine />,
     content: <TextToImageTab />,
   },
   {
     id: 'img2img',
     translationKey: 'common.img2img',
-    icon: <Icon as={FaImage} sx={{ boxSize: 6, pointerEvents: 'none' }} />,
+    icon: <RiImage2Line />,
     content: <ImageTab />,
   },
   {
     id: 'unifiedCanvas',
     translationKey: 'common.unifiedCanvas',
-    icon: <Icon as={MdGridOn} sx={{ boxSize: 6, pointerEvents: 'none' }} />,
+    icon: <RiBrushLine />,
     content: <UnifiedCanvasTab />,
   },
   {
     id: 'nodes',
     translationKey: 'common.nodes',
-    icon: (
-      <Icon as={FaCircleNodes} sx={{ boxSize: 6, pointerEvents: 'none' }} />
-    ),
+    icon: <PiFlowArrowBold />,
     content: <NodesTab />,
   },
   {
     id: 'modelManager',
     translationKey: 'modelManager.modelManager',
-    icon: <Icon as={FaCube} sx={{ boxSize: 6, pointerEvents: 'none' }} />,
+    icon: <RiBox2Line />,
     content: <ModelManagerTab />,
   },
   {
     id: 'queue',
     translationKey: 'queue.queue',
-    icon: <Icon as={FaStream} sx={{ boxSize: 6, pointerEvents: 'none' }} />,
+    icon: <RiPlayList2Fill />,
     content: <QueueTab />,
   },
 ];
 
-const enabledTabsSelector = createMemoizedSelector(
-  [stateSelector],
-  ({ config }) => {
-    const { disabledTabs } = config;
-    const enabledTabs = tabs.filter((tab) => !disabledTabs.includes(tab.id));
-    return enabledTabs;
-  }
+const enabledTabsSelector = createMemoizedSelector(selectConfigSlice, (config) =>
+  tabs.filter((tab) => !config.disabledTabs.includes(tab.id))
 );
 
-const SIDE_PANEL_MIN_SIZE_PX = 448;
-const MAIN_PANEL_MIN_SIZE_PX = 448;
-const GALLERY_PANEL_MIN_SIZE_PX = 360;
+const NO_GALLERY_PANEL_TABS: InvokeTabName[] = ['modelManager', 'queue'];
+const NO_OPTIONS_PANEL_TABS: InvokeTabName[] = ['modelManager', 'queue'];
+const panelStyles: CSSProperties = { height: '100%', width: '100%' };
+const GALLERY_MIN_SIZE_PX = 310;
+const GALLERY_MIN_SIZE_PCT = 20;
+const OPTIONS_PANEL_MIN_SIZE_PX = 430;
+const OPTIONS_PANEL_MIN_SIZE_PCT = 20;
 
-export const NO_GALLERY_TABS: InvokeTabName[] = ['modelManager', 'queue'];
-export const NO_SIDE_PANEL_TABS: InvokeTabName[] = ['modelManager', 'queue'];
+const appPanelGroupId = 'app-panel-group';
 
 const InvokeTabs = () => {
   const activeTabIndex = useAppSelector(activeTabIndexSelector);
@@ -111,36 +101,39 @@ const InvokeTabs = () => {
   const enabledTabs = useAppSelector(enabledTabsSelector);
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
-
+  const customNavComponent = useStore($customNavComponent);
+  const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
   const handleClickTab = useCallback((e: MouseEvent<HTMLElement>) => {
     if (e.target instanceof HTMLElement) {
       e.target.blur();
     }
   }, []);
+  const shouldShowOptionsPanel = useMemo(() => !NO_OPTIONS_PANEL_TABS.includes(activeTabName), [activeTabName]);
+  const shouldShowGalleryPanel = useMemo(() => !NO_GALLERY_PANEL_TABS.includes(activeTabName), [activeTabName]);
 
   const tabs = useMemo(
     () =>
       enabledTabs.map((tab) => (
-        <Tooltip
-          key={tab.id}
-          hasArrow
-          label={String(t(tab.translationKey as ResourceKey))}
-          placement="end"
-        >
-          <Tab onClick={handleClickTab}>
-            <VisuallyHidden>
-              {String(t(tab.translationKey as ResourceKey))}
-            </VisuallyHidden>
-            {tab.icon}
-          </Tab>
+        <Tooltip key={tab.id} label={t(tab.translationKey)} placement="end">
+          <Tab
+            as={IconButton}
+            p={0}
+            onClick={handleClickTab}
+            icon={tab.icon}
+            size="md"
+            fontSize="24px"
+            variant="appTab"
+            data-selected={activeTabName === tab.id}
+            aria-label={t(tab.translationKey)}
+            data-testid={t(tab.translationKey)}
+          />
         </Tooltip>
       )),
-    [enabledTabs, t, handleClickTab]
+    [enabledTabs, t, handleClickTab, activeTabName]
   );
 
   const tabPanels = useMemo(
-    () =>
-      enabledTabs.map((tab) => <TabPanel key={tab.id}>{tab.content}</TabPanel>),
+    () => enabledTabs.map((tab) => <TabPanel key={tab.id}>{tab.content}</TabPanel>),
     [enabledTabs]
   );
 
@@ -155,146 +148,145 @@ const InvokeTabs = () => {
     [dispatch, enabledTabs]
   );
 
-  const {
-    minSize: sidePanelMinSize,
-    isCollapsed: isSidePanelCollapsed,
-    setIsCollapsed: setIsSidePanelCollapsed,
-    ref: sidePanelRef,
-    reset: resetSidePanel,
-    expand: expandSidePanel,
-    collapse: collapseSidePanel,
-    toggle: toggleSidePanel,
-  } = usePanel(SIDE_PANEL_MIN_SIZE_PX, 'pixels');
-
-  const {
-    ref: galleryPanelRef,
-    minSize: galleryPanelMinSize,
-    isCollapsed: isGalleryPanelCollapsed,
-    setIsCollapsed: setIsGalleryPanelCollapsed,
-    reset: resetGalleryPanel,
-    expand: expandGalleryPanel,
-    collapse: collapseGalleryPanel,
-    toggle: toggleGalleryPanel,
-  } = usePanel(GALLERY_PANEL_MIN_SIZE_PX, 'pixels');
-
-  useHotkeys(
-    'f',
-    () => {
-      if (isGalleryPanelCollapsed || isSidePanelCollapsed) {
-        expandGalleryPanel();
-        expandSidePanel();
-      } else {
-        collapseSidePanel();
-        collapseGalleryPanel();
-      }
-    },
-    [dispatch, isGalleryPanelCollapsed, isSidePanelCollapsed]
+  const optionsPanelUsePanelOptions = useMemo<UsePanelOptions>(
+    () => ({
+      unit: 'pixels',
+      minSize: OPTIONS_PANEL_MIN_SIZE_PX,
+      fallbackMinSizePct: OPTIONS_PANEL_MIN_SIZE_PCT,
+      panelGroupRef,
+      panelGroupDirection: 'horizontal',
+    }),
+    []
   );
 
-  useHotkeys(
-    ['t', 'o'],
-    () => {
-      toggleSidePanel();
-    },
-    [dispatch]
-  );
-
-  useHotkeys(
-    'g',
-    () => {
-      toggleGalleryPanel();
-    },
-    [dispatch]
+  const galleryPanelUsePanelOptions = useMemo<UsePanelOptions>(
+    () => ({
+      unit: 'pixels',
+      minSize: GALLERY_MIN_SIZE_PX,
+      fallbackMinSizePct: GALLERY_MIN_SIZE_PCT,
+      panelGroupRef,
+      panelGroupDirection: 'horizontal',
+    }),
+    []
   );
 
   const panelStorage = usePanelStorage();
 
+  const optionsPanel = usePanel(optionsPanelUsePanelOptions);
+
+  const galleryPanel = usePanel(galleryPanelUsePanelOptions);
+
+  useHotkeys('g', galleryPanel.toggle, [galleryPanel.toggle]);
+  useHotkeys(['t', 'o'], optionsPanel.toggle, [optionsPanel.toggle]);
+  useHotkeys(
+    'shift+r',
+    () => {
+      optionsPanel.reset();
+      galleryPanel.reset();
+    },
+    [optionsPanel.reset, galleryPanel.reset]
+  );
+  useHotkeys(
+    'f',
+    () => {
+      if (optionsPanel.isCollapsed || galleryPanel.isCollapsed) {
+        optionsPanel.expand();
+        galleryPanel.expand();
+      } else {
+        optionsPanel.collapse();
+        galleryPanel.collapse();
+      }
+    },
+    [
+      optionsPanel.isCollapsed,
+      galleryPanel.isCollapsed,
+      optionsPanel.expand,
+      galleryPanel.expand,
+      optionsPanel.collapse,
+      galleryPanel.collapse,
+    ]
+  );
+
   return (
     <Tabs
+      id="invoke-app-tabs"
       variant="appTabs"
       defaultIndex={activeTabIndex}
       index={activeTabIndex}
       onChange={handleTabChange}
-      sx={{
-        flexGrow: 1,
-        gap: 4,
-      }}
+      w="full"
+      h="full"
+      gap={4}
+      p={4}
       isLazy
     >
-      <TabList
-        sx={{
-          pt: 2,
-          gap: 4,
-          flexDir: 'column',
-        }}
-      >
-        {tabs}
+      <Flex flexDir="column" alignItems="center" pt={4} pb={2} gap={4}>
+        <InvokeAILogoComponent />
+        <TabList gap={4} pt={6} h="full" flexDir="column">
+          {tabs}
+        </TabList>
         <Spacer />
-      </TabList>
+        <StatusIndicator />
+        {customNavComponent ? customNavComponent : <SettingsMenu />}
+      </Flex>
       <PanelGroup
-        id="app"
+        ref={panelGroupRef}
+        id={appPanelGroupId}
         autoSaveId="app"
         direction="horizontal"
-        style={{ height: '100%', width: '100%' }}
+        style={panelStyles}
         storage={panelStorage}
-        units="pixels"
       >
-        {!NO_SIDE_PANEL_TABS.includes(activeTabName) && (
+        {shouldShowOptionsPanel && (
           <>
             <Panel
+              id="options-panel"
+              ref={optionsPanel.ref}
               order={0}
-              id="side"
-              ref={sidePanelRef}
-              defaultSize={sidePanelMinSize}
-              minSize={sidePanelMinSize}
-              onCollapse={setIsSidePanelCollapsed}
+              defaultSize={optionsPanel.minSize}
+              minSize={optionsPanel.minSize}
+              onCollapse={optionsPanel.onCollapse}
+              onExpand={optionsPanel.onExpand}
               collapsible
             >
-              {activeTabName === 'nodes' ? (
-                <NodeEditorPanelGroup />
-              ) : (
-                <ParametersPanel />
-              )}
+              {activeTabName === 'nodes' ? <NodeEditorPanelGroup /> : <ParametersPanel />}
             </Panel>
             <ResizeHandle
-              onDoubleClick={resetSidePanel}
-              collapsedDirection={isSidePanelCollapsed ? 'left' : undefined}
-            />
-            <FloatingSidePanelButtons
-              isSidePanelCollapsed={isSidePanelCollapsed}
-              sidePanelRef={sidePanelRef}
+              id="options-main-handle"
+              onDoubleClick={optionsPanel.onDoubleClickHandle}
+              orientation="vertical"
             />
           </>
         )}
-        <Panel id="main" order={1} minSize={MAIN_PANEL_MIN_SIZE_PX}>
-          <TabPanels style={{ height: '100%', width: '100%' }}>
+        <Panel id="main-panel" order={1} minSize={20}>
+          <TabPanels w="full" h="full">
             {tabPanels}
           </TabPanels>
         </Panel>
-        {!NO_GALLERY_TABS.includes(activeTabName) && (
+        {shouldShowGalleryPanel && (
           <>
             <ResizeHandle
-              onDoubleClick={resetGalleryPanel}
-              collapsedDirection={isGalleryPanelCollapsed ? 'right' : undefined}
+              id="main-gallery-handle"
+              orientation="vertical"
+              onDoubleClick={galleryPanel.onDoubleClickHandle}
             />
             <Panel
-              id="gallery"
-              ref={galleryPanelRef}
+              id="gallery-panel"
+              ref={galleryPanel.ref}
               order={2}
-              defaultSize={galleryPanelMinSize}
-              minSize={galleryPanelMinSize}
-              onCollapse={setIsGalleryPanelCollapsed}
+              defaultSize={galleryPanel.minSize}
+              minSize={galleryPanel.minSize}
+              onCollapse={galleryPanel.onCollapse}
+              onExpand={galleryPanel.onExpand}
               collapsible
             >
               <ImageGalleryContent />
             </Panel>
-            <FloatingGalleryButton
-              isGalleryCollapsed={isGalleryPanelCollapsed}
-              galleryPanelRef={galleryPanelRef}
-            />
           </>
         )}
       </PanelGroup>
+      {shouldShowOptionsPanel && <FloatingParametersPanelButtons panelApi={optionsPanel} />}
+      {shouldShowGalleryPanel && <FloatingGalleryButton panelApi={galleryPanel} />}
     </Tabs>
   );
 };

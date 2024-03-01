@@ -23,7 +23,6 @@ from invokeai.backend.model_manager.config import (
     ModelType,
 )
 from invokeai.backend.model_manager.hash import FastModelHash
-from invokeai.backend.util.logging import InvokeAILogger
 
 ModelsValidator = TypeAdapter(AnyModelConfig)
 
@@ -46,10 +45,9 @@ class MigrateModelYamlToDb1:
     logger: Logger
     cursor: sqlite3.Cursor
 
-    def __init__(self, cursor: sqlite3.Cursor = None) -> None:
-        self.config = InvokeAIAppConfig.get_config()
-        self.config.parse_args()
-        self.logger = InvokeAILogger.get_logger()
+    def __init__(self, config: InvokeAIAppConfig, logger: Logger, cursor: sqlite3.Cursor = None) -> None:
+        self.config = config
+        self.logger = logger
         self.cursor = cursor
 
     def get_yaml(self) -> DictConfig:
@@ -74,7 +72,12 @@ class MigrateModelYamlToDb1:
                 continue
 
             base_type, model_type, model_name = str(model_key).split("/")
-            hash = FastModelHash.hash(self.config.models_path / stanza.path)
+            try:
+                hash = FastModelHash.hash(self.config.models_path / stanza.path)
+            except OSError:
+                self.logger.warning(f"The model at {stanza.path} is not a valid file or directory. Skipping migration.")
+                continue
+
             assert isinstance(model_key, str)
             new_key = sha1(model_key.encode("utf-8")).hexdigest()
 

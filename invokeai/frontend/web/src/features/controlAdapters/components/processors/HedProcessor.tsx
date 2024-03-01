@@ -1,14 +1,14 @@
-import IAISlider from 'common/components/IAISlider';
-import IAISwitch from 'common/components/IAISwitch';
-import { CONTROLNET_PROCESSORS } from 'features/controlAdapters/store/constants';
-import { RequiredHedImageProcessorInvocation } from 'features/controlAdapters/store/types';
-import { ChangeEvent, memo, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import { CompositeNumberInput, CompositeSlider, FormControl, FormLabel, Switch } from '@invoke-ai/ui-library';
 import { useProcessorNodeChanged } from 'features/controlAdapters/components/hooks/useProcessorNodeChanged';
+import { CONTROLNET_PROCESSORS } from 'features/controlAdapters/store/constants';
+import type { RequiredHedImageProcessorInvocation } from 'features/controlAdapters/store/types';
+import type { ChangeEvent } from 'react';
+import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import ProcessorWrapper from './common/ProcessorWrapper';
 
-const DEFAULTS = CONTROLNET_PROCESSORS.hed_image_processor
-  .default as RequiredHedImageProcessorInvocation;
+const DEFAULTS = CONTROLNET_PROCESSORS.hed_image_processor.default as RequiredHedImageProcessorInvocation;
 
 type HedProcessorProps = {
   controlNetId: string;
@@ -46,50 +46,48 @@ const HedPreprocessor = (props: HedProcessorProps) => {
     [controlNetId, processorChanged]
   );
 
-  const handleDetectResolutionReset = useCallback(() => {
-    processorChanged(controlNetId, {
-      detect_resolution: DEFAULTS.detect_resolution,
-    });
-  }, [controlNetId, processorChanged]);
-
-  const handleImageResolutionReset = useCallback(() => {
-    processorChanged(controlNetId, {
-      image_resolution: DEFAULTS.image_resolution,
-    });
-  }, [controlNetId, processorChanged]);
-
   return (
     <ProcessorWrapper>
-      <IAISlider
-        label={t('controlnet.detectResolution')}
-        value={detect_resolution}
-        onChange={handleDetectResolutionChanged}
-        handleReset={handleDetectResolutionReset}
-        withReset
-        min={0}
-        max={4096}
-        withInput
-        withSliderMarks
-        isDisabled={!isEnabled}
-      />
-      <IAISlider
-        label={t('controlnet.imageResolution')}
-        value={image_resolution}
-        onChange={handleImageResolutionChanged}
-        handleReset={handleImageResolutionReset}
-        withReset
-        min={0}
-        max={4096}
-        withInput
-        withSliderMarks
-        isDisabled={!isEnabled}
-      />
-      <IAISwitch
-        label={t('controlnet.scribble')}
-        isChecked={scribble}
-        onChange={handleScribbleChanged}
-        isDisabled={!isEnabled}
-      />
+      <FormControl isDisabled={!isEnabled}>
+        <FormLabel>{t('controlnet.detectResolution')}</FormLabel>
+        <CompositeSlider
+          value={detect_resolution}
+          defaultValue={DEFAULTS.detect_resolution}
+          onChange={handleDetectResolutionChanged}
+          min={0}
+          max={4096}
+          marks
+        />
+        <CompositeNumberInput
+          value={detect_resolution}
+          defaultValue={DEFAULTS.detect_resolution}
+          onChange={handleDetectResolutionChanged}
+          min={0}
+          max={4096}
+        />
+      </FormControl>
+      <FormControl isDisabled={!isEnabled}>
+        <FormLabel>{t('controlnet.imageResolution')}</FormLabel>
+        <CompositeSlider
+          value={image_resolution}
+          onChange={handleImageResolutionChanged}
+          defaultValue={DEFAULTS.image_resolution}
+          min={0}
+          max={4096}
+          marks
+        />
+        <CompositeNumberInput
+          value={image_resolution}
+          onChange={handleImageResolutionChanged}
+          defaultValue={DEFAULTS.image_resolution}
+          min={0}
+          max={4096}
+        />
+      </FormControl>
+      <FormControl isDisabled={!isEnabled}>
+        <FormLabel>{t('controlnet.scribble')}</FormLabel>
+        <Switch isChecked={scribble} onChange={handleScribbleChanged} />
+      </FormControl>
     </ProcessorWrapper>
   );
 };

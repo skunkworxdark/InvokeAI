@@ -1,9 +1,10 @@
-import IAISlider from 'common/components/IAISlider';
+import { CompositeNumberInput, CompositeSlider, FormControl, FormLabel } from '@invoke-ai/ui-library';
+import { useProcessorNodeChanged } from 'features/controlAdapters/components/hooks/useProcessorNodeChanged';
 import { CONTROLNET_PROCESSORS } from 'features/controlAdapters/store/constants';
-import { RequiredMidasDepthImageProcessorInvocation } from 'features/controlAdapters/store/types';
+import type { RequiredMidasDepthImageProcessorInvocation } from 'features/controlAdapters/store/types';
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProcessorNodeChanged } from 'features/controlAdapters/components/hooks/useProcessorNodeChanged';
+
 import ProcessorWrapper from './common/ProcessorWrapper';
 
 const DEFAULTS = CONTROLNET_PROCESSORS.midas_depth_image_processor
@@ -35,42 +36,48 @@ const MidasDepthProcessor = (props: Props) => {
     [controlNetId, processorChanged]
   );
 
-  const handleAMultReset = useCallback(() => {
-    processorChanged(controlNetId, { a_mult: DEFAULTS.a_mult });
-  }, [controlNetId, processorChanged]);
-
-  const handleBgThReset = useCallback(() => {
-    processorChanged(controlNetId, { bg_th: DEFAULTS.bg_th });
-  }, [controlNetId, processorChanged]);
-
   return (
     <ProcessorWrapper>
-      <IAISlider
-        label={t('controlnet.amult')}
-        value={a_mult}
-        onChange={handleAMultChanged}
-        handleReset={handleAMultReset}
-        withReset
-        min={0}
-        max={20}
-        step={0.01}
-        withInput
-        withSliderMarks
-        isDisabled={!isEnabled}
-      />
-      <IAISlider
-        label={t('controlnet.bgth')}
-        value={bg_th}
-        onChange={handleBgThChanged}
-        handleReset={handleBgThReset}
-        withReset
-        min={0}
-        max={20}
-        step={0.01}
-        withInput
-        withSliderMarks
-        isDisabled={!isEnabled}
-      />
+      <FormControl isDisabled={!isEnabled}>
+        <FormLabel>{t('controlnet.amult')}</FormLabel>
+        <CompositeSlider
+          value={a_mult}
+          onChange={handleAMultChanged}
+          defaultValue={DEFAULTS.a_mult}
+          min={0}
+          max={20}
+          step={0.01}
+          marks
+        />
+        <CompositeNumberInput
+          value={a_mult}
+          onChange={handleAMultChanged}
+          defaultValue={DEFAULTS.a_mult}
+          min={0}
+          max={20}
+          step={0.01}
+        />
+      </FormControl>
+      <FormControl isDisabled={!isEnabled}>
+        <FormLabel>{t('controlnet.bgth')}</FormLabel>
+        <CompositeSlider
+          value={bg_th}
+          onChange={handleBgThChanged}
+          defaultValue={DEFAULTS.bg_th}
+          min={0}
+          max={20}
+          step={0.01}
+          marks
+        />
+        <CompositeNumberInput
+          value={bg_th}
+          onChange={handleBgThChanged}
+          defaultValue={DEFAULTS.bg_th}
+          min={0}
+          max={20}
+          step={0.01}
+        />
+      </FormControl>
     </ProcessorWrapper>
   );
 };

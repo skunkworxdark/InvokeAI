@@ -1,4 +1,4 @@
-import { ListRange } from 'react-virtuoso';
+import type { ListRange } from 'react-virtuoso';
 
 /**
  * Gets the alignment for react-virtuoso's scrollToIndex function.
@@ -6,10 +6,7 @@ import { ListRange } from 'react-virtuoso';
  * @param range The range of items currently visible.
  * @returns
  */
-export const getScrollToIndexAlign = (
-  index: number,
-  range: ListRange
-): 'start' | 'end' => {
+export const getScrollToIndexAlign = (index: number, range: ListRange): 'start' | 'end' => {
   if (index > (range.endIndex - range.startIndex) / 2 + range.startIndex) {
     return 'end';
   }

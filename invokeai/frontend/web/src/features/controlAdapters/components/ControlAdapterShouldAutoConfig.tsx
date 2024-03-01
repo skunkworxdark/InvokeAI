@@ -1,11 +1,11 @@
+import { FormControl, FormLabel, Switch } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
-import IAISwitch from 'common/components/IAISwitch';
-import { controlAdapterAutoConfigToggled } from 'features/controlAdapters/store/controlAdaptersSlice';
-import { memo, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useControlAdapterIsEnabled } from 'features/controlAdapters/hooks/useControlAdapterIsEnabled';
 import { useControlAdapterShouldAutoConfig } from 'features/controlAdapters/hooks/useControlAdapterShouldAutoConfig';
+import { controlAdapterAutoConfigToggled } from 'features/controlAdapters/store/controlAdaptersSlice';
 import { isNil } from 'lodash-es';
+import { memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   id: string;
@@ -26,13 +26,10 @@ const ControlAdapterShouldAutoConfig = ({ id }: Props) => {
   }
 
   return (
-    <IAISwitch
-      label={t('controlnet.autoConfigure')}
-      aria-label={t('controlnet.autoConfigure')}
-      isChecked={shouldAutoConfig}
-      onChange={handleShouldAutoConfigChanged}
-      isDisabled={!isEnabled}
-    />
+    <FormControl isDisabled={!isEnabled}>
+      <FormLabel flexGrow={1}>{t('controlnet.autoConfigure')}</FormLabel>
+      <Switch isChecked={shouldAutoConfig} onChange={handleShouldAutoConfigChanged} />
+    </FormControl>
   );
 };
 

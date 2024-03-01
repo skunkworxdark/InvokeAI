@@ -1,18 +1,16 @@
-import { canvasCopiedToClipboard } from 'features/canvas/store/actions';
-import { startAppListening } from '..';
 import { $logger } from 'app/logging/logger';
+import type { AppStartListening } from 'app/store/middleware/listenerMiddleware';
+import { canvasCopiedToClipboard } from 'features/canvas/store/actions';
 import { getBaseLayerBlob } from 'features/canvas/util/getBaseLayerBlob';
 import { addToast } from 'features/system/store/systemSlice';
 import { copyBlobToClipboard } from 'features/system/util/copyBlobToClipboard';
 import { t } from 'i18next';
 
-export const addCanvasCopiedToClipboardListener = () => {
+export const addCanvasCopiedToClipboardListener = (startAppListening: AppStartListening) => {
   startAppListening({
     actionCreator: canvasCopiedToClipboard,
     effect: async (action, { dispatch, getState }) => {
-      const moduleLog = $logger
-        .get()
-        .child({ namespace: 'canvasCopiedToClipboardListener' });
+      const moduleLog = $logger.get().child({ namespace: 'canvasCopiedToClipboardListener' });
       const state = getState();
 
       try {

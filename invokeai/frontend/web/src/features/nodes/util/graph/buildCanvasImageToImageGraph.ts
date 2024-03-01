@@ -1,13 +1,10 @@
 import { logger } from 'app/logging/logger';
-import { RootState } from 'app/store/store';
-import {
-  ImageDTO,
-  ImageToLatentsInvocation,
-  NonNullableGraph,
-} from 'services/api/types';
+import type { RootState } from 'app/store/store';
+import { getBoardField, getIsIntermediate } from 'features/nodes/util/graph/graphBuilderUtils';
+import type { ImageDTO, ImageToLatentsInvocation, NonNullableGraph } from 'services/api/types';
+
 import { addControlNetToLinearGraph } from './addControlNetToLinearGraph';
 import { addIPAdapterToLinearGraph } from './addIPAdapterToLinearGraph';
-import { addLinearUIOutputNode } from './addLinearUIOutputNode';
 import { addLoRAsToGraph } from './addLoRAsToGraph';
 import { addNSFWCheckerToGraph } from './addNSFWCheckerToGraph';
 import { addSeamlessToLinearGraph } from './addSeamlessToLinearGraph';
@@ -33,10 +30,7 @@ import { addCoreMetadataNode } from './metadata';
 /**
  * Builds the Canvas tab's Image to Image graph.
  */
-export const buildCanvasImageToImageGraph = (
-  state: RootState,
-  initialImage: ImageDTO
-): NonNullableGraph => {
+export const buildCanvasImageToImageGraph = (state: RootState, initialImage: ImageDTO): NonNullableGraph => {
   const log = logger('nodes');
   const {
     positivePrompt,
@@ -62,9 +56,7 @@ export const buildCanvasImageToImageGraph = (
 
   const fp32 = vaePrecision === 'fp32';
   const is_intermediate = true;
-  const isUsingScaledDimensions = ['auto', 'manual'].includes(
-    boundingBoxScaleMethod
-  );
+  const isUsingScaledDimensions = ['auto', 'manual'].includes(boundingBoxScaleMethod);
 
   if (!model) {
     log.error('No model found in state');
@@ -118,12 +110,8 @@ export const buildCanvasImageToImageGraph = (
         is_intermediate,
         use_cpu,
         seed,
-        width: !isUsingScaledDimensions
-          ? width
-          : scaledBoundingBoxDimensions.width,
-        height: !isUsingScaledDimensions
-          ? height
-          : scaledBoundingBoxDimensions.height,
+        width: !isUsingScaledDimensions ? width : scaledBoundingBoxDimensions.width,
+        height: !isUsingScaledDimensions ? height : scaledBoundingBoxDimensions.height,
       },
       [IMAGE_TO_LATENTS]: {
         type: 'i2l',
@@ -135,6 +123,7 @@ export const buildCanvasImageToImageGraph = (
         id: DENOISE_LATENTS,
         is_intermediate,
         cfg_scale,
+        cfg_rescale_multiplier,
         scheduler,
         steps,
         denoising_start: 1 - strength,
@@ -143,7 +132,8 @@ export const buildCanvasImageToImageGraph = (
       [CANVAS_OUTPUT]: {
         type: 'l2i',
         id: CANVAS_OUTPUT,
-        is_intermediate,
+        is_intermediate: getIsIntermediate(state),
+        board: getBoardField(state),
         use_cache: false,
       },
     },
@@ -253,7 +243,8 @@ export const buildCanvasImageToImageGraph = (
     graph.nodes[CANVAS_OUTPUT] = {
       id: CANVAS_OUTPUT,
       type: 'img_resize',
-      is_intermediate,
+      is_intermediate: getIsIntermediate(state),
+      board: getBoardField(state),
       width: width,
       height: height,
       use_cache: false,
@@ -295,13 +286,13 @@ export const buildCanvasImageToImageGraph = (
     graph.nodes[CANVAS_OUTPUT] = {
       type: 'l2i',
       id: CANVAS_OUTPUT,
-      is_intermediate,
+      is_intermediate: getIsIntermediate(state),
+      board: getBoardField(state),
       fp32,
       use_cache: false,
     };
 
-    (graph.nodes[IMAGE_TO_LATENTS] as ImageToLatentsInvocation).image =
-      initialImage;
+    (graph.nodes[IMAGE_TO_LATENTS] as ImageToLatentsInvocation).image = initialImage;
 
     graph.edges.push({
       source: {
@@ -321,12 +312,8 @@ export const buildCanvasImageToImageGraph = (
       generation_mode: 'img2img',
       cfg_scale,
       cfg_rescale_multiplier,
-      width: !isUsingScaledDimensions
-        ? width
-        : scaledBoundingBoxDimensions.width,
-      height: !isUsingScaledDimensions
-        ? height
-        : scaledBoundingBoxDimensions.height,
+      width: !isUsingScaledDimensions ? width : scaledBoundingBoxDimensions.width,
+      height: !isUsingScaledDimensions ? height : scaledBoundingBoxDimensions.height,
       positive_prompt: positivePrompt,
       negative_prompt: negativePrompt,
       model,
@@ -370,8 +357,6 @@ export const buildCanvasImageToImageGraph = (
     // must add after nsfw checker!
     addWatermarkerToGraph(state, graph, CANVAS_OUTPUT);
   }
-
-  addLinearUIOutputNode(state, graph);
 
   return graph;
 };

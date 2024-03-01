@@ -1,6 +1,5 @@
-import { ButtonGroup } from '@chakra-ui/react';
+import { ButtonGroup, IconButton } from '@invoke-ai/ui-library';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import IAIIconButton from 'common/components/IAIIconButton';
 import {
   // shouldShowFieldTypeLegendChanged,
   shouldShowMinimapPanelChanged,
@@ -8,11 +7,11 @@ import {
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  FaExpand,
-  // FaInfo,
-  FaMapMarkerAlt,
-} from 'react-icons/fa';
-import { FaMagnifyingGlassMinus, FaMagnifyingGlassPlus } from 'react-icons/fa6';
+  PiFrameCornersBold,
+  PiMagnifyingGlassMinusBold,
+  PiMagnifyingGlassPlusBold,
+  PiMapPinBold,
+} from 'react-icons/pi';
 import { useReactFlow } from 'reactflow';
 
 const ViewportControls = () => {
@@ -20,11 +19,9 @@ const ViewportControls = () => {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const dispatch = useAppDispatch();
   // const shouldShowFieldTypeLegend = useAppSelector(
-  //   (state) => state.nodes.shouldShowFieldTypeLegend
+  //   (s) => s.nodes.shouldShowFieldTypeLegend
   // );
-  const shouldShowMinimapPanel = useAppSelector(
-    (state) => state.nodes.shouldShowMinimapPanel
-  );
+  const shouldShowMinimapPanel = useAppSelector((s) => s.nodes.shouldShowMinimapPanel);
 
   const handleClickedZoomIn = useCallback(() => {
     zoomIn();
@@ -47,24 +44,24 @@ const ViewportControls = () => {
   }, [shouldShowMinimapPanel, dispatch]);
 
   return (
-    <ButtonGroup isAttached orientation="vertical">
-      <IAIIconButton
+    <ButtonGroup orientation="vertical">
+      <IconButton
         tooltip={t('nodes.zoomInNodes')}
         aria-label={t('nodes.zoomInNodes')}
         onClick={handleClickedZoomIn}
-        icon={<FaMagnifyingGlassPlus />}
+        icon={<PiMagnifyingGlassPlusBold />}
       />
-      <IAIIconButton
+      <IconButton
         tooltip={t('nodes.zoomOutNodes')}
         aria-label={t('nodes.zoomOutNodes')}
         onClick={handleClickedZoomOut}
-        icon={<FaMagnifyingGlassMinus />}
+        icon={<PiMagnifyingGlassMinusBold />}
       />
-      <IAIIconButton
+      <IconButton
         tooltip={t('nodes.fitViewportNodes')}
         aria-label={t('nodes.fitViewportNodes')}
         onClick={handleClickedFitView}
-        icon={<FaExpand />}
+        icon={<PiFrameCornersBold />}
       />
       {/* <Tooltip
         label={
@@ -73,27 +70,19 @@ const ViewportControls = () => {
             : t('nodes.showLegendNodes')
         }
       >
-        <IAIIconButton
+        <IconButton
           aria-label="Toggle field type legend"
           isChecked={shouldShowFieldTypeLegend}
           onClick={handleClickedToggleFieldTypeLegend}
           icon={<FaInfo />}
         />
       </Tooltip> */}
-      <IAIIconButton
-        tooltip={
-          shouldShowMinimapPanel
-            ? t('nodes.hideMinimapnodes')
-            : t('nodes.showMinimapnodes')
-        }
-        aria-label={
-          shouldShowMinimapPanel
-            ? t('nodes.hideMinimapnodes')
-            : t('nodes.showMinimapnodes')
-        }
+      <IconButton
+        tooltip={shouldShowMinimapPanel ? t('nodes.hideMinimapnodes') : t('nodes.showMinimapnodes')}
+        aria-label={shouldShowMinimapPanel ? t('nodes.hideMinimapnodes') : t('nodes.showMinimapnodes')}
         isChecked={shouldShowMinimapPanel}
         onClick={handleClickedToggleMiniMapPanel}
-        icon={<FaMapMarkerAlt />}
+        icon={<PiMapPinBold />}
       />
     </ButtonGroup>
   );

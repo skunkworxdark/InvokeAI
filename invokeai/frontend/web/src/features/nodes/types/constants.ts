@@ -1,4 +1,4 @@
-import { Node } from 'reactflow';
+import type { Node } from 'reactflow';
 
 /**
  * How long to wait before showing a tooltip when hovering a field handle.
@@ -24,14 +24,6 @@ export const SHARED_NODE_PROPERTIES: Partial<Node> = {
 };
 
 /**
- * Helper for getting the kind of a field.
- */
-export const KIND_MAP = {
-  input: 'inputs' as const,
-  output: 'outputs' as const,
-};
-
-/**
  * Model types' handles are rendered as squares in the UI.
  */
 export const MODEL_TYPES = [
@@ -39,7 +31,6 @@ export const MODEL_TYPES = [
   'ControlNetModelField',
   'LoRAModelField',
   'MainModelField',
-  'ONNXModelField',
   'SDXLMainModelField',
   'SDXLRefinerModelField',
   'VaeModelField',
@@ -70,7 +61,6 @@ export const FIELD_COLORS: { [key: string]: string } = {
   LatentsField: 'pink.500',
   LoRAModelField: 'teal.500',
   MainModelField: 'teal.500',
-  ONNXModelField: 'teal.500',
   SDXLMainModelField: 'teal.500',
   SDXLRefinerModelField: 'teal.500',
   StringField: 'yellow.500',

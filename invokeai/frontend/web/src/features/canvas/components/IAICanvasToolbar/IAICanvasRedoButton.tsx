@@ -1,29 +1,16 @@
-import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
+import { IconButton } from '@invoke-ai/ui-library';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import IAIIconButton from 'common/components/IAIIconButton';
 import { redo } from 'features/canvas/store/canvasSlice';
 import { activeTabNameSelector } from 'features/ui/store/uiSelectors';
-import { useCallback } from 'react';
+import { memo, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
-import { FaRedo } from 'react-icons/fa';
+import { PiArrowClockwiseBold } from 'react-icons/pi';
 
-const canvasRedoSelector = createMemoizedSelector(
-  [stateSelector, activeTabNameSelector],
-  ({ canvas }, activeTabName) => {
-    const { futureLayerStates } = canvas;
-
-    return {
-      canRedo: futureLayerStates.length > 0,
-      activeTabName,
-    };
-  }
-);
-
-export default function IAICanvasRedoButton() {
+const IAICanvasRedoButton = () => {
   const dispatch = useAppDispatch();
-  const { canRedo, activeTabName } = useAppSelector(canvasRedoSelector);
+  const canRedo = useAppSelector((s) => s.canvas.futureLayerStates.length > 0);
+  const activeTabName = useAppSelector(activeTabNameSelector);
 
   const { t } = useTranslation();
 
@@ -44,12 +31,14 @@ export default function IAICanvasRedoButton() {
   );
 
   return (
-    <IAIIconButton
+    <IconButton
       aria-label={`${t('unifiedCanvas.redo')} (Ctrl+Shift+Z)`}
       tooltip={`${t('unifiedCanvas.redo')} (Ctrl+Shift+Z)`}
-      icon={<FaRedo />}
+      icon={<PiArrowClockwiseBold />}
       onClick={handleRedo}
       isDisabled={!canRedo}
     />
   );
-}
+};
+
+export default memo(IAICanvasRedoButton);

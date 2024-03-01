@@ -1,39 +1,41 @@
-import { Flex } from '@chakra-ui/react';
-import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
+import type { FormLabelProps } from '@invoke-ai/ui-library';
+import {
+  Checkbox,
+  CompositeSlider,
+  Flex,
+  FormControl,
+  FormControlGroup,
+  FormLabel,
+  IconButton,
+  Popover,
+  PopoverBody,
+  PopoverContent,
+  PopoverTrigger,
+  Switch,
+} from '@invoke-ai/ui-library';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import IAIIconButton from 'common/components/IAIIconButton';
-import IAIPopover from 'common/components/IAIPopover';
-import IAISimpleCheckbox from 'common/components/IAISimpleCheckbox';
-import IAISlider from 'common/components/IAISlider';
-import IAISwitch from 'common/components/IAISwitch';
 import {
   autoAssignBoardOnClickChanged,
   setGalleryImageMinimumWidth,
   shouldAutoSwitchChanged,
 } from 'features/gallery/store/gallerySlice';
-import { ChangeEvent, memo, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FaWrench } from 'react-icons/fa';
+import { RiSettings4Fill } from 'react-icons/ri';
+
 import BoardAutoAddSelect from './Boards/BoardAutoAddSelect';
 
-const selector = createMemoizedSelector([stateSelector], (state) => {
-  const { galleryImageMinimumWidth, shouldAutoSwitch, autoAssignBoardOnClick } =
-    state.gallery;
-
-  return {
-    galleryImageMinimumWidth,
-    shouldAutoSwitch,
-    autoAssignBoardOnClick,
-  };
-});
+const formLabelProps: FormLabelProps = {
+  flexGrow: 1,
+};
 
 const GallerySettingsPopover = () => {
   const dispatch = useAppDispatch();
   const { t } = useTranslation();
-
-  const { galleryImageMinimumWidth, shouldAutoSwitch, autoAssignBoardOnClick } =
-    useAppSelector(selector);
+  const galleryImageMinimumWidth = useAppSelector((s) => s.gallery.galleryImageMinimumWidth);
+  const shouldAutoSwitch = useAppSelector((s) => s.gallery.shouldAutoSwitch);
+  const autoAssignBoardOnClick = useAppSelector((s) => s.gallery.autoAssignBoardOnClick);
 
   const handleChangeGalleryImageMinimumWidth = useCallback(
     (v: number) => {
@@ -41,10 +43,6 @@ const GallerySettingsPopover = () => {
     },
     [dispatch]
   );
-
-  const handleResetGalleryImageMinimumWidth = useCallback(() => {
-    dispatch(setGalleryImageMinimumWidth(64));
-  }, [dispatch]);
 
   const handleChangeAutoSwitch = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
@@ -54,46 +52,48 @@ const GallerySettingsPopover = () => {
   );
 
   const handleChangeAutoAssignBoardOnClick = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) =>
-      dispatch(autoAssignBoardOnClickChanged(e.target.checked)),
+    (e: ChangeEvent<HTMLInputElement>) => dispatch(autoAssignBoardOnClickChanged(e.target.checked)),
     [dispatch]
   );
 
   return (
-    <IAIPopover
-      triggerComponent={
-        <IAIIconButton
+    <Popover isLazy>
+      <PopoverTrigger>
+        <IconButton
           tooltip={t('gallery.gallerySettings')}
           aria-label={t('gallery.gallerySettings')}
           size="sm"
-          icon={<FaWrench />}
+          icon={<RiSettings4Fill />}
         />
-      }
-    >
-      <Flex direction="column" gap={2}>
-        <IAISlider
-          value={galleryImageMinimumWidth}
-          onChange={handleChangeGalleryImageMinimumWidth}
-          min={45}
-          max={256}
-          hideTooltip={true}
-          label={t('gallery.galleryImageSize')}
-          withReset
-          handleReset={handleResetGalleryImageMinimumWidth}
-        />
-        <IAISwitch
-          label={t('gallery.autoSwitchNewImages')}
-          isChecked={shouldAutoSwitch}
-          onChange={handleChangeAutoSwitch}
-        />
-        <IAISimpleCheckbox
-          label={t('gallery.autoAssignBoardOnClick')}
-          isChecked={autoAssignBoardOnClick}
-          onChange={handleChangeAutoAssignBoardOnClick}
-        />
-        <BoardAutoAddSelect />
-      </Flex>
-    </IAIPopover>
+      </PopoverTrigger>
+      <PopoverContent>
+        <PopoverBody>
+          <Flex direction="column" gap={2}>
+            <FormControl>
+              <FormLabel>{t('gallery.galleryImageSize')}</FormLabel>
+              <CompositeSlider
+                value={galleryImageMinimumWidth}
+                onChange={handleChangeGalleryImageMinimumWidth}
+                min={45}
+                max={256}
+                defaultValue={90}
+              />
+            </FormControl>
+            <FormControlGroup formLabelProps={formLabelProps}>
+              <FormControl>
+                <FormLabel>{t('gallery.autoSwitchNewImages')}</FormLabel>
+                <Switch isChecked={shouldAutoSwitch} onChange={handleChangeAutoSwitch} />
+              </FormControl>
+              <FormControl>
+                <FormLabel>{t('gallery.autoAssignBoardOnClick')}</FormLabel>
+                <Checkbox isChecked={autoAssignBoardOnClick} onChange={handleChangeAutoAssignBoardOnClick} />
+              </FormControl>
+            </FormControlGroup>
+            <BoardAutoAddSelect />
+          </Flex>
+        </PopoverBody>
+      </PopoverContent>
+    </Popover>
   );
 };
 

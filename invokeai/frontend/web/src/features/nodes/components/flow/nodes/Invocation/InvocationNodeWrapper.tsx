@@ -1,10 +1,11 @@
-import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
+import { createSelector } from '@reduxjs/toolkit';
 import { useAppSelector } from 'app/store/storeHooks';
 import InvocationNode from 'features/nodes/components/flow/nodes/Invocation/InvocationNode';
-import { InvocationNodeData } from 'features/nodes/types/invocation';
+import { selectNodesSlice } from 'features/nodes/store/nodesSlice';
+import type { InvocationNodeData } from 'features/nodes/types/invocation';
 import { memo, useMemo } from 'react';
-import { NodeProps } from 'reactflow';
+import type { NodeProps } from 'reactflow';
+
 import InvocationNodeUnknownFallback from './InvocationNodeUnknownFallback';
 
 const InvocationNodeWrapper = (props: NodeProps<InvocationNodeData>) => {
@@ -12,36 +13,19 @@ const InvocationNodeWrapper = (props: NodeProps<InvocationNodeData>) => {
   const { id: nodeId, type, isOpen, label } = data;
 
   const hasTemplateSelector = useMemo(
-    () =>
-      createMemoizedSelector(stateSelector, ({ nodes }) =>
-        Boolean(nodes.nodeTemplates[type])
-      ),
+    () => createSelector(selectNodesSlice, (nodes) => Boolean(nodes.templates[type])),
     [type]
   );
 
-  const nodeTemplate = useAppSelector(hasTemplateSelector);
+  const hasTemplate = useAppSelector(hasTemplateSelector);
 
-  if (!nodeTemplate) {
+  if (!hasTemplate) {
     return (
-      <InvocationNodeUnknownFallback
-        nodeId={nodeId}
-        isOpen={isOpen}
-        label={label}
-        type={type}
-        selected={selected}
-      />
+      <InvocationNodeUnknownFallback nodeId={nodeId} isOpen={isOpen} label={label} type={type} selected={selected} />
     );
   }
 
-  return (
-    <InvocationNode
-      nodeId={nodeId}
-      isOpen={isOpen}
-      label={label}
-      type={type}
-      selected={selected}
-    />
-  );
+  return <InvocationNode nodeId={nodeId} isOpen={isOpen} label={label} type={type} selected={selected} />;
 };
 
 export default memo(InvocationNodeWrapper);

@@ -1,26 +1,20 @@
-import { RootState } from 'app/store/store';
+import type { RootState } from 'app/store/store';
 import { selectValidControlNets } from 'features/controlAdapters/store/controlAdaptersSlice';
 import { omit } from 'lodash-es';
-import {
+import type {
   CollectInvocation,
   ControlField,
   ControlNetInvocation,
   CoreMetadataInvocation,
   NonNullableGraph,
 } from 'services/api/types';
-import {
-  CANVAS_COHERENCE_DENOISE_LATENTS,
-  CONTROL_NET_COLLECT,
-} from './constants';
+
+import { CONTROL_NET_COLLECT } from './constants';
 import { upsertMetadata } from './metadata';
 
-export const addControlNetToLinearGraph = (
-  state: RootState,
-  graph: NonNullableGraph,
-  baseNodeId: string
-): void => {
+export const addControlNetToLinearGraph = (state: RootState, graph: NonNullableGraph, baseNodeId: string): void => {
   const validControlNets = selectValidControlNets(state.controlAdapters).filter(
-    (ca) => ca.model?.base_model === state.generation.model?.base_model
+    (ca) => ca.model?.base === state.generation.model?.base
   );
 
   // const metadataAccumulator = graph.nodes[METADATA_ACCUMULATOR] as
@@ -44,16 +38,6 @@ export const addControlNetToLinearGraph = (
         field: 'control',
       },
     });
-
-    if (CANVAS_COHERENCE_DENOISE_LATENTS in graph.nodes) {
-      graph.edges.push({
-        source: { node_id: CONTROL_NET_COLLECT, field: 'collection' },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 'control',
-        },
-      });
-    }
 
     validControlNets.forEach((controlNet) => {
       if (!controlNet.model) {
@@ -101,9 +85,7 @@ export const addControlNetToLinearGraph = (
 
       graph.nodes[controlNetNode.id] = controlNetNode as ControlNetInvocation;
 
-      controlNetMetadata.push(
-        omit(controlNetNode, ['id', 'type', 'is_intermediate']) as ControlField
-      );
+      controlNetMetadata.push(omit(controlNetNode, ['id', 'type', 'is_intermediate']) as ControlField);
 
       graph.edges.push({
         source: { node_id: controlNetNode.id, field: 'control' },

@@ -1,8 +1,9 @@
-import { Checkbox, Flex, FormControl, FormLabel } from '@chakra-ui/react';
+import { Checkbox, FormControl, FormLabel } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
 import { useUseCache } from 'features/nodes/hooks/useUseCache';
 import { nodeUseCacheChanged } from 'features/nodes/store/nodesSlice';
-import { ChangeEvent, memo, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const UseCacheCheckbox = ({ nodeId }: { nodeId: string }) => {
@@ -21,16 +22,9 @@ const UseCacheCheckbox = ({ nodeId }: { nodeId: string }) => {
   );
   const { t } = useTranslation();
   return (
-    <FormControl as={Flex} sx={{ alignItems: 'center', gap: 2, w: 'auto' }}>
-      <FormLabel sx={{ fontSize: 'xs', mb: '1px' }}>
-        {t('invocationCache.useCache')}
-      </FormLabel>
-      <Checkbox
-        className="nopan"
-        size="sm"
-        onChange={handleChange}
-        isChecked={useCache}
-      />
+    <FormControl>
+      <FormLabel>{t('invocationCache.useCache')}</FormLabel>
+      <Checkbox className="nopan" onChange={handleChange} isChecked={useCache} />
     </FormControl>
   );
 };

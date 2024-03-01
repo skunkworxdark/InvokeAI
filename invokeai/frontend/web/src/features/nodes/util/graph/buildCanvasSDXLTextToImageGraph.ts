@@ -1,13 +1,9 @@
 import { logger } from 'app/logging/logger';
-import { RootState } from 'app/store/store';
-import {
-  DenoiseLatentsInvocation,
-  NonNullableGraph,
-  ONNXTextToLatentsInvocation,
-} from 'services/api/types';
+import type { RootState } from 'app/store/store';
+import type { NonNullableGraph } from 'services/api/types';
+
 import { addControlNetToLinearGraph } from './addControlNetToLinearGraph';
 import { addIPAdapterToLinearGraph } from './addIPAdapterToLinearGraph';
-import { addLinearUIOutputNode } from './addLinearUIOutputNode';
 import { addNSFWCheckerToGraph } from './addNSFWCheckerToGraph';
 import { addSDXLLoRAsToGraph } from './addSDXLLoRAstoGraph';
 import { addSDXLRefinerToGraph } from './addSDXLRefinerToGraph';
@@ -20,7 +16,6 @@ import {
   LATENTS_TO_IMAGE,
   NEGATIVE_CONDITIONING,
   NOISE,
-  ONNX_MODEL_LOADER,
   POSITIVE_CONDITIONING,
   SDXL_CANVAS_TEXT_TO_IMAGE_GRAPH,
   SDXL_DENOISE_LATENTS,
@@ -28,15 +23,13 @@ import {
   SDXL_REFINER_SEAMLESS,
   SEAMLESS,
 } from './constants';
-import { buildSDXLStylePrompts } from './helpers/craftSDXLStylePrompt';
+import { getBoardField, getIsIntermediate, getSDXLStylePrompts } from './graphBuilderUtils';
 import { addCoreMetadataNode } from './metadata';
 
 /**
  * Builds the Canvas tab's Text to Image graph.
  */
-export const buildCanvasSDXLTextToImageGraph = (
-  state: RootState
-): NonNullableGraph => {
+export const buildCanvasSDXLTextToImageGraph = (state: RootState): NonNullableGraph => {
   const log = logger('nodes');
   const {
     positivePrompt,
@@ -60,11 +53,9 @@ export const buildCanvasSDXLTextToImageGraph = (
 
   const fp32 = vaePrecision === 'fp32';
   const is_intermediate = true;
-  const isUsingScaledDimensions = ['auto', 'manual'].includes(
-    boundingBoxScaleMethod
-  );
+  const isUsingScaledDimensions = ['auto', 'manual'].includes(boundingBoxScaleMethod);
 
-  const { shouldUseSDXLRefiner, refinerStart } = state.sdxl;
+  const { refinerModel, refinerStart } = state.sdxl;
 
   if (!model) {
     log.error('No model found in state');
@@ -73,40 +64,10 @@ export const buildCanvasSDXLTextToImageGraph = (
 
   const use_cpu = shouldUseCpuNoise;
 
-  const isUsingOnnxModel = model.model_type === 'onnx';
-
-  let modelLoaderNodeId = isUsingOnnxModel
-    ? ONNX_MODEL_LOADER
-    : SDXL_MODEL_LOADER;
-
-  const modelLoaderNodeType = isUsingOnnxModel
-    ? 'onnx_model_loader'
-    : 'sdxl_model_loader';
-
-  const t2lNode: DenoiseLatentsInvocation | ONNXTextToLatentsInvocation =
-    isUsingOnnxModel
-      ? {
-          type: 't2l_onnx',
-          id: SDXL_DENOISE_LATENTS,
-          is_intermediate,
-          cfg_scale,
-          scheduler,
-          steps,
-        }
-      : {
-          type: 'denoise_latents',
-          id: SDXL_DENOISE_LATENTS,
-          is_intermediate,
-          cfg_scale,
-          scheduler,
-          steps,
-          denoising_start: 0,
-          denoising_end: shouldUseSDXLRefiner ? refinerStart : 1,
-        };
+  let modelLoaderNodeId = SDXL_MODEL_LOADER;
 
   // Construct Style Prompt
-  const { joinedPositiveStylePrompt, joinedNegativeStylePrompt } =
-    buildSDXLStylePrompts(state);
+  const { positiveStylePrompt, negativeStylePrompt } = getSDXLStylePrompts(state);
 
   /**
    * The easiest way to build linear graphs is to do it in the node editor, then copy and paste the
@@ -118,44 +79,49 @@ export const buildCanvasSDXLTextToImageGraph = (
    */
 
   // copy-pasted graph from node editor, filled in with state values & friendly node ids
-  // TODO: Actually create the graph correctly for ONNX
   const graph: NonNullableGraph = {
     id: SDXL_CANVAS_TEXT_TO_IMAGE_GRAPH,
     nodes: {
       [modelLoaderNodeId]: {
-        type: modelLoaderNodeType,
+        type: 'sdxl_model_loader',
         id: modelLoaderNodeId,
         is_intermediate,
         model,
       },
       [POSITIVE_CONDITIONING]: {
-        type: isUsingOnnxModel ? 'prompt_onnx' : 'sdxl_compel_prompt',
+        type: 'sdxl_compel_prompt',
         id: POSITIVE_CONDITIONING,
         is_intermediate,
         prompt: positivePrompt,
-        style: joinedPositiveStylePrompt,
+        style: positiveStylePrompt,
       },
       [NEGATIVE_CONDITIONING]: {
-        type: isUsingOnnxModel ? 'prompt_onnx' : 'sdxl_compel_prompt',
+        type: 'sdxl_compel_prompt',
         id: NEGATIVE_CONDITIONING,
         is_intermediate,
         prompt: negativePrompt,
-        style: joinedNegativeStylePrompt,
+        style: negativeStylePrompt,
       },
       [NOISE]: {
         type: 'noise',
         id: NOISE,
         is_intermediate,
         seed,
-        width: !isUsingScaledDimensions
-          ? width
-          : scaledBoundingBoxDimensions.width,
-        height: !isUsingScaledDimensions
-          ? height
-          : scaledBoundingBoxDimensions.height,
+        width: !isUsingScaledDimensions ? width : scaledBoundingBoxDimensions.width,
+        height: !isUsingScaledDimensions ? height : scaledBoundingBoxDimensions.height,
         use_cpu,
       },
-      [t2lNode.id]: t2lNode,
+      [SDXL_DENOISE_LATENTS]: {
+        type: 'denoise_latents',
+        id: SDXL_DENOISE_LATENTS,
+        is_intermediate,
+        cfg_scale,
+        cfg_rescale_multiplier,
+        scheduler,
+        steps,
+        denoising_start: 0,
+        denoising_end: refinerModel ? refinerStart : 1,
+      },
     },
     edges: [
       // Connect Model Loader to UNet and CLIP
@@ -247,7 +213,7 @@ export const buildCanvasSDXLTextToImageGraph = (
   if (isUsingScaledDimensions) {
     graph.nodes[LATENTS_TO_IMAGE] = {
       id: LATENTS_TO_IMAGE,
-      type: isUsingOnnxModel ? 'l2i_onnx' : 'l2i',
+      type: 'l2i',
       is_intermediate,
       fp32,
     };
@@ -255,7 +221,8 @@ export const buildCanvasSDXLTextToImageGraph = (
     graph.nodes[CANVAS_OUTPUT] = {
       id: CANVAS_OUTPUT,
       type: 'img_resize',
-      is_intermediate,
+      is_intermediate: getIsIntermediate(state),
+      board: getBoardField(state),
       width: width,
       height: height,
       use_cache: false,
@@ -285,9 +252,10 @@ export const buildCanvasSDXLTextToImageGraph = (
     );
   } else {
     graph.nodes[CANVAS_OUTPUT] = {
-      type: isUsingOnnxModel ? 'l2i_onnx' : 'l2i',
+      type: 'l2i',
       id: CANVAS_OUTPUT,
-      is_intermediate,
+      is_intermediate: getIsIntermediate(state),
+      board: getBoardField(state),
       fp32,
       use_cache: false,
     };
@@ -310,14 +278,12 @@ export const buildCanvasSDXLTextToImageGraph = (
       generation_mode: 'txt2img',
       cfg_scale,
       cfg_rescale_multiplier,
-      width: !isUsingScaledDimensions
-        ? width
-        : scaledBoundingBoxDimensions.width,
-      height: !isUsingScaledDimensions
-        ? height
-        : scaledBoundingBoxDimensions.height,
+      width: !isUsingScaledDimensions ? width : scaledBoundingBoxDimensions.width,
+      height: !isUsingScaledDimensions ? height : scaledBoundingBoxDimensions.height,
       positive_prompt: positivePrompt,
       negative_prompt: negativePrompt,
+      positive_style_prompt: positiveStylePrompt,
+      negative_style_prompt: negativeStylePrompt,
       model,
       seed,
       steps,
@@ -334,13 +300,8 @@ export const buildCanvasSDXLTextToImageGraph = (
   }
 
   // Add Refiner if enabled
-  if (shouldUseSDXLRefiner) {
-    addSDXLRefinerToGraph(
-      state,
-      graph,
-      SDXL_DENOISE_LATENTS,
-      modelLoaderNodeId
-    );
+  if (refinerModel) {
+    addSDXLRefinerToGraph(state, graph, SDXL_DENOISE_LATENTS, modelLoaderNodeId);
     if (seamlessXAxis || seamlessYAxis) {
       modelLoaderNodeId = SDXL_REFINER_SEAMLESS;
     }
@@ -369,8 +330,6 @@ export const buildCanvasSDXLTextToImageGraph = (
     // must add after nsfw checker!
     addWatermarkerToGraph(state, graph, CANVAS_OUTPUT);
   }
-
-  addLinearUIOutputNode(state, graph);
 
   return graph;
 };

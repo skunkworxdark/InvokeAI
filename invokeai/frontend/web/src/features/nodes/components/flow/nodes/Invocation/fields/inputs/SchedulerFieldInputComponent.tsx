@@ -1,67 +1,42 @@
-import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
-import { stateSelector } from 'app/store/store';
-import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
-import IAIMantineSearchableSelect from 'common/components/IAIMantineSearchableSelect';
+import type { ComboboxOnChange } from '@invoke-ai/ui-library';
+import { Combobox, FormControl } from '@invoke-ai/ui-library';
+import { useAppDispatch } from 'app/store/storeHooks';
 import { fieldSchedulerValueChanged } from 'features/nodes/store/nodesSlice';
-import {
-  SchedulerFieldInputInstance,
-  SchedulerFieldInputTemplate,
-} from 'features/nodes/types/field';
-import { SCHEDULER_LABEL_MAP } from 'features/parameters/types/constants';
-import { ParameterScheduler } from 'features/parameters/types/parameterSchemas';
-import { map } from 'lodash-es';
-import { memo, useCallback } from 'react';
-import { FieldComponentProps } from './types';
+import type { SchedulerFieldInputInstance, SchedulerFieldInputTemplate } from 'features/nodes/types/field';
+import { SCHEDULER_OPTIONS } from 'features/parameters/types/constants';
+import { isParameterScheduler } from 'features/parameters/types/parameterSchemas';
+import { memo, useCallback, useMemo } from 'react';
 
-const selector = createMemoizedSelector([stateSelector], ({ ui }) => {
-  const { favoriteSchedulers: enabledSchedulers } = ui;
+import type { FieldComponentProps } from './types';
 
-  const data = map(SCHEDULER_LABEL_MAP, (label, name) => ({
-    value: name,
-    label: label,
-    group: enabledSchedulers.includes(name as ParameterScheduler)
-      ? 'Favorites'
-      : undefined,
-  })).sort((a, b) => a.label.localeCompare(b.label));
+type Props = FieldComponentProps<SchedulerFieldInputInstance, SchedulerFieldInputTemplate>;
 
-  return {
-    data,
-  };
-});
-
-const SchedulerFieldInputComponent = (
-  props: FieldComponentProps<
-    SchedulerFieldInputInstance,
-    SchedulerFieldInputTemplate
-  >
-) => {
+const SchedulerFieldInputComponent = (props: Props) => {
   const { nodeId, field } = props;
   const dispatch = useAppDispatch();
-  const { data } = useAppSelector(selector);
 
-  const handleChange = useCallback(
-    (value: string | null) => {
-      if (!value) {
+  const onChange = useCallback<ComboboxOnChange>(
+    (v) => {
+      if (!isParameterScheduler(v?.value)) {
         return;
       }
       dispatch(
         fieldSchedulerValueChanged({
           nodeId,
           fieldName: field.name,
-          value: value as ParameterScheduler,
+          value: v.value,
         })
       );
     },
     [dispatch, field.name, nodeId]
   );
 
+  const value = useMemo(() => SCHEDULER_OPTIONS.find((o) => o.value === field?.value), [field?.value]);
+
   return (
-    <IAIMantineSearchableSelect
-      className="nowheel nodrag"
-      value={field.value}
-      data={data}
-      onChange={handleChange}
-    />
+    <FormControl className="nowheel nodrag">
+      <Combobox value={value} options={SCHEDULER_OPTIONS} onChange={onChange} />
+    </FormControl>
   );
 };
 

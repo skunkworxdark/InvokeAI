@@ -1,23 +1,19 @@
-import {
-  Flex,
-  FormControl,
-  FormLabel,
-  Icon,
-  Spacer,
-  Tooltip,
-} from '@chakra-ui/react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Flex, Icon, IconButton, Spacer, Tooltip } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
-import IAIIconButton from 'common/components/IAIIconButton';
 import NodeSelectionOverlay from 'common/components/NodeSelectionOverlay';
+import { useFieldOriginalValue } from 'features/nodes/hooks/useFieldOriginalValue';
 import { useMouseOverNode } from 'features/nodes/hooks/useMouseOverNode';
 import { workflowExposedFieldRemoved } from 'features/nodes/store/workflowSlice';
 import { HANDLE_TOOLTIP_OPEN_DELAY } from 'features/nodes/types/constants';
 import { memo, useCallback } from 'react';
-import { FaInfoCircle, FaTrash } from 'react-icons/fa';
+import { useTranslation } from 'react-i18next';
+import { PiArrowCounterClockwiseBold, PiDotsSixVerticalBold, PiInfoBold, PiTrashSimpleBold } from 'react-icons/pi';
+
 import EditableFieldTitle from './EditableFieldTitle';
 import FieldTooltipContent from './FieldTooltipContent';
 import InputFieldRenderer from './InputFieldRenderer';
-import { useTranslation } from 'react-i18next';
 
 type Props = {
   nodeId: string;
@@ -26,67 +22,79 @@ type Props = {
 
 const LinearViewField = ({ nodeId, fieldName }: Props) => {
   const dispatch = useAppDispatch();
-  const { isMouseOverNode, handleMouseOut, handleMouseOver } =
-    useMouseOverNode(nodeId);
+  const { isValueChanged, onReset } = useFieldOriginalValue(nodeId, fieldName);
+  const { isMouseOverNode, handleMouseOut, handleMouseOver } = useMouseOverNode(nodeId);
   const { t } = useTranslation();
+
   const handleRemoveField = useCallback(() => {
     dispatch(workflowExposedFieldRemoved({ nodeId, fieldName }));
   }, [dispatch, fieldName, nodeId]);
+
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: `${nodeId}.${fieldName}` });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+  };
 
   return (
     <Flex
       onMouseEnter={handleMouseOver}
       onMouseLeave={handleMouseOut}
       layerStyle="second"
-      sx={{
-        position: 'relative',
-        borderRadius: 'base',
-        w: 'full',
-        p: 2,
-      }}
+      alignItems="center"
+      position="relative"
+      borderRadius="base"
+      w="full"
+      p={4}
+      paddingLeft={0}
+      ref={setNodeRef}
+      style={style}
     >
-      <FormControl as={Flex} sx={{ flexDir: 'column', gap: 1, flexShrink: 1 }}>
-        <FormLabel
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            mb: 0,
-          }}
-        >
-          <EditableFieldTitle
-            nodeId={nodeId}
-            fieldName={fieldName}
-            kind="input"
-          />
+      <IconButton
+        aria-label={t('nodes.reorderLinearView')}
+        variant="ghost"
+        icon={<PiDotsSixVerticalBold />}
+        {...listeners}
+        {...attributes}
+        mx={2}
+        height="full"
+      />
+      <Flex flexDir="column" w="full">
+        <Flex alignItems="center">
+          <EditableFieldTitle nodeId={nodeId} fieldName={fieldName} kind="inputs" />
           <Spacer />
+          {isValueChanged && (
+            <IconButton
+              aria-label={t('nodes.resetToDefaultValue')}
+              tooltip={t('nodes.resetToDefaultValue')}
+              variant="ghost"
+              size="sm"
+              onClick={onReset}
+              icon={<PiArrowCounterClockwiseBold />}
+            />
+          )}
           <Tooltip
-            label={
-              <FieldTooltipContent
-                nodeId={nodeId}
-                fieldName={fieldName}
-                kind="input"
-              />
-            }
+            label={<FieldTooltipContent nodeId={nodeId} fieldName={fieldName} kind="inputs" />}
             openDelay={HANDLE_TOOLTIP_OPEN_DELAY}
             placement="top"
-            hasArrow
           >
             <Flex h="full" alignItems="center">
-              <Icon as={FaInfoCircle} />
+              <Icon fontSize="sm" color="base.300" as={PiInfoBold} />
             </Flex>
           </Tooltip>
-          <IAIIconButton
+          <IconButton
             aria-label={t('nodes.removeLinearView')}
             tooltip={t('nodes.removeLinearView')}
             variant="ghost"
             size="sm"
             onClick={handleRemoveField}
-            icon={<FaTrash />}
+            icon={<PiTrashSimpleBold />}
           />
-        </FormLabel>
+        </Flex>
         <InputFieldRenderer nodeId={nodeId} fieldName={fieldName} />
-      </FormControl>
-      <NodeSelectionOverlay isSelected={false} isHovered={isMouseOverNode} />
+        <NodeSelectionOverlay isSelected={false} isHovered={isMouseOverNode} />
+      </Flex>
     </Flex>
   );
 };

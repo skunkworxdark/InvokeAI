@@ -1,13 +1,9 @@
 import { logger } from 'app/logging/logger';
-import { RootState } from 'app/store/store';
-import {
-  ImageDTO,
-  ImageToLatentsInvocation,
-  NonNullableGraph,
-} from 'services/api/types';
+import type { RootState } from 'app/store/store';
+import type { ImageDTO, ImageToLatentsInvocation, NonNullableGraph } from 'services/api/types';
+
 import { addControlNetToLinearGraph } from './addControlNetToLinearGraph';
 import { addIPAdapterToLinearGraph } from './addIPAdapterToLinearGraph';
-import { addLinearUIOutputNode } from './addLinearUIOutputNode';
 import { addNSFWCheckerToGraph } from './addNSFWCheckerToGraph';
 import { addSDXLLoRAsToGraph } from './addSDXLLoRAstoGraph';
 import { addSDXLRefinerToGraph } from './addSDXLRefinerToGraph';
@@ -29,16 +25,13 @@ import {
   SDXL_REFINER_SEAMLESS,
   SEAMLESS,
 } from './constants';
-import { buildSDXLStylePrompts } from './helpers/craftSDXLStylePrompt';
+import { getBoardField, getIsIntermediate, getSDXLStylePrompts } from './graphBuilderUtils';
 import { addCoreMetadataNode } from './metadata';
 
 /**
  * Builds the Canvas tab's Image to Image graph.
  */
-export const buildCanvasSDXLImageToImageGraph = (
-  state: RootState,
-  initialImage: ImageDTO
-): NonNullableGraph => {
+export const buildCanvasSDXLImageToImageGraph = (state: RootState, initialImage: ImageDTO): NonNullableGraph => {
   const log = logger('nodes');
   const {
     positivePrompt,
@@ -53,13 +46,10 @@ export const buildCanvasSDXLImageToImageGraph = (
     shouldUseCpuNoise,
     seamlessXAxis,
     seamlessYAxis,
+    img2imgStrength: strength,
   } = state.generation;
 
-  const {
-    shouldUseSDXLRefiner,
-    refinerStart,
-    sdxlImg2ImgDenoisingStrength: strength,
-  } = state.sdxl;
+  const { refinerModel, refinerStart } = state.sdxl;
 
   // The bounding box determines width and height, not the width and height params
   const { width, height } = state.canvas.boundingBoxDimensions;
@@ -68,9 +58,7 @@ export const buildCanvasSDXLImageToImageGraph = (
 
   const fp32 = vaePrecision === 'fp32';
   const is_intermediate = true;
-  const isUsingScaledDimensions = ['auto', 'manual'].includes(
-    boundingBoxScaleMethod
-  );
+  const isUsingScaledDimensions = ['auto', 'manual'].includes(boundingBoxScaleMethod);
 
   if (!model) {
     log.error('No model found in state');
@@ -83,8 +71,7 @@ export const buildCanvasSDXLImageToImageGraph = (
   const use_cpu = shouldUseCpuNoise;
 
   // Construct Style Prompt
-  const { joinedPositiveStylePrompt, joinedNegativeStylePrompt } =
-    buildSDXLStylePrompts(state);
+  const { positiveStylePrompt, negativeStylePrompt } = getSDXLStylePrompts(state);
 
   /**
    * The easiest way to build linear graphs is to do it in the node editor, then copy and paste the
@@ -108,13 +95,13 @@ export const buildCanvasSDXLImageToImageGraph = (
         type: 'sdxl_compel_prompt',
         id: POSITIVE_CONDITIONING,
         prompt: positivePrompt,
-        style: joinedPositiveStylePrompt,
+        style: positiveStylePrompt,
       },
       [NEGATIVE_CONDITIONING]: {
         type: 'sdxl_compel_prompt',
         id: NEGATIVE_CONDITIONING,
         prompt: negativePrompt,
-        style: joinedNegativeStylePrompt,
+        style: negativeStylePrompt,
       },
       [NOISE]: {
         type: 'noise',
@@ -122,12 +109,8 @@ export const buildCanvasSDXLImageToImageGraph = (
         is_intermediate,
         use_cpu,
         seed,
-        width: !isUsingScaledDimensions
-          ? width
-          : scaledBoundingBoxDimensions.width,
-        height: !isUsingScaledDimensions
-          ? height
-          : scaledBoundingBoxDimensions.height,
+        width: !isUsingScaledDimensions ? width : scaledBoundingBoxDimensions.width,
+        height: !isUsingScaledDimensions ? height : scaledBoundingBoxDimensions.height,
       },
       [IMAGE_TO_LATENTS]: {
         type: 'i2l',
@@ -140,12 +123,11 @@ export const buildCanvasSDXLImageToImageGraph = (
         id: SDXL_DENOISE_LATENTS,
         is_intermediate,
         cfg_scale,
+        cfg_rescale_multiplier,
         scheduler,
         steps,
-        denoising_start: shouldUseSDXLRefiner
-          ? Math.min(refinerStart, 1 - strength)
-          : 1 - strength,
-        denoising_end: shouldUseSDXLRefiner ? refinerStart : 1,
+        denoising_start: refinerModel ? Math.min(refinerStart, 1 - strength) : 1 - strength,
+        denoising_end: refinerModel ? refinerStart : 1,
       },
     },
     edges: [
@@ -263,7 +245,8 @@ export const buildCanvasSDXLImageToImageGraph = (
     graph.nodes[CANVAS_OUTPUT] = {
       id: CANVAS_OUTPUT,
       type: 'img_resize',
-      is_intermediate,
+      is_intermediate: getIsIntermediate(state),
+      board: getBoardField(state),
       width: width,
       height: height,
       use_cache: false,
@@ -310,8 +293,7 @@ export const buildCanvasSDXLImageToImageGraph = (
       use_cache: false,
     };
 
-    (graph.nodes[IMAGE_TO_LATENTS] as ImageToLatentsInvocation).image =
-      initialImage;
+    (graph.nodes[IMAGE_TO_LATENTS] as ImageToLatentsInvocation).image = initialImage;
 
     graph.edges.push({
       source: {
@@ -331,12 +313,8 @@ export const buildCanvasSDXLImageToImageGraph = (
       generation_mode: 'img2img',
       cfg_scale,
       cfg_rescale_multiplier,
-      width: !isUsingScaledDimensions
-        ? width
-        : scaledBoundingBoxDimensions.width,
-      height: !isUsingScaledDimensions
-        ? height
-        : scaledBoundingBoxDimensions.height,
+      width: !isUsingScaledDimensions ? width : scaledBoundingBoxDimensions.width,
+      height: !isUsingScaledDimensions ? height : scaledBoundingBoxDimensions.height,
       positive_prompt: positivePrompt,
       negative_prompt: negativePrompt,
       model,
@@ -346,6 +324,8 @@ export const buildCanvasSDXLImageToImageGraph = (
       scheduler,
       strength,
       init_image: initialImage.image_name,
+      positive_style_prompt: positiveStylePrompt,
+      negative_style_prompt: negativeStylePrompt,
     },
     CANVAS_OUTPUT
   );
@@ -357,13 +337,8 @@ export const buildCanvasSDXLImageToImageGraph = (
   }
 
   // Add Refiner if enabled
-  if (shouldUseSDXLRefiner) {
-    addSDXLRefinerToGraph(
-      state,
-      graph,
-      SDXL_DENOISE_LATENTS,
-      modelLoaderNodeId
-    );
+  if (refinerModel) {
+    addSDXLRefinerToGraph(state, graph, SDXL_DENOISE_LATENTS, modelLoaderNodeId);
     if (seamlessXAxis || seamlessYAxis) {
       modelLoaderNodeId = SDXL_REFINER_SEAMLESS;
     }
@@ -392,8 +367,6 @@ export const buildCanvasSDXLImageToImageGraph = (
     // must add after nsfw checker!
     addWatermarkerToGraph(state, graph, CANVAS_OUTPUT);
   }
-
-  addLinearUIOutputNode(state, graph);
 
   return graph;
 };

@@ -1,38 +1,29 @@
+import type { ControlAdapterType } from 'features/controlAdapters/store/types';
 import { useMemo } from 'react';
 import {
-  controlNetModelsAdapter,
-  ipAdapterModelsAdapter,
-  t2iAdapterModelsAdapter,
+  controlNetModelsAdapterSelectors,
+  ipAdapterModelsAdapterSelectors,
+  t2iAdapterModelsAdapterSelectors,
   useGetControlNetModelsQuery,
   useGetIPAdapterModelsQuery,
   useGetT2IAdapterModelsQuery,
 } from 'services/api/endpoints/models';
-import { ControlAdapterType } from 'features/controlAdapters/store/types';
 
 export const useControlAdapterModels = (type?: ControlAdapterType) => {
   const { data: controlNetModelsData } = useGetControlNetModelsQuery();
   const controlNetModels = useMemo(
-    () =>
-      controlNetModelsData
-        ? controlNetModelsAdapter.getSelectors().selectAll(controlNetModelsData)
-        : [],
+    () => (controlNetModelsData ? controlNetModelsAdapterSelectors.selectAll(controlNetModelsData) : []),
     [controlNetModelsData]
   );
 
   const { data: t2iAdapterModelsData } = useGetT2IAdapterModelsQuery();
   const t2iAdapterModels = useMemo(
-    () =>
-      t2iAdapterModelsData
-        ? t2iAdapterModelsAdapter.getSelectors().selectAll(t2iAdapterModelsData)
-        : [],
+    () => (t2iAdapterModelsData ? t2iAdapterModelsAdapterSelectors.selectAll(t2iAdapterModelsData) : []),
     [t2iAdapterModelsData]
   );
   const { data: ipAdapterModelsData } = useGetIPAdapterModelsQuery();
   const ipAdapterModels = useMemo(
-    () =>
-      ipAdapterModelsData
-        ? ipAdapterModelsAdapter.getSelectors().selectAll(ipAdapterModelsData)
-        : [],
+    () => (ipAdapterModelsData ? ipAdapterModelsAdapterSelectors.selectAll(ipAdapterModelsData) : []),
     [ipAdapterModelsData]
   );
 

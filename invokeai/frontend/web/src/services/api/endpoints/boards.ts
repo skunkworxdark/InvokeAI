@@ -1,50 +1,31 @@
-import {
-  ASSETS_CATEGORIES,
-  IMAGE_CATEGORIES,
-} from 'features/gallery/store/types';
-import {
-  BoardDTO,
-  ListBoardsArg,
-  OffsetPaginatedResults_BoardDTO_,
-  OffsetPaginatedResults_ImageDTO_,
-  UpdateBoardArg,
-} from 'services/api/types';
-import { ApiTagDescription, LIST_TAG, api } from '..';
+import { ASSETS_CATEGORIES, IMAGE_CATEGORIES } from 'features/gallery/store/types';
+import type { BoardDTO, OffsetPaginatedResults_ImageDTO_, UpdateBoardArg } from 'services/api/types';
 import { getListImagesUrl } from 'services/api/util';
+
+import type { ApiTagDescription } from '..';
+import { api, buildV1Url, LIST_TAG } from '..';
+
+/**
+ * Builds an endpoint URL for the boards router
+ * @example
+ * buildBoardsUrl('some-path')
+ * // '/api/v1/boards/some-path'
+ */
+export const buildBoardsUrl = (path: string = '') => buildV1Url(`boards/${path}`);
 
 export const boardsApi = api.injectEndpoints({
   endpoints: (build) => ({
     /**
      * Boards Queries
      */
-    listBoards: build.query<OffsetPaginatedResults_BoardDTO_, ListBoardsArg>({
-      query: (arg) => ({ url: 'boards/', params: arg }),
-      providesTags: (result) => {
-        // any list of boards
-        const tags: ApiTagDescription[] = [{ type: 'Board', id: LIST_TAG }];
-
-        if (result) {
-          // and individual tags for each board
-          tags.push(
-            ...result.items.map(({ board_id }) => ({
-              type: 'Board' as const,
-              id: board_id,
-            }))
-          );
-        }
-
-        return tags;
-      },
-    }),
-
     listAllBoards: build.query<Array<BoardDTO>, void>({
       query: () => ({
-        url: 'boards/',
+        url: buildBoardsUrl(),
         params: { all: true },
       }),
       providesTags: (result) => {
         // any list of boards
-        const tags: ApiTagDescription[] = [{ type: 'Board', id: LIST_TAG }];
+        const tags: ApiTagDescription[] = [{ type: 'Board', id: LIST_TAG }, 'FetchOnReconnect'];
 
         if (result) {
           // and individual tags for each board
@@ -62,11 +43,9 @@ export const boardsApi = api.injectEndpoints({
 
     listAllImageNamesForBoard: build.query<Array<string>, string>({
       query: (board_id) => ({
-        url: `boards/${board_id}/image_names`,
+        url: buildBoardsUrl(`${board_id}/image_names`),
       }),
-      providesTags: (result, error, arg) => [
-        { type: 'ImageNameList', id: arg },
-      ],
+      providesTags: (result, error, arg) => [{ type: 'ImageNameList', id: arg }, 'FetchOnReconnect'],
       keepUnusedDataFor: 0,
     }),
 
@@ -81,9 +60,7 @@ export const boardsApi = api.injectEndpoints({
         }),
         method: 'GET',
       }),
-      providesTags: (result, error, arg) => [
-        { type: 'BoardImagesTotal', id: arg ?? 'none' },
-      ],
+      providesTags: (result, error, arg) => [{ type: 'BoardImagesTotal', id: arg ?? 'none' }, 'FetchOnReconnect'],
       transformResponse: (response: OffsetPaginatedResults_ImageDTO_) => {
         return { total: response.total };
       },
@@ -100,9 +77,7 @@ export const boardsApi = api.injectEndpoints({
         }),
         method: 'GET',
       }),
-      providesTags: (result, error, arg) => [
-        { type: 'BoardAssetsTotal', id: arg ?? 'none' },
-      ],
+      providesTags: (result, error, arg) => [{ type: 'BoardAssetsTotal', id: arg ?? 'none' }, 'FetchOnReconnect'],
       transformResponse: (response: OffsetPaginatedResults_ImageDTO_) => {
         return { total: response.total };
       },
@@ -114,7 +89,7 @@ export const boardsApi = api.injectEndpoints({
 
     createBoard: build.mutation<BoardDTO, string>({
       query: (board_name) => ({
-        url: `boards/`,
+        url: buildBoardsUrl(),
         method: 'POST',
         params: { board_name },
       }),
@@ -123,19 +98,16 @@ export const boardsApi = api.injectEndpoints({
 
     updateBoard: build.mutation<BoardDTO, UpdateBoardArg>({
       query: ({ board_id, changes }) => ({
-        url: `boards/${board_id}`,
+        url: buildBoardsUrl(board_id),
         method: 'PATCH',
         body: changes,
       }),
-      invalidatesTags: (result, error, arg) => [
-        { type: 'Board', id: arg.board_id },
-      ],
+      invalidatesTags: (result, error, arg) => [{ type: 'Board', id: arg.board_id }],
     }),
   }),
 });
 
 export const {
-  useListBoardsQuery,
   useListAllBoardsQuery,
   useGetBoardImagesTotalQuery,
   useGetBoardAssetsTotalQuery,
