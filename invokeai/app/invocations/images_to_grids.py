@@ -24,7 +24,7 @@ from invokeai.app.invocations.baseinvocation import (
     invocation,
     invocation_output,
 )
-from invokeai.app.invocations.constants import SCHEDULER_NAME_VALUES
+from invokeai.app.invocations.constants import LATENT_SCALE_FACTOR, SCHEDULER_NAME_VALUES
 from invokeai.app.invocations.fields import (
     FieldDescriptions,
     InputField,
@@ -51,7 +51,7 @@ from invokeai.app.invocations.primitives import (
 )
 from invokeai.app.invocations.sdxl import SDXLModelLoaderInvocation, SDXLModelLoaderOutput
 
-_downsampling_factor = 8
+_downsampling_factor = LATENT_SCALE_FACTOR
 
 # numeric pattern
 # - ^s* - start of line then any whitespace
@@ -395,7 +395,7 @@ class SchedulerToStringInvocation(BaseInvocation):
     )
 
     def invoke(self, context: InvocationContext) -> StringOutput:
-        return StringOutput(value=str(self.scheduler))
+        return StringOutput(value=self.scheduler)
 
 
 @invocation(
