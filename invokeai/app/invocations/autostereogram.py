@@ -7,21 +7,13 @@ from PIL import Image, ImageOps
 
 from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
-    FieldDescriptions,
-    Input,
-    InputField,
     InvocationContext,
-    WithMetadata,
     invocation,
 )
+from invokeai.app.invocations.fields import InputField, WithBoard, WithMetadata
 from invokeai.app.invocations.primitives import (
-    BoardField,
     ImageField,
     ImageOutput,
-)
-from invokeai.app.services.image_records.image_records_common import (
-    ImageCategory,
-    ResourceOrigin,
 )
 
 
@@ -32,11 +24,11 @@ from invokeai.app.services.image_records.image_records_common import (
     category="image",
     version="1.0.0",
 )
-class AutostereogramInvocation(BaseInvocation, WithMetadata):
+class AutostereogramInvocation(BaseInvocation, WithMetadata, WithBoard):
     """create an autostereogram from a depth map"""
 
     # Inputs
-    board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
+    #    board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     depth_map: ImageField = InputField(description="The depth map to create the autostereogram from")
     pattern: Optional[ImageField] = InputField(
         default=None,
@@ -58,7 +50,7 @@ class AutostereogramInvocation(BaseInvocation, WithMetadata):
 
     def invoke(self, context: InvocationContext) -> ImageOutput:
         # Load the depth map and ensure grayscale
-        depth_map = context.services.images.get_pil_image(self.depth_map.image_name).convert("L")
+        depth_map = context.images.get_pil(self.depth_map.image_name, "L")
 
         # Calculate the pattern width
         pattern_width = int(depth_map.width / self.pattern_divisions)
@@ -72,7 +64,7 @@ class AutostereogramInvocation(BaseInvocation, WithMetadata):
 
         if self.pattern:
             # Load the pattern
-            pattern = context.services.images.get_pil_image(self.pattern.image_name).convert("RGB")
+            pattern = context.images.get_pil(self.pattern.image_name, "RGB")
 
             # Resize pattern width
             pattern_height = int(pattern_width * (pattern.height / pattern.width))
@@ -106,23 +98,9 @@ class AutostereogramInvocation(BaseInvocation, WithMetadata):
             output_image = output_image.convert("L")
 
         # Save the image
-        image_dto = context.services.images.create(
-            image=output_image,
-            image_origin=ResourceOrigin.INTERNAL,
-            image_category=ImageCategory.GENERAL,
-            board_id=self.board.board_id if self.board else None,
-            node_id=self.id,
-            session_id=context.graph_execution_state_id,
-            is_intermediate=self.is_intermediate,
-            metadata=self.metadata,
-            workflow=context.workflow,
-        )
+        image_dto = context.images.save(image=output_image)
 
-        return ImageOutput(
-            image=ImageField(image_name=image_dto.image_name),
-            width=image_dto.width,
-            height=image_dto.height,
-        )
+        return ImageOutput.build(image_dto)
 
 
 @invocation(
@@ -132,11 +110,11 @@ class AutostereogramInvocation(BaseInvocation, WithMetadata):
     category="image",
     version="1.0.0",
 )
-class AdvAutostereogramInvocation(BaseInvocation, WithMetadata):
+class AdvAutostereogramInvocation(BaseInvocation, WithMetadata, WithBoard):
     """create an advanced autostereogram from a depth map"""
 
     # Inputs
-    board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
+    #    board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     depth_map: ImageField = InputField(description="The depth map to create the image from")
     pattern: Optional[ImageField] = InputField(
         default=None,
@@ -163,7 +141,7 @@ class AdvAutostereogramInvocation(BaseInvocation, WithMetadata):
 
     def invoke(self, context: InvocationContext) -> ImageOutput:
         # Load the depth map
-        depth_map = context.services.images.get_pil_image(self.depth_map.image_name).convert("L")
+        depth_map = context.images.get_pil(self.depth_map.image_name, "L")
 
         # extend the left of the depthmap by the separation value
         depth_map = ImageOps.expand(depth_map, border=(self.pattern_width, 0, 0, 0), fill=0)
@@ -175,7 +153,7 @@ class AdvAutostereogramInvocation(BaseInvocation, WithMetadata):
         pattern_width = self.pattern_width
         if self.pattern:
             # Load the pattern
-            pattern = context.services.images.get_pil_image(self.pattern.image_name).convert("RGB")
+            pattern = context.images.get_pil(self.pattern.image_name, "RGB")
 
             # Resize pattern width to separation size
             pattern_height = int(pattern_width * (pattern.height / pattern.width))
@@ -209,20 +187,6 @@ class AdvAutostereogramInvocation(BaseInvocation, WithMetadata):
             output_image = output_image.convert("L")
 
         # Save the image
-        image_dto = context.services.images.create(
-            image=output_image,
-            image_origin=ResourceOrigin.INTERNAL,
-            image_category=ImageCategory.GENERAL,
-            board_id=self.board.board_id if self.board else None,
-            node_id=self.id,
-            session_id=context.graph_execution_state_id,
-            is_intermediate=self.is_intermediate,
-            metadata=self.metadata,
-            workflow=context.workflow,
-        )
+        image_dto = context.images.save(image=output_image)
 
-        return ImageOutput(
-            image=ImageField(image_name=image_dto.image_name),
-            width=image_dto.width,
-            height=image_dto.height,
-        )
+        return ImageOutput.build(image_dto)
