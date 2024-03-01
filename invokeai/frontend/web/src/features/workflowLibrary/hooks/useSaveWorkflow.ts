@@ -3,7 +3,8 @@ import { useToast } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
 import { $builtWorkflow } from 'features/nodes/hooks/useWorkflowWatcher';
 import { workflowIDChanged, workflowSaved } from 'features/nodes/store/workflowSlice';
-import type { WorkflowV2 } from 'features/nodes/types/workflow';
+import type { WorkflowV3 } from 'features/nodes/types/workflow';
+import { workflowUpdated } from 'features/workflowLibrary/store/actions';
 import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCreateWorkflowMutation, useUpdateWorkflowMutation, workflowsApi } from 'services/api/endpoints/workflows';
@@ -17,7 +18,7 @@ type UseSaveLibraryWorkflowReturn = {
 
 type UseSaveLibraryWorkflow = () => UseSaveLibraryWorkflowReturn;
 
-export const isWorkflowWithID = (workflow: WorkflowV2): workflow is O.Required<WorkflowV2, 'id'> =>
+export const isWorkflowWithID = (workflow: WorkflowV3): workflow is O.Required<WorkflowV3, 'id'> =>
   Boolean(workflow.id);
 
 export const useSaveLibraryWorkflow: UseSaveLibraryWorkflow = () => {
@@ -41,6 +42,7 @@ export const useSaveLibraryWorkflow: UseSaveLibraryWorkflow = () => {
     try {
       if (isWorkflowWithID(workflow)) {
         await updateWorkflow(workflow).unwrap();
+        dispatch(workflowUpdated());
       } else {
         const data = await createWorkflow(workflow).unwrap();
         dispatch(workflowIDChanged(data.workflow.id));

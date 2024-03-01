@@ -1,10 +1,10 @@
 import { logger } from 'app/logging/logger';
 import type { RootState } from 'app/store/store';
+import { getBoardField, getIsIntermediate } from 'features/nodes/util/graph/graphBuilderUtils';
 import type { ImageDTO, ImageToLatentsInvocation, NonNullableGraph } from 'services/api/types';
 
 import { addControlNetToLinearGraph } from './addControlNetToLinearGraph';
 import { addIPAdapterToLinearGraph } from './addIPAdapterToLinearGraph';
-import { addLinearUIOutputNode } from './addLinearUIOutputNode';
 import { addLoRAsToGraph } from './addLoRAsToGraph';
 import { addNSFWCheckerToGraph } from './addNSFWCheckerToGraph';
 import { addSeamlessToLinearGraph } from './addSeamlessToLinearGraph';
@@ -123,6 +123,7 @@ export const buildCanvasImageToImageGraph = (state: RootState, initialImage: Ima
         id: DENOISE_LATENTS,
         is_intermediate,
         cfg_scale,
+        cfg_rescale_multiplier,
         scheduler,
         steps,
         denoising_start: 1 - strength,
@@ -131,7 +132,8 @@ export const buildCanvasImageToImageGraph = (state: RootState, initialImage: Ima
       [CANVAS_OUTPUT]: {
         type: 'l2i',
         id: CANVAS_OUTPUT,
-        is_intermediate,
+        is_intermediate: getIsIntermediate(state),
+        board: getBoardField(state),
         use_cache: false,
       },
     },
@@ -241,7 +243,8 @@ export const buildCanvasImageToImageGraph = (state: RootState, initialImage: Ima
     graph.nodes[CANVAS_OUTPUT] = {
       id: CANVAS_OUTPUT,
       type: 'img_resize',
-      is_intermediate,
+      is_intermediate: getIsIntermediate(state),
+      board: getBoardField(state),
       width: width,
       height: height,
       use_cache: false,
@@ -283,7 +286,8 @@ export const buildCanvasImageToImageGraph = (state: RootState, initialImage: Ima
     graph.nodes[CANVAS_OUTPUT] = {
       type: 'l2i',
       id: CANVAS_OUTPUT,
-      is_intermediate,
+      is_intermediate: getIsIntermediate(state),
+      board: getBoardField(state),
       fp32,
       use_cache: false,
     };
@@ -353,8 +357,6 @@ export const buildCanvasImageToImageGraph = (state: RootState, initialImage: Ima
     // must add after nsfw checker!
     addWatermarkerToGraph(state, graph, CANVAS_OUTPUT);
   }
-
-  addLinearUIOutputNode(state, graph);
 
   return graph;
 };

@@ -5,13 +5,6 @@
 
 
 export type paths = {
-  "/api/v1/sessions/{session_id}": {
-    /**
-     * Get Session
-     * @description Gets a session
-     */
-    get: operations["get_session"];
-  };
   "/api/v1/utilities/dynamicprompts": {
     /**
      * Parse Dynamicprompts
@@ -19,80 +12,22 @@ export type paths = {
      */
     post: operations["parse_dynamicprompts"];
   };
-  "/api/v1/models/": {
-    /**
-     * List Models
-     * @description Gets a list of models
-     */
-    get: operations["list_models"];
-  };
-  "/api/v1/models/{base_model}/{model_type}/{model_name}": {
-    /**
-     * Delete Model
-     * @description Delete Model
-     */
-    delete: operations["del_model"];
-    /**
-     * Update Model
-     * @description Update model contents with a new config. If the model name or base fields are changed, then the model is renamed.
-     */
-    patch: operations["update_model"];
-  };
-  "/api/v1/models/import": {
-    /**
-     * Import Model
-     * @description Add a model using its local path, repo_id, or remote URL. Model characteristics will be probed and configured automatically
-     */
-    post: operations["import_model"];
-  };
-  "/api/v1/models/add": {
-    /**
-     * Add Model
-     * @description Add a model using the configuration information appropriate for its type. Only local models can be added by path
-     */
-    post: operations["add_model"];
-  };
-  "/api/v1/models/convert/{base_model}/{model_type}/{model_name}": {
-    /**
-     * Convert Model
-     * @description Convert a checkpoint model into a diffusers model, optionally saving to the indicated destination directory, or `models` if none.
-     */
-    put: operations["convert_model"];
-  };
-  "/api/v1/models/search": {
-    /** Search For Models */
-    get: operations["search_for_models"];
-  };
-  "/api/v1/models/ckpt_confs": {
-    /**
-     * List Ckpt Configs
-     * @description Return a list of the legacy checkpoint configuration files stored in `ROOT/configs/stable-diffusion`, relative to ROOT.
-     */
-    get: operations["list_ckpt_configs"];
-  };
-  "/api/v1/models/sync": {
-    /**
-     * Sync To Config
-     * @description Call after making changes to models.yaml, autoimport directories or models directory to synchronize
-     * in-memory data structures with disk data structures.
-     */
-    post: operations["sync_to_config"];
-  };
-  "/api/v1/models/merge/{base_model}": {
-    /**
-     * Merge Models
-     * @description Convert a checkpoint model into a diffusers model
-     */
-    put: operations["merge_models"];
-  };
-  "/api/v1/model/record/": {
+  "/api/v2/models/": {
     /**
      * List Model Records
      * @description Get a list of models.
      */
     get: operations["list_model_records"];
   };
-  "/api/v1/model/record/i/{key}": {
+  "/api/v2/models/get_by_attrs": {
+    /**
+     * Get Model Records By Attrs
+     * @description Gets a model by its attributes. The main use of this route is to provide backwards compatibility with the old
+     * model manager, which identified models by a combination of name, base and type.
+     */
+    get: operations["get_model_records_by_attrs"];
+  };
+  "/api/v2/models/i/{key}": {
     /**
      * Get Model Record
      * @description Get a model record
@@ -112,114 +47,110 @@ export type paths = {
      */
     patch: operations["update_model_record"];
   };
-  "/api/v1/model/record/meta": {
+  "/api/v2/models/summary": {
     /**
      * List Model Summary
      * @description Gets a page of model summary data.
      */
     get: operations["list_model_summary"];
   };
-  "/api/v1/model/record/meta/i/{key}": {
+  "/api/v2/models/i/{key}/metadata": {
     /**
      * Get Model Metadata
      * @description Get a model metadata object.
      */
     get: operations["get_model_metadata"];
   };
-  "/api/v1/model/record/tags": {
+  "/api/v2/models/tags": {
     /**
      * List Tags
      * @description Get a unique set of all the model tags.
      */
     get: operations["list_tags"];
   };
-  "/api/v1/model/record/tags/search": {
+  "/api/v2/models/scan_folder": {
+    /** Scan For Models */
+    get: operations["scan_for_models"];
+  };
+  "/api/v2/models/tags/search": {
     /**
      * Search By Metadata Tags
      * @description Get a list of models.
      */
     get: operations["search_by_metadata_tags"];
   };
-  "/api/v1/model/record/i/": {
+  "/api/v2/models/i/": {
     /**
      * Add Model Record
      * @description Add a model using the configuration information appropriate for its type.
      */
     post: operations["add_model_record"];
   };
-  "/api/v1/model/record/import": {
+  "/api/v2/models/install": {
     /**
-     * List Model Install Jobs
-     * @description Return list of model install jobs.
-     */
-    get: operations["list_model_install_jobs"];
-    /**
-     * Import Model
-     * @description Add a model using its local path, repo_id, or remote URL.
+     * Install Model
+     * @description Install a model using a string identifier.
+     *
+     * `source` can be any of the following.
+     *
+     * 1. A path on the local filesystem ('C:\users\fred\model.safetensors')
+     * 2. A Url pointing to a single downloadable model file
+     * 3. A HuggingFace repo_id with any of the following formats:
+     *    - model/name
+     *    - model/name:fp16:vae
+     *    - model/name::vae          -- use default precision
+     *    - model/name:fp16:path/to/model.safetensors
+     *    - model/name::path/to/model.safetensors
+     *
+     * `config` is an optional dict containing model configuration values that will override
+     * the ones that are probed automatically.
+     *
+     * `access_token` is an optional access token for use with Urls that require
+     * authentication.
      *
      * Models will be downloaded, probed, configured and installed in a
      * series of background threads. The return object has `status` attribute
      * that can be used to monitor progress.
      *
-     * The source object is a discriminated Union of LocalModelSource,
-     * HFModelSource and URLModelSource. Set the "type" field to the
-     * appropriate value:
-     *
-     * * To install a local path using LocalModelSource, pass a source of form:
-     *   `{
-     *     "type": "local",
-     *     "path": "/path/to/model",
-     *     "inplace": false
-     *   }`
-     *    The "inplace" flag, if true, will register the model in place in its
-     *    current filesystem location. Otherwise, the model will be copied
-     *    into the InvokeAI models directory.
-     *
-     * * To install a HuggingFace repo_id using HFModelSource, pass a source of form:
-     *   `{
-     *     "type": "hf",
-     *     "repo_id": "stabilityai/stable-diffusion-2.0",
-     *     "variant": "fp16",
-     *     "subfolder": "vae",
-     *     "access_token": "f5820a918aaf01"
-     *   }`
-     *  The `variant`, `subfolder` and `access_token` fields are optional.
-     *
-     * * To install a remote model using an arbitrary URL, pass:
-     *   `{
-     *     "type": "url",
-     *     "url": "http://www.civitai.com/models/123456",
-     *     "access_token": "f5820a918aaf01"
-     *   }`
-     * The `access_token` field is optonal
-     *
-     * The model's configuration record will be probed and filled in
-     * automatically.  To override the default guesses, pass "metadata"
-     * with a Dict containing the attributes you wish to override.
-     *
-     * Installation occurs in the background. Either use list_model_install_jobs()
-     * to poll for completion, or listen on the event bus for the following events:
-     *
-     *   "model_install_running"
-     *   "model_install_completed"
-     *   "model_install_error"
-     *
-     * On successful completion, the event's payload will contain the field "key"
-     * containing the installed ID of the model. On an error, the event's payload
-     * will contain the fields "error_type" and "error" describing the nature of the
-     * error and its traceback, respectively.
+     * See the documentation for `import_model_record` for more information on
+     * interpreting the job information returned by this route.
      */
-    post: operations["import_model_record"];
+    post: operations["install_model"];
+  };
+  "/api/v2/models/import": {
+    /**
+     * List Model Install Jobs
+     * @description Return the list of model install jobs.
+     *
+     * Install jobs have a numeric `id`, a `status`, and other fields that provide information on
+     * the nature of the job and its progress. The `status` is one of:
+     *
+     * * "waiting" -- Job is waiting in the queue to run
+     * * "downloading" -- Model file(s) are downloading
+     * * "running" -- Model has downloaded and the model probing and registration process is running
+     * * "completed" -- Installation completed successfully
+     * * "error" -- An error occurred. Details will be in the "error_type" and "error" fields.
+     * * "cancelled" -- Job was cancelled before completion.
+     *
+     * Once completed, information about the model such as its size, base
+     * model, type, and metadata can be retrieved from the `config_out`
+     * field. For multi-file models such as diffusers, information on individual files
+     * can be retrieved from `download_parts`.
+     *
+     * See the example and schema below for more information.
+     */
+    get: operations["list_model_install_jobs"];
     /**
      * Prune Model Install Jobs
      * @description Prune all completed and errored jobs from the install job list.
      */
     patch: operations["prune_model_install_jobs"];
   };
-  "/api/v1/model/record/import/{id}": {
+  "/api/v2/models/import/{id}": {
     /**
      * Get Model Install Job
-     * @description Return model install job corresponding to the given source.
+     * @description Return model install job corresponding to the given source. See the documentation for 'List Model Install Jobs'
+     * for information on the format of the return value.
      */
     get: operations["get_model_install_job"];
     /**
@@ -228,7 +159,7 @@ export type paths = {
      */
     delete: operations["cancel_model_install_job"];
   };
-  "/api/v1/model/record/sync": {
+  "/api/v2/models/sync": {
     /**
      * Sync Models To Config
      * @description Traverse the models and autoimport directories.
@@ -237,6 +168,32 @@ export type paths = {
      * record in the database are added. Orphan records without a models file are deleted.
      */
     patch: operations["sync_models_to_config"];
+  };
+  "/api/v2/models/convert/{key}": {
+    /**
+     * Convert Model
+     * @description Permanently convert a model into diffusers format, replacing the safetensors version.
+     * Note that during the conversion process the key and model hash will change.
+     * The return value is the model configuration for the converted model.
+     */
+    put: operations["convert_model"];
+  };
+  "/api/v2/models/merge": {
+    /**
+     * Merge
+     * @description Merge diffusers models. The process is controlled by a set parameters provided in the body of the request.
+     * ```
+     * Argument                Description [default]
+     * --------               ----------------------
+     * keys                   List of 2-3 model keys to merge together. All models must use the same base type.
+     * merged_model_name      Name for the merged model [Concat model names]
+     * alpha                  Alpha value (0.0-1.0). Higher values give more weight to the second model [0.5]
+     * force                  If true, force the merge even if the models were generated by different versions of the diffusers library [False]
+     * interp                 Interpolation method. One of "weighted_sum", "sigmoid", "inv_sigmoid" or "add_difference" [weighted_sum]
+     * merge_dest_directory   Specify a directory to store the merged model in [models directory]
+     * ```
+     */
+    put: operations["merge"];
   };
   "/api/v1/download_queue/": {
     /**
@@ -371,6 +328,13 @@ export type paths = {
   "/api/v1/images/download": {
     /** Download Images From List */
     post: operations["download_images_from_list"];
+  };
+  "/api/v1/images/download/{bulk_download_item_name}": {
+    /**
+     * Get Bulk Download Item
+     * @description Gets a bulk download zip file
+     */
+    get: operations["get_bulk_download_item"];
   };
   "/api/v1/boards/": {
     /**
@@ -608,7 +572,7 @@ export type paths = {
   };
 };
 
-export type webhooks = Record<string, never>;
+type webhooks = Record<string, never>;
 
 export type components = {
   schemas: {
@@ -801,6 +765,12 @@ export type components = {
        */
       type?: "basemetadata";
     };
+    /**
+     * BaseModelType
+     * @description Base model type.
+     * @enum {string}
+     */
+    BaseModelType: "any" | "sd-1" | "sd-2" | "sdxl" | "sdxl-refiner";
     /** Batch */
     Batch: {
       /**
@@ -890,6 +860,8 @@ export type components = {
      * @description Creates a blank image and forwards it to the pipeline
      */
     BlankImageInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -1127,10 +1099,10 @@ export type components = {
        * Image Names
        * @description The list of names of images to download
        */
-      image_names: string[];
+      image_names?: string[] | null;
       /**
        * Board Id
-       * @description The board from which image should be downloaded from
+       * @description The board from which image should be downloaded
        */
       board_id?: string | null;
     };
@@ -1145,33 +1117,37 @@ export type components = {
        */
       prepend?: boolean;
     };
-    /** Body_import_model */
-    Body_import_model: {
+    /** Body_merge */
+    Body_merge: {
       /**
-       * Location
-       * @description A model path, repo_id or URL to import
+       * Keys
+       * @description Keys for two to three models to merge
        */
-      location: string;
+      keys: string[];
       /**
-       * Prediction Type
-       * @description Prediction type for SDv2 checkpoints and rare SDv1 checkpoints
+       * Merged Model Name
+       * @description Name of destination model
        */
-      prediction_type?: ("v_prediction" | "epsilon" | "sample") | null;
-    };
-    /** Body_import_model_record */
-    Body_import_model_record: {
-      /** Source */
-      source: components["schemas"]["LocalModelSource"] | components["schemas"]["HFModelSource"] | components["schemas"]["CivitaiModelSource"] | components["schemas"]["URLModelSource"];
+      merged_model_name?: string | null;
       /**
-       * Config
-       * @description Dict of fields that override auto-probed values in the model config record, such as name, description and prediction_type
+       * Alpha
+       * @description Alpha weighting strength to apply to 2d and 3d models
+       * @default 0.5
        */
-      config?: Record<string, never> | null;
-    };
-    /** Body_merge_models */
-    Body_merge_models: {
-      /** @description Model configuration */
-      body: components["schemas"]["MergeModelsBody"];
+      alpha?: number;
+      /**
+       * Force
+       * @description Force merging of models created with different versions of diffusers
+       * @default false
+       */
+      force?: boolean;
+      /** @description Interpolation method */
+      interp?: components["schemas"]["MergeInterpolationMethod"] | null;
+      /**
+       * Merge Dest Directory
+       * @description Save the merged model to the designated directory (with 'merged_model_name' appended)
+       */
+      merge_dest_directory?: string | null;
     };
     /** Body_parse_dynamicprompts */
     Body_parse_dynamicprompts: {
@@ -1364,17 +1340,24 @@ export type components = {
      * @description Model config for ClipVision.
      */
     CLIPVisionDiffusersConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default clip_vision
        * @constant
        */
-      type?: "clip_vision";
+      type: "clip_vision";
       /**
        * Format
        * @constant
@@ -1385,62 +1368,48 @@ export type components = {
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
-    };
-    /** CLIPVisionModelDiffusersConfig */
-    CLIPVisionModelDiffusersConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
+      source: string | null;
       /**
-       * Model Type
-       * @default clip_vision
-       * @constant
+       * Last Modified
+       * @description timestamp for modification time
        */
-      model_type: "clip_vision";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "diffusers";
-      error?: components["schemas"]["ModelError"] | null;
+      last_modified: number | null;
     };
     /** CLIPVisionModelField */
     CLIPVisionModelField: {
       /**
-       * Model Name
-       * @description Name of the CLIP Vision image encoder model
+       * Key
+       * @description Key to the CLIP Vision image encoder model
        */
-      model_name: string;
-      /** @description Base model (usually 'Any') */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
+      key: string;
     };
     /**
      * CV2 Infill
      * @description Infills transparent areas of an image using OpenCV Inpainting
      */
     CV2InfillInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -1676,6 +1645,8 @@ export type components = {
      * @description Canny edge detection for ControlNet
      */
     CannyImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -1715,6 +1686,51 @@ export type components = {
        * @constant
        */
       type: "canny_image_processor";
+    };
+    /**
+     * Canvas Paste Back
+     * @description Combines two images by using the mask provided. Intended for use on the Unified Canvas.
+     */
+    CanvasPasteBackInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
+      /** @description Optional metadata to be saved with the image */
+      metadata?: components["schemas"]["MetadataField"] | null;
+      /**
+       * Id
+       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
+       */
+      id: string;
+      /**
+       * Is Intermediate
+       * @description Whether or not this is an intermediate invocation.
+       * @default false
+       */
+      is_intermediate?: boolean;
+      /**
+       * Use Cache
+       * @description Whether or not to use the cache
+       * @default true
+       */
+      use_cache?: boolean;
+      /** @description The source image */
+      source_image?: components["schemas"]["ImageField"];
+      /** @description The target image */
+      target_image?: components["schemas"]["ImageField"];
+      /** @description The mask to use when pasting */
+      mask?: components["schemas"]["ImageField"];
+      /**
+       * Mask Blur
+       * @description The amount to blur the mask by
+       * @default 0
+       */
+      mask_blur?: number;
+      /**
+       * type
+       * @default canvas_paste_back
+       * @constant
+       */
+      type: "canvas_paste_back";
     };
     /**
      * Center Pad or Crop Image
@@ -1977,8 +1993,9 @@ export type components = {
       /**
        * CLIP
        * @description CLIP (tokenizer, text encoder, LoRAs) and skipped layer count
+       * @default null
        */
-      clip?: components["schemas"]["ClipField"] | null;
+      clip: components["schemas"]["ClipField"] | null;
       /**
        * type
        * @default clip_skip_output
@@ -2063,6 +2080,8 @@ export type components = {
      * using a mask to only color-correct certain regions of the target image.
      */
     ColorCorrectInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -2171,6 +2190,8 @@ export type components = {
      * @description Generates a color map from the provided image
      */
     ColorMapImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -2378,6 +2399,8 @@ export type components = {
      * @description Applies content shuffle processing to image
      */
     ContentShuffleImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -2480,46 +2503,61 @@ export type components = {
      * @description Model config for ControlNet models (diffusers version).
      */
     ControlNetCheckpointConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default controlnet
        * @constant
        */
-      type?: "controlnet";
+      type: "controlnet";
       /**
        * Format
        * @default checkpoint
        * @constant
        */
-      format?: "checkpoint";
+      format: "checkpoint";
       /**
        * Key
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
       /**
        * Config
        * @description path to the checkpoint model config file
@@ -2531,46 +2569,63 @@ export type components = {
      * @description Model config for ControlNet models (diffusers version).
      */
     ControlNetDiffusersConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default controlnet
        * @constant
        */
-      type?: "controlnet";
+      type: "controlnet";
       /**
        * Format
        * @default diffusers
        * @constant
        */
-      format?: "diffusers";
+      format: "diffusers";
       /**
        * Key
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
+      /** @default */
+      repo_variant?: components["schemas"]["ModelRepoVariant"] | null;
     };
     /**
      * ControlNet
@@ -2637,64 +2692,16 @@ export type components = {
        */
       type: "controlnet";
     };
-    /** ControlNetModelCheckpointConfig */
-    ControlNetModelCheckpointConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default controlnet
-       * @constant
-       */
-      model_type: "controlnet";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "checkpoint";
-      error?: components["schemas"]["ModelError"] | null;
-      /** Config */
-      config: string;
-    };
-    /** ControlNetModelDiffusersConfig */
-    ControlNetModelDiffusersConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default controlnet
-       * @constant
-       */
-      model_type: "controlnet";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "diffusers";
-      error?: components["schemas"]["ModelError"] | null;
-    };
     /**
      * ControlNetModelField
      * @description ControlNet model field
      */
     ControlNetModelField: {
       /**
-       * Model Name
-       * @description Name of the ControlNet model
+       * Key
+       * @description Model config record key for the ControlNet model
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
+      key: string;
     };
     /**
      * ControlOutput
@@ -2949,6 +2956,55 @@ export type components = {
       type: "create_denoise_mask";
     };
     /**
+     * Create Gradient Mask
+     * @description Creates mask for denoising model run.
+     */
+    CreateGradientMaskInvocation: {
+      /**
+       * Id
+       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
+       */
+      id: string;
+      /**
+       * Is Intermediate
+       * @description Whether or not this is an intermediate invocation.
+       * @default false
+       */
+      is_intermediate?: boolean;
+      /**
+       * Use Cache
+       * @description Whether or not to use the cache
+       * @default true
+       */
+      use_cache?: boolean;
+      /** @description Image which will be masked */
+      mask?: components["schemas"]["ImageField"];
+      /**
+       * Edge Radius
+       * @description How far to blur/expand the edges of the mask
+       * @default 16
+       */
+      edge_radius?: number;
+      /**
+       * Coherence Mode
+       * @default Gaussian Blur
+       * @enum {string}
+       */
+      coherence_mode?: "Gaussian Blur" | "Box Blur" | "Staged";
+      /**
+       * Minimum Denoise
+       * @description Minimum denoise level for the coherence region
+       * @default 0
+       */
+      minimum_denoise?: number;
+      /**
+       * type
+       * @default create_gradient_mask
+       * @constant
+       */
+      type: "create_gradient_mask";
+    };
+    /**
      * Crop Latents
      * @description Crops a latent-space tensor to a box specified in image-space. The box dimensions and coordinates must be
      * divisible by the latent scale factor of 8.
@@ -3023,6 +3079,8 @@ export type components = {
      * @description Simple inpaint using opencv.
      */
     CvInpaintInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -3052,6 +3110,62 @@ export type components = {
        * @constant
        */
       type: "cv_inpaint";
+    };
+    /**
+     * DW Openpose Image Processor
+     * @description Generates an openpose pose from an image using DWPose
+     */
+    DWOpenposeImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
+      /** @description Optional metadata to be saved with the image */
+      metadata?: components["schemas"]["MetadataField"] | null;
+      /**
+       * Id
+       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
+       */
+      id: string;
+      /**
+       * Is Intermediate
+       * @description Whether or not this is an intermediate invocation.
+       * @default false
+       */
+      is_intermediate?: boolean;
+      /**
+       * Use Cache
+       * @description Whether or not to use the cache
+       * @default true
+       */
+      use_cache?: boolean;
+      /** @description The image to process */
+      image?: components["schemas"]["ImageField"];
+      /**
+       * Draw Body
+       * @default true
+       */
+      draw_body?: boolean;
+      /**
+       * Draw Face
+       * @default false
+       */
+      draw_face?: boolean;
+      /**
+       * Draw Hands
+       * @default false
+       */
+      draw_hands?: boolean;
+      /**
+       * Image Resolution
+       * @description Pixel resolution for output image
+       * @default 512
+       */
+      image_resolution?: number;
+      /**
+       * type
+       * @default dw_openpose_image_processor
+       * @constant
+       */
+      type: "dw_openpose_image_processor";
     };
     /** DeleteBoardResult */
     DeleteBoardResult: {
@@ -3182,8 +3296,15 @@ export type components = {
       /**
        * Masked Latents Name
        * @description The name of the masked image latents
+       * @default null
        */
       masked_latents_name?: string | null;
+      /**
+       * Gradient
+       * @description Used for gradient inpainting
+       * @default false
+       */
+      gradient?: boolean;
     };
     /**
      * DenoiseMaskOutput
@@ -3204,6 +3325,8 @@ export type components = {
      * @description Generates a depth map based on the Depth Anything algorithm
      */
     DepthAnythingImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -3437,6 +3560,8 @@ export type components = {
      * @description Upscales an image using RealESRGAN.
      */
     ESRGANInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -3535,6 +3660,8 @@ export type components = {
      * @description Outputs an image with detected face IDs printed on each face. For use with other FaceTools.
      */
     FaceIdentifierInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -4022,6 +4149,19 @@ export type components = {
        */
       type: "float_to_int";
     };
+    /** FoundModel */
+    FoundModel: {
+      /**
+       * Path
+       * @description Path to the model
+       */
+      path: string;
+      /**
+       * Is Installed
+       * @description Whether or not the model is already installed
+       */
+      is_installed: boolean;
+    };
     /**
      * FreeUConfig
      * @description Configuration for the FreeU hyperparameters.
@@ -4118,19 +4258,19 @@ export type components = {
        * Id
        * @description The id of this graph
        */
-      id?: string;
+      id?: string | null;
       /**
        * Nodes
        * @description The nodes in this graph
        */
-      nodes?: {
-        [key: string]: components["schemas"]["LatentConsistencyInvocation"] | components["schemas"]["SDXLModelLoaderInvocation"] | components["schemas"]["CannyImageProcessorInvocation"] | components["schemas"]["MidasDepthImageProcessorInvocation"] | components["schemas"]["FloatToIntegerInvocation"] | components["schemas"]["ControlNetInvocation"] | components["schemas"]["ScaleLatentsInvocation"] | components["schemas"]["FloatCollectionInvocation"] | components["schemas"]["ImageChannelMultiplyInvocation"] | components["schemas"]["DynamicPromptInvocation"] | components["schemas"]["BooleanCollectionInvocation"] | components["schemas"]["HedImageProcessorInvocation"] | components["schemas"]["LoraLoaderInvocation"] | components["schemas"]["AddInvocation"] | components["schemas"]["StringSplitInvocation"] | components["schemas"]["CompelInvocation"] | components["schemas"]["MediapipeFaceProcessorInvocation"] | components["schemas"]["ImagePasteInvocation"] | components["schemas"]["MergeTilesToImageInvocation"] | components["schemas"]["ImageResizeInvocation"] | components["schemas"]["CV2InfillInvocation"] | components["schemas"]["ImageChannelInvocation"] | components["schemas"]["StringReplaceInvocation"] | components["schemas"]["SeamlessModeInvocation"] | components["schemas"]["LinearUIOutputInvocation"] | components["schemas"]["PromptsFromFileInvocation"] | components["schemas"]["RangeInvocation"] | components["schemas"]["IPAdapterInvocation"] | components["schemas"]["ConditioningCollectionInvocation"] | components["schemas"]["ImageChannelOffsetInvocation"] | components["schemas"]["CalculateImageTilesMinimumOverlapInvocation"] | components["schemas"]["MlsdImageProcessorInvocation"] | components["schemas"]["MaskFromAlphaInvocation"] | components["schemas"]["LaMaInfillInvocation"] | components["schemas"]["BooleanInvocation"] | components["schemas"]["ONNXLatentsToImageInvocation"] | components["schemas"]["ResizeLatentsInvocation"] | components["schemas"]["LineartAnimeImageProcessorInvocation"] | components["schemas"]["RoundInvocation"] | components["schemas"]["CenterPadCropInvocation"] | components["schemas"]["BlendLatentsInvocation"] | components["schemas"]["FreeUInvocation"] | components["schemas"]["ShowImageInvocation"] | components["schemas"]["LineartImageProcessorInvocation"] | components["schemas"]["DivideInvocation"] | components["schemas"]["VaeLoaderInvocation"] | components["schemas"]["CvInpaintInvocation"] | components["schemas"]["ImageLerpInvocation"] | components["schemas"]["SaveImageInvocation"] | components["schemas"]["LatentsToImageInvocation"] | components["schemas"]["ZoeDepthImageProcessorInvocation"] | components["schemas"]["FloatMathInvocation"] | components["schemas"]["SDXLRefinerCompelPromptInvocation"] | components["schemas"]["ImageCropInvocation"] | components["schemas"]["MaskCombineInvocation"] | components["schemas"]["CalculateImageTilesEvenSplitInvocation"] | components["schemas"]["StringSplitNegInvocation"] | components["schemas"]["FaceOffInvocation"] | components["schemas"]["StringInvocation"] | components["schemas"]["RangeOfSizeInvocation"] | components["schemas"]["FaceIdentifierInvocation"] | components["schemas"]["GraphInvocation"] | components["schemas"]["ImageCollectionInvocation"] | components["schemas"]["InfillColorInvocation"] | components["schemas"]["StringJoinInvocation"] | components["schemas"]["FaceMaskInvocation"] | components["schemas"]["ImageScaleInvocation"] | components["schemas"]["CollectInvocation"] | components["schemas"]["CalculateImageTilesInvocation"] | components["schemas"]["ONNXPromptInvocation"] | components["schemas"]["InfillPatchMatchInvocation"] | components["schemas"]["ImageToLatentsInvocation"] | components["schemas"]["NoiseInvocation"] | components["schemas"]["SegmentAnythingProcessorInvocation"] | components["schemas"]["SDXLCompelPromptInvocation"] | components["schemas"]["BlankImageInvocation"] | components["schemas"]["MaskEdgeInvocation"] | components["schemas"]["ColorInvocation"] | components["schemas"]["PairTileImageInvocation"] | components["schemas"]["OpenposeImageProcessorInvocation"] | components["schemas"]["FloatInvocation"] | components["schemas"]["SchedulerInvocation"] | components["schemas"]["TileToPropertiesInvocation"] | components["schemas"]["SubtractInvocation"] | components["schemas"]["RandomRangeInvocation"] | components["schemas"]["MetadataInvocation"] | components["schemas"]["ImageInvocation"] | components["schemas"]["ClipSkipInvocation"] | components["schemas"]["RandomIntInvocation"] | components["schemas"]["ContentShuffleImageProcessorInvocation"] | components["schemas"]["IntegerMathInvocation"] | components["schemas"]["ColorCorrectInvocation"] | components["schemas"]["DenoiseLatentsInvocation"] | components["schemas"]["MultiplyInvocation"] | components["schemas"]["SDXLLoraLoaderInvocation"] | components["schemas"]["OnnxModelLoaderInvocation"] | components["schemas"]["UnsharpMaskInvocation"] | components["schemas"]["NormalbaeImageProcessorInvocation"] | components["schemas"]["CoreMetadataInvocation"] | components["schemas"]["FloatLinearRangeInvocation"] | components["schemas"]["IterateInvocation"] | components["schemas"]["CropLatentsCoreInvocation"] | components["schemas"]["TileResamplerProcessorInvocation"] | components["schemas"]["ImageInverseLerpInvocation"] | components["schemas"]["StepParamEasingInvocation"] | components["schemas"]["LatentsCollectionInvocation"] | components["schemas"]["StringJoinThreeInvocation"] | components["schemas"]["ImageMultiplyInvocation"] | components["schemas"]["ImageHueAdjustmentInvocation"] | components["schemas"]["InfillTileInvocation"] | components["schemas"]["RandomFloatInvocation"] | components["schemas"]["MainModelLoaderInvocation"] | components["schemas"]["ColorMapImageProcessorInvocation"] | components["schemas"]["ImageBlurInvocation"] | components["schemas"]["StringCollectionInvocation"] | components["schemas"]["ConditioningInvocation"] | components["schemas"]["T2IAdapterInvocation"] | components["schemas"]["SDXLRefinerModelLoaderInvocation"] | components["schemas"]["ONNXTextToLatentsInvocation"] | components["schemas"]["ImageConvertInvocation"] | components["schemas"]["MetadataItemInvocation"] | components["schemas"]["ESRGANInvocation"] | components["schemas"]["IntegerCollectionInvocation"] | components["schemas"]["LatentsInvocation"] | components["schemas"]["CreateDenoiseMaskInvocation"] | components["schemas"]["ImageNSFWBlurInvocation"] | components["schemas"]["IntegerInvocation"] | components["schemas"]["PidiImageProcessorInvocation"] | components["schemas"]["DepthAnythingImageProcessorInvocation"] | components["schemas"]["MergeMetadataInvocation"] | components["schemas"]["ImageWatermarkInvocation"] | components["schemas"]["IdealSizeInvocation"] | components["schemas"]["LeresImageProcessorInvocation"];
+      nodes: {
+        [key: string]: components["schemas"]["ColorInvocation"] | components["schemas"]["CoreMetadataInvocation"] | components["schemas"]["ImageCropInvocation"] | components["schemas"]["CalculateImageTilesInvocation"] | components["schemas"]["RandomIntInvocation"] | components["schemas"]["MediapipeFaceProcessorInvocation"] | components["schemas"]["SDXLCompelPromptInvocation"] | components["schemas"]["FloatToIntegerInvocation"] | components["schemas"]["FaceIdentifierInvocation"] | components["schemas"]["FreeUInvocation"] | components["schemas"]["ImageMultiplyInvocation"] | components["schemas"]["StepParamEasingInvocation"] | components["schemas"]["SDXLModelLoaderInvocation"] | components["schemas"]["SDXLLoraLoaderInvocation"] | components["schemas"]["RandomFloatInvocation"] | components["schemas"]["ImagePasteInvocation"] | components["schemas"]["ResizeLatentsInvocation"] | components["schemas"]["SaveImageInvocation"] | components["schemas"]["StringJoinInvocation"] | components["schemas"]["CenterPadCropInvocation"] | components["schemas"]["ColorCorrectInvocation"] | components["schemas"]["StringJoinThreeInvocation"] | components["schemas"]["IPAdapterInvocation"] | components["schemas"]["NormalbaeImageProcessorInvocation"] | components["schemas"]["CompelInvocation"] | components["schemas"]["ImageHueAdjustmentInvocation"] | components["schemas"]["LatentsCollectionInvocation"] | components["schemas"]["BlendLatentsInvocation"] | components["schemas"]["PidiImageProcessorInvocation"] | components["schemas"]["ImageConvertInvocation"] | components["schemas"]["IdealSizeInvocation"] | components["schemas"]["FloatMathInvocation"] | components["schemas"]["StringReplaceInvocation"] | components["schemas"]["ImageCollectionInvocation"] | components["schemas"]["InfillTileInvocation"] | components["schemas"]["PromptsFromFileInvocation"] | components["schemas"]["FloatLinearRangeInvocation"] | components["schemas"]["CropLatentsCoreInvocation"] | components["schemas"]["LeresImageProcessorInvocation"] | components["schemas"]["ShowImageInvocation"] | components["schemas"]["ImageChannelInvocation"] | components["schemas"]["SDXLRefinerCompelPromptInvocation"] | components["schemas"]["UnsharpMaskInvocation"] | components["schemas"]["CalculateImageTilesMinimumOverlapInvocation"] | components["schemas"]["MaskCombineInvocation"] | components["schemas"]["BooleanCollectionInvocation"] | components["schemas"]["IntegerInvocation"] | components["schemas"]["FloatInvocation"] | components["schemas"]["ColorMapImageProcessorInvocation"] | components["schemas"]["ImageWatermarkInvocation"] | components["schemas"]["ImageLerpInvocation"] | components["schemas"]["MaskEdgeInvocation"] | components["schemas"]["ControlNetInvocation"] | components["schemas"]["CannyImageProcessorInvocation"] | components["schemas"]["IntegerMathInvocation"] | components["schemas"]["SeamlessModeInvocation"] | components["schemas"]["StringSplitNegInvocation"] | components["schemas"]["MidasDepthImageProcessorInvocation"] | components["schemas"]["RangeInvocation"] | components["schemas"]["ESRGANInvocation"] | components["schemas"]["TileToPropertiesInvocation"] | components["schemas"]["ImageScaleInvocation"] | components["schemas"]["BlankImageInvocation"] | components["schemas"]["MergeMetadataInvocation"] | components["schemas"]["LaMaInfillInvocation"] | components["schemas"]["ImageNSFWBlurInvocation"] | components["schemas"]["DenoiseLatentsInvocation"] | components["schemas"]["MetadataItemInvocation"] | components["schemas"]["ImageChannelMultiplyInvocation"] | components["schemas"]["CanvasPasteBackInvocation"] | components["schemas"]["StringCollectionInvocation"] | components["schemas"]["LoraLoaderInvocation"] | components["schemas"]["SchedulerInvocation"] | components["schemas"]["MaskFromAlphaInvocation"] | components["schemas"]["ConditioningInvocation"] | components["schemas"]["LatentsToImageInvocation"] | components["schemas"]["MetadataInvocation"] | components["schemas"]["CollectInvocation"] | components["schemas"]["DWOpenposeImageProcessorInvocation"] | components["schemas"]["ZoeDepthImageProcessorInvocation"] | components["schemas"]["CreateDenoiseMaskInvocation"] | components["schemas"]["ScaleLatentsInvocation"] | components["schemas"]["RangeOfSizeInvocation"] | components["schemas"]["ClipSkipInvocation"] | components["schemas"]["InfillPatchMatchInvocation"] | components["schemas"]["CvInpaintInvocation"] | components["schemas"]["FaceOffInvocation"] | components["schemas"]["StringSplitInvocation"] | components["schemas"]["ImageResizeInvocation"] | components["schemas"]["MlsdImageProcessorInvocation"] | components["schemas"]["CalculateImageTilesEvenSplitInvocation"] | components["schemas"]["LineartImageProcessorInvocation"] | components["schemas"]["ImageBlurInvocation"] | components["schemas"]["AddInvocation"] | components["schemas"]["SDXLRefinerModelLoaderInvocation"] | components["schemas"]["ImageChannelOffsetInvocation"] | components["schemas"]["VaeLoaderInvocation"] | components["schemas"]["ContentShuffleImageProcessorInvocation"] | components["schemas"]["RandomRangeInvocation"] | components["schemas"]["CV2InfillInvocation"] | components["schemas"]["ImageInverseLerpInvocation"] | components["schemas"]["MultiplyInvocation"] | components["schemas"]["PairTileImageInvocation"] | components["schemas"]["DivideInvocation"] | components["schemas"]["DynamicPromptInvocation"] | components["schemas"]["CreateGradientMaskInvocation"] | components["schemas"]["InfillColorInvocation"] | components["schemas"]["TileResamplerProcessorInvocation"] | components["schemas"]["ImageInvocation"] | components["schemas"]["HedImageProcessorInvocation"] | components["schemas"]["BooleanInvocation"] | components["schemas"]["LatentsInvocation"] | components["schemas"]["DepthAnythingImageProcessorInvocation"] | components["schemas"]["IterateInvocation"] | components["schemas"]["RoundInvocation"] | components["schemas"]["FloatCollectionInvocation"] | components["schemas"]["MainModelLoaderInvocation"] | components["schemas"]["SubtractInvocation"] | components["schemas"]["ImageToLatentsInvocation"] | components["schemas"]["LineartAnimeImageProcessorInvocation"] | components["schemas"]["NoiseInvocation"] | components["schemas"]["T2IAdapterInvocation"] | components["schemas"]["ConditioningCollectionInvocation"] | components["schemas"]["IntegerCollectionInvocation"] | components["schemas"]["FaceMaskInvocation"] | components["schemas"]["SegmentAnythingProcessorInvocation"] | components["schemas"]["StringInvocation"] | components["schemas"]["MergeTilesToImageInvocation"];
       };
       /**
        * Edges
        * @description The connections between nodes and their fields in this graph
        */
-      edges?: components["schemas"]["Edge"][];
+      edges: components["schemas"]["Edge"][];
     };
     /**
      * GraphExecutionState
@@ -4161,7 +4301,7 @@ export type components = {
        * @description The results of node executions
        */
       results: {
-        [key: string]: components["schemas"]["ColorCollectionOutput"] | components["schemas"]["PairTileImageOutput"] | components["schemas"]["StringCollectionOutput"] | components["schemas"]["FaceOffOutput"] | components["schemas"]["StringOutput"] | components["schemas"]["SeamlessModeOutput"] | components["schemas"]["SDXLModelLoaderOutput"] | components["schemas"]["VAEOutput"] | components["schemas"]["ColorOutput"] | components["schemas"]["StringPosNegOutput"] | components["schemas"]["LoraLoaderOutput"] | components["schemas"]["IntegerCollectionOutput"] | components["schemas"]["ImageCollectionOutput"] | components["schemas"]["LatentsCollectionOutput"] | components["schemas"]["SchedulerOutput"] | components["schemas"]["NoiseOutput"] | components["schemas"]["CollectInvocationOutput"] | components["schemas"]["IntegerOutput"] | components["schemas"]["MetadataItemOutput"] | components["schemas"]["SDXLLoraLoaderOutput"] | components["schemas"]["T2IAdapterOutput"] | components["schemas"]["IdealSizeOutput"] | components["schemas"]["UNetOutput"] | components["schemas"]["TileToPropertiesOutput"] | components["schemas"]["SDXLRefinerModelLoaderOutput"] | components["schemas"]["FloatCollectionOutput"] | components["schemas"]["BooleanCollectionOutput"] | components["schemas"]["DenoiseMaskOutput"] | components["schemas"]["ConditioningOutput"] | components["schemas"]["GraphInvocationOutput"] | components["schemas"]["BooleanOutput"] | components["schemas"]["CLIPOutput"] | components["schemas"]["MetadataOutput"] | components["schemas"]["ConditioningCollectionOutput"] | components["schemas"]["FloatOutput"] | components["schemas"]["IterateInvocationOutput"] | components["schemas"]["ClipSkipInvocationOutput"] | components["schemas"]["ONNXModelLoaderOutput"] | components["schemas"]["IPAdapterOutput"] | components["schemas"]["LatentsOutput"] | components["schemas"]["String2Output"] | components["schemas"]["ModelLoaderOutput"] | components["schemas"]["FaceMaskOutput"] | components["schemas"]["CalculateImageTilesOutput"] | components["schemas"]["ControlOutput"] | components["schemas"]["ImageOutput"];
+        [key: string]: components["schemas"]["IntegerCollectionOutput"] | components["schemas"]["IterateInvocationOutput"] | components["schemas"]["StringOutput"] | components["schemas"]["ConditioningOutput"] | components["schemas"]["SDXLLoraLoaderOutput"] | components["schemas"]["LoraLoaderOutput"] | components["schemas"]["ModelLoaderOutput"] | components["schemas"]["IntegerOutput"] | components["schemas"]["CalculateImageTilesOutput"] | components["schemas"]["ImageCollectionOutput"] | components["schemas"]["TileToPropertiesOutput"] | components["schemas"]["StringPosNegOutput"] | components["schemas"]["BooleanCollectionOutput"] | components["schemas"]["DenoiseMaskOutput"] | components["schemas"]["UNetOutput"] | components["schemas"]["IPAdapterOutput"] | components["schemas"]["SchedulerOutput"] | components["schemas"]["FloatOutput"] | components["schemas"]["String2Output"] | components["schemas"]["SeamlessModeOutput"] | components["schemas"]["NoiseOutput"] | components["schemas"]["SDXLModelLoaderOutput"] | components["schemas"]["MetadataItemOutput"] | components["schemas"]["ImageOutput"] | components["schemas"]["ColorOutput"] | components["schemas"]["IdealSizeOutput"] | components["schemas"]["ColorCollectionOutput"] | components["schemas"]["ControlOutput"] | components["schemas"]["SDXLRefinerModelLoaderOutput"] | components["schemas"]["BooleanOutput"] | components["schemas"]["MetadataOutput"] | components["schemas"]["CLIPOutput"] | components["schemas"]["ConditioningCollectionOutput"] | components["schemas"]["LatentsCollectionOutput"] | components["schemas"]["T2IAdapterOutput"] | components["schemas"]["VAEOutput"] | components["schemas"]["FaceMaskOutput"] | components["schemas"]["PairTileImageOutput"] | components["schemas"]["FaceOffOutput"] | components["schemas"]["ClipSkipInvocationOutput"] | components["schemas"]["CollectInvocationOutput"] | components["schemas"]["StringCollectionOutput"] | components["schemas"]["LatentsOutput"] | components["schemas"]["FloatCollectionOutput"];
       };
       /**
        * Errors
@@ -4184,46 +4324,6 @@ export type components = {
       source_prepared_mapping: {
         [key: string]: string[];
       };
-    };
-    /**
-     * GraphInvocation
-     * @description Execute a graph
-     */
-    GraphInvocation: {
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default true
-       */
-      use_cache?: boolean;
-      /** @description The graph to run */
-      graph?: components["schemas"]["Graph"];
-      /**
-       * type
-       * @default graph
-       * @constant
-       */
-      type: "graph";
-    };
-    /** GraphInvocationOutput */
-    GraphInvocationOutput: {
-      /**
-       * type
-       * @default graph_output
-       * @constant
-       */
-      type: "graph_output";
     };
     /**
      * HFModelSource
@@ -4257,6 +4357,8 @@ export type components = {
      * @description Applies HED edge detection to image
      */
     HedImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -4353,17 +4455,24 @@ export type components = {
      * @description Model config for IP Adaptor format models.
      */
     IPAdapterConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default ip_adapter
        * @constant
        */
-      type?: "ip_adapter";
+      type: "ip_adapter";
       /**
        * Format
        * @constant
@@ -4374,24 +4483,34 @@ export type components = {
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
+      /** Image Encoder Model Id */
+      image_encoder_model_id: string;
     };
     /** IPAdapterField */
     IPAdapterField: {
@@ -4508,34 +4627,10 @@ export type components = {
     /** IPAdapterModelField */
     IPAdapterModelField: {
       /**
-       * Model Name
-       * @description Name of the IP-Adapter model
+       * Key
+       * @description Key to the IP-Adapter model
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-    };
-    /** IPAdapterModelInvokeAIConfig */
-    IPAdapterModelInvokeAIConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default ip_adapter
-       * @constant
-       */
-      model_type: "ip_adapter";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "invokeai";
-      error?: components["schemas"]["ModelError"] | null;
+      key: string;
     };
     /** IPAdapterOutput */
     IPAdapterOutput: {
@@ -4627,6 +4722,8 @@ export type components = {
      * @description Blurs an image
      */
     ImageBlurInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -4685,6 +4782,8 @@ export type components = {
      * @description Gets a channel from an image.
      */
     ImageChannelInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -4725,6 +4824,8 @@ export type components = {
      * @description Scale a specific color channel of an image.
      */
     ImageChannelMultiplyInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -4776,6 +4877,8 @@ export type components = {
      * @description Add or subtract a value from a specific color channel of an image.
      */
     ImageChannelOffsetInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -4872,6 +4975,8 @@ export type components = {
      * @description Converts an image to a different mode.
      */
     ImageConvertInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -4912,6 +5017,8 @@ export type components = {
      * @description Crops an image to a specified box. The box can be outside of the image.
      */
     ImageCropInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5060,6 +5167,8 @@ export type components = {
      * @description Adjusts the Hue of an image.
      */
     ImageHueAdjustmentInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5099,6 +5208,8 @@ export type components = {
      * @description Inverse linear interpolation of all pixels of an image
      */
     ImageInverseLerpInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5175,6 +5286,8 @@ export type components = {
      * @description Linear interpolation of all pixels of an image
      */
     ImageLerpInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5220,6 +5333,8 @@ export type components = {
      * @description Multiplies two images together using `PIL.ImageChops.multiply()`.
      */
     ImageMultiplyInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5255,6 +5370,8 @@ export type components = {
      * @description Add blur to NSFW-flagged images
      */
     ImageNSFWBlurInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5312,6 +5429,8 @@ export type components = {
      * @description Pastes an image into another image.
      */
     ImagePasteInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5397,6 +5516,8 @@ export type components = {
      * @description Resizes an image to specific dimensions
      */
     ImageResizeInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5449,6 +5570,8 @@ export type components = {
      * @description Scales an image by a factor
      */
     ImageScaleInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5561,6 +5684,8 @@ export type components = {
      * @description Add an invisible watermark to an image
      */
     ImageWatermarkInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5599,9 +5724,14 @@ export type components = {
     ImagesDownloaded: {
       /**
        * Response
-       * @description If defined, the message to display to the user when images begin downloading
+       * @description The message to display to the user when images begin downloading
        */
-      response: string | null;
+      response?: string | null;
+      /**
+       * Bulk Download Item Name
+       * @description The name of the bulk download item for which events will be emitted
+       */
+      bulk_download_item_name?: string | null;
     };
     /** ImagesUpdatedFromListResult */
     ImagesUpdatedFromListResult: {
@@ -5616,6 +5746,8 @@ export type components = {
      * @description Infills transparent areas of an image with a solid color
      */
     InfillColorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5659,6 +5791,8 @@ export type components = {
      * @description Infills transparent areas of an image using the PatchMatch algorithm
      */
     InfillPatchMatchInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -5705,6 +5839,8 @@ export type components = {
      * @description Infills transparent areas of an image with tiles of the image
      */
     InfillTileInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6005,6 +6141,8 @@ export type components = {
      * @description Infills transparent areas of an image using the LaMa model
      */
     LaMaInfillInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6032,96 +6170,6 @@ export type components = {
        * @constant
        */
       type: "infill_lama";
-    };
-    /**
-     * Latent Consistency MonoNode
-     * @description Wrapper node around diffusers LatentConsistencyTxt2ImgPipeline
-     */
-    LatentConsistencyInvocation: {
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default true
-       */
-      use_cache?: boolean;
-      /**
-       * Prompt
-       * @description The prompt to use
-       */
-      prompt?: string;
-      /**
-       * Num Inference Steps
-       * @description The number of inference steps to use, 4-8 recommended
-       * @default 8
-       */
-      num_inference_steps?: number;
-      /**
-       * Guidance Scale
-       * @description The guidance scale to use
-       * @default 8
-       */
-      guidance_scale?: number;
-      /**
-       * Batches
-       * @description The number of batches to use
-       * @default 1
-       */
-      batches?: number;
-      /**
-       * Images Per Batch
-       * @description The number of images per batch to use
-       * @default 1
-       */
-      images_per_batch?: number;
-      /**
-       * Seeds
-       * @description List of noise seeds to use
-       */
-      seeds?: number[];
-      /**
-       * Lcm Origin Steps
-       * @description The lcm origin steps to use
-       * @default 50
-       */
-      lcm_origin_steps?: number;
-      /**
-       * Width
-       * @description The width to use
-       * @default 512
-       */
-      width?: number;
-      /**
-       * Height
-       * @description The height to use
-       * @default 512
-       */
-      height?: number;
-      /**
-       * Precision
-       * @description floating point precision
-       * @default fp16
-       * @enum {string}
-       */
-      precision?: "fp16" | "fp32";
-      /** @description The board to save the image to */
-      board?: components["schemas"]["BoardField"];
-      /**
-       * type
-       * @default latent_consistency_mononode
-       * @constant
-       */
-      type: "latent_consistency_mononode";
     };
     /**
      * Latents Collection Primitive
@@ -6187,6 +6235,7 @@ export type components = {
       /**
        * Seed
        * @description Seed used to generate this latents
+       * @default null
        */
       seed?: number | null;
     };
@@ -6250,6 +6299,8 @@ export type components = {
      * @description Generates an image from latents.
      */
     LatentsToImageInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6297,6 +6348,8 @@ export type components = {
      * @description Applies leres processing to image
      */
     LeresImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6379,48 +6432,15 @@ export type components = {
        */
       AllowDifferentLicense?: boolean;
       /** @description Type of commercial use allowed or 'No' if no commercial use is allowed. */
-      AllowCommercialUse?: components["schemas"]["CommercialUsage"];
-    };
-    /**
-     * Linear UI Image Output
-     * @description Handles Linear UI Image Outputting tasks.
-     */
-    LinearUIOutputInvocation: {
-      /** @description Optional metadata to be saved with the image */
-      metadata?: components["schemas"]["MetadataField"] | null;
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default false
-       */
-      use_cache?: boolean;
-      /** @description The image to process */
-      image?: components["schemas"]["ImageField"];
-      /** @description The board to save the image to */
-      board?: components["schemas"]["BoardField"] | null;
-      /**
-       * type
-       * @default linear_ui_output
-       * @constant
-       */
-      type: "linear_ui_output";
+      AllowCommercialUse?: components["schemas"]["CommercialUsage"] | null;
     };
     /**
      * Lineart Anime Processor
      * @description Applies line art anime processing to image
      */
     LineartAnimeImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6466,6 +6486,8 @@ export type components = {
      * @description Applies line art processing to image
      */
     LineartImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6517,17 +6539,24 @@ export type components = {
      * @description Model config for LoRA/Lycoris models.
      */
     LoRAConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default lora
        * @constant
        */
-      type?: "lora";
+      type: "lora";
       /**
        * Format
        * @enum {string}
@@ -6538,24 +6567,32 @@ export type components = {
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
     };
     /**
      * LoRAMetadataField
@@ -6563,30 +6600,12 @@ export type components = {
      */
     LoRAMetadataField: {
       /** @description LoRA model to load */
-      lora: components["schemas"]["LoRAModelField"];
+      model: components["schemas"]["LoRAModelField"];
       /**
        * Weight
        * @description The weight at which the LoRA is applied to each model
        */
       weight: number;
-    };
-    /** LoRAModelConfig */
-    LoRAModelConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default lora
-       * @constant
-       */
-      model_type: "lora";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      model_format: components["schemas"]["LoRAModelFormat"];
-      error?: components["schemas"]["ModelError"] | null;
     };
     /**
      * LoRAModelField
@@ -6594,18 +6613,11 @@ export type components = {
      */
     LoRAModelField: {
       /**
-       * Model Name
-       * @description Name of the LoRA model
+       * Key
+       * @description LoRA model key
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
+      key: string;
     };
-    /**
-     * LoRAModelFormat
-     * @enum {string}
-     */
-    LoRAModelFormat: "lycoris" | "diffusers";
     /**
      * LocalModelSource
      * @description A local file or directory path.
@@ -6633,16 +6645,15 @@ export type components = {
     /** LoraInfo */
     LoraInfo: {
       /**
-       * Model Name
-       * @description Info to load submodel
+       * Key
+       * @description Key of model as returned by ModelRecordServiceBase.get_model()
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /** @description Info to load submodel */
-      model_type: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"];
-      /** @description Info to load submodel */
-      submodel?: components["schemas"]["SubModelType"] | null;
+      key: string;
+      /**
+       * @description Info to load submodel
+       * @default null
+       */
+      submodel_type?: components["schemas"]["SubModelType"] | null;
       /**
        * Weight
        * @description Lora's weight which to use when apply to model
@@ -6707,13 +6718,15 @@ export type components = {
       /**
        * UNet
        * @description UNet (scheduler, LoRAs)
+       * @default null
        */
-      unet?: components["schemas"]["UNetField"] | null;
+      unet: components["schemas"]["UNetField"] | null;
       /**
        * CLIP
        * @description CLIP (tokenizer, text encoder, LoRAs) and skipped layer count
+       * @default null
        */
-      clip?: components["schemas"]["ClipField"] | null;
+      clip: components["schemas"]["ClipField"] | null;
       /**
        * type
        * @default lora_loader_output
@@ -6726,50 +6739,72 @@ export type components = {
      * @description Model config for main checkpoint models.
      */
     MainCheckpointConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default main
        * @constant
        */
-      type?: "main";
+      type: "main";
       /**
        * Format
        * @default checkpoint
        * @constant
        */
-      format?: "checkpoint";
+      format: "checkpoint";
       /**
        * Key
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
       /** Vae */
       vae?: string | null;
       /** @default normal */
-      variant?: components["schemas"]["invokeai__backend__model_manager__config__ModelVariantType"];
+      variant?: components["schemas"]["ModelVariantType"];
+      /** @default epsilon */
+      prediction_type?: components["schemas"]["SchedulerPredictionType"];
+      /**
+       * Upcast Attention
+       * @default false
+       */
+      upcast_attention?: boolean;
       /**
        * Ztsnr Training
        * @default false
@@ -6786,62 +6821,79 @@ export type components = {
      * @description Model config for main diffusers models.
      */
     MainDiffusersConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default main
        * @constant
        */
-      type?: "main";
+      type: "main";
       /**
        * Format
        * @default diffusers
        * @constant
        */
-      format?: "diffusers";
+      format: "diffusers";
       /**
        * Key
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
       /** Vae */
       vae?: string | null;
       /** @default normal */
-      variant?: components["schemas"]["invokeai__backend__model_manager__config__ModelVariantType"];
-      /**
-       * Ztsnr Training
-       * @default false
-       */
-      ztsnr_training?: boolean;
+      variant?: components["schemas"]["ModelVariantType"];
       /** @default epsilon */
-      prediction_type?: components["schemas"]["invokeai__backend__model_manager__config__SchedulerPredictionType"];
+      prediction_type?: components["schemas"]["SchedulerPredictionType"];
       /**
        * Upcast Attention
        * @default false
        */
       upcast_attention?: boolean;
+      /**
+       * Ztsnr Training
+       * @default false
+       */
+      ztsnr_training?: boolean;
+      /** @default */
+      repo_variant?: components["schemas"]["ModelRepoVariant"] | null;
     };
     /**
      * MainModelField
@@ -6849,14 +6901,10 @@ export type components = {
      */
     MainModelField: {
       /**
-       * Model Name
-       * @description Name of the model
+       * Key
+       * @description Model key
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /** @description Model Type */
-      model_type: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"];
+      key: string;
     };
     /**
      * Main Model
@@ -6894,6 +6942,8 @@ export type components = {
      * @description Combine two masks together by multiplying them using `PIL.ImageChops.multiply()`.
      */
     MaskCombineInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6929,6 +6979,8 @@ export type components = {
      * @description Applies an edge mask to an image
      */
     MaskEdgeInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -6982,6 +7034,8 @@ export type components = {
      * @description Extracts the alpha channel of an image as a mask.
      */
     MaskFromAlphaInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -7021,6 +7075,8 @@ export type components = {
      * @description Applies mediapipe face processing to image
      */
     MediapipeFaceProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -7100,43 +7156,13 @@ export type components = {
        */
       type: "merge_metadata";
     };
-    /** MergeModelsBody */
-    MergeModelsBody: {
-      /**
-       * Model Names
-       * @description model name
-       */
-      model_names: string[];
-      /**
-       * Merged Model Name
-       * @description Name of destination model
-       */
-      merged_model_name: string | null;
-      /**
-       * Alpha
-       * @description Alpha weighting strength to apply to 2d and 3d models
-       * @default 0.5
-       */
-      alpha?: number | null;
-      /** @description Interpolation method */
-      interp: components["schemas"]["MergeInterpolationMethod"] | null;
-      /**
-       * Force
-       * @description Force merging of models created with different versions of diffusers
-       * @default false
-       */
-      force?: boolean | null;
-      /**
-       * Merge Dest Directory
-       * @description Save the merged model to the designated directory (with 'merged_model_name' appended)
-       */
-      merge_dest_directory?: string | null;
-    };
     /**
      * Merge Tiles to Image
      * @description Merge multiple tile images into a single image.
      */
     MergeTilesToImageInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -7303,6 +7329,8 @@ export type components = {
      * @description Applies Midas depth processing to image
      */
     MidasDepthImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -7348,6 +7376,8 @@ export type components = {
      * @description Applies MLSD processing to image
      */
     MlsdImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -7401,11 +7431,6 @@ export type components = {
       type: "mlsd_image_processor";
     };
     /**
-     * ModelError
-     * @constant
-     */
-    ModelError: "not_found";
-    /**
      * ModelFormat
      * @description Storage format of model.
      * @enum {string}
@@ -7414,16 +7439,15 @@ export type components = {
     /** ModelInfo */
     ModelInfo: {
       /**
-       * Model Name
-       * @description Info to load submodel
+       * Key
+       * @description Key of model as returned by ModelRecordServiceBase.get_model()
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /** @description Info to load submodel */
-      model_type: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"];
-      /** @description Info to load submodel */
-      submodel?: components["schemas"]["SubModelType"] | null;
+      key: string;
+      /**
+       * @description Info to load submodel
+       * @default null
+       */
+      submodel_type?: components["schemas"]["SubModelType"] | null;
     };
     /**
      * ModelInstallJob
@@ -7441,6 +7465,11 @@ export type components = {
        */
       status?: components["schemas"]["InstallStatus"];
       /**
+       * Error Reason
+       * @description Information about why the job failed
+       */
+      error_reason?: string | null;
+      /**
        * Config In
        * @description Configuration information (e.g. 'description') to apply to model.
        */
@@ -7449,7 +7478,7 @@ export type components = {
        * Config Out
        * @description After successful installation, this will hold the configuration object.
        */
-      config_out?: (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["ONNXSD1Config"] | components["schemas"]["ONNXSD2Config"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"] | null;
+      config_out?: (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"] | null;
       /**
        * Inplace
        * @description Leave model in its current location; otherwise install under models directory
@@ -7470,8 +7499,9 @@ export type components = {
       /**
        * Bytes
        * @description For a remote model, the number of bytes downloaded so far (may not be available)
+       * @default 0
        */
-      bytes?: number | null;
+      bytes?: number;
       /**
        * Total Bytes
        * @description Total size of the model to be installed
@@ -7488,6 +7518,16 @@ export type components = {
        * @description Download jobs contributing to this install
        */
       download_parts?: components["schemas"]["DownloadJob"][];
+      /**
+       * Error
+       * @description On an error condition, this field will contain the text of the exception
+       */
+      error?: string | null;
+      /**
+       * Error Traceback
+       * @description On an error condition, this field will contain the exception traceback
+       */
+      error_traceback?: string | null;
     };
     /**
      * ModelLoaderOutput
@@ -7527,7 +7567,7 @@ export type components = {
      * @description Various hugging face variants on the diffusers format.
      * @enum {string}
      */
-    ModelRepoVariant: "default" | "fp16" | "fp32" | "onnx" | "openvino" | "flax";
+    ModelRepoVariant: "" | "fp16" | "fp32" | "onnx" | "openvino" | "flax";
     /**
      * ModelSummary
      * @description A short summary of models for UI listing purposes.
@@ -7539,9 +7579,9 @@ export type components = {
        */
       key: string;
       /** @description model type */
-      type: components["schemas"]["invokeai__backend__model_manager__config__ModelType"];
+      type: components["schemas"]["ModelType"];
       /** @description base model */
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      base: components["schemas"]["BaseModelType"];
       /** @description model format */
       format: components["schemas"]["ModelFormat"];
       /**
@@ -7559,6 +7599,26 @@ export type components = {
        * @description tags associated with model
        */
       tags: string[];
+    };
+    /**
+     * ModelType
+     * @description Model type.
+     * @enum {string}
+     */
+    ModelType: "onnx" | "main" | "vae" | "lora" | "controlnet" | "embedding" | "ip_adapter" | "clip_vision" | "t2i_adapter";
+    /**
+     * ModelVariantType
+     * @description Variant type.
+     * @enum {string}
+     */
+    ModelVariantType: "normal" | "inpaint" | "depth";
+    /**
+     * ModelsList
+     * @description Return list of configs.
+     */
+    ModelsList: {
+      /** Models */
+      models: ((components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"])[];
     };
     /**
      * Multiply Integers
@@ -7701,6 +7761,8 @@ export type components = {
      * @description Applies NormalBae processing to image
      */
     NormalbaeImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -7740,356 +7802,6 @@ export type components = {
        * @constant
        */
       type: "normalbae_image_processor";
-    };
-    /**
-     * ONNX Latents to Image
-     * @description Generates an image from latents.
-     */
-    ONNXLatentsToImageInvocation: {
-      /** @description Optional metadata to be saved with the image */
-      metadata?: components["schemas"]["MetadataField"] | null;
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default true
-       */
-      use_cache?: boolean;
-      /** @description Denoised latents tensor */
-      latents?: components["schemas"]["LatentsField"];
-      /** @description VAE */
-      vae?: components["schemas"]["VaeField"];
-      /**
-       * type
-       * @default l2i_onnx
-       * @constant
-       */
-      type: "l2i_onnx";
-    };
-    /**
-     * ONNXModelLoaderOutput
-     * @description Model loader output
-     */
-    ONNXModelLoaderOutput: {
-      /**
-       * UNet
-       * @description UNet (scheduler, LoRAs)
-       */
-      unet?: components["schemas"]["UNetField"];
-      /**
-       * CLIP
-       * @description CLIP (tokenizer, text encoder, LoRAs) and skipped layer count
-       */
-      clip?: components["schemas"]["ClipField"];
-      /**
-       * VAE Decoder
-       * @description VAE
-       */
-      vae_decoder?: components["schemas"]["VaeField"];
-      /**
-       * VAE Encoder
-       * @description VAE
-       */
-      vae_encoder?: components["schemas"]["VaeField"];
-      /**
-       * type
-       * @default model_loader_output_onnx
-       * @constant
-       */
-      type: "model_loader_output_onnx";
-    };
-    /** ONNX Prompt (Raw) */
-    ONNXPromptInvocation: {
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default true
-       */
-      use_cache?: boolean;
-      /**
-       * Prompt
-       * @description Raw prompt text (no parsing)
-       * @default
-       */
-      prompt?: string;
-      /** @description CLIP (tokenizer, text encoder, LoRAs) and skipped layer count */
-      clip?: components["schemas"]["ClipField"];
-      /**
-       * type
-       * @default prompt_onnx
-       * @constant
-       */
-      type: "prompt_onnx";
-    };
-    /**
-     * ONNXSD1Config
-     * @description Model config for ONNX format models based on sd-1.
-     */
-    ONNXSD1Config: {
-      /** Path */
-      path: string;
-      /** Name */
-      name: string;
-      /**
-       * Base
-       * @default sd-1
-       * @constant
-       */
-      base?: "sd-1";
-      /**
-       * Type
-       * @default onnx
-       * @constant
-       */
-      type?: "onnx";
-      /**
-       * Format
-       * @enum {string}
-       */
-      format: "onnx" | "olive";
-      /**
-       * Key
-       * @description unique key for model
-       * @default <NOKEY>
-       */
-      key?: string;
-      /**
-       * Original Hash
-       * @description original fasthash of model contents
-       */
-      original_hash?: string | null;
-      /**
-       * Current Hash
-       * @description current fasthash of model contents
-       */
-      current_hash?: string | null;
-      /** Description */
-      description?: string | null;
-      /**
-       * Source
-       * @description Model download source (URL or repo_id)
-       */
-      source?: string | null;
-      /** Vae */
-      vae?: string | null;
-      /** @default normal */
-      variant?: components["schemas"]["invokeai__backend__model_manager__config__ModelVariantType"];
-      /**
-       * Ztsnr Training
-       * @default false
-       */
-      ztsnr_training?: boolean;
-      /** @default epsilon */
-      prediction_type?: components["schemas"]["invokeai__backend__model_manager__config__SchedulerPredictionType"];
-      /**
-       * Upcast Attention
-       * @default false
-       */
-      upcast_attention?: boolean;
-    };
-    /**
-     * ONNXSD2Config
-     * @description Model config for ONNX format models based on sd-2.
-     */
-    ONNXSD2Config: {
-      /** Path */
-      path: string;
-      /** Name */
-      name: string;
-      /**
-       * Base
-       * @default sd-2
-       * @constant
-       */
-      base?: "sd-2";
-      /**
-       * Type
-       * @default onnx
-       * @constant
-       */
-      type?: "onnx";
-      /**
-       * Format
-       * @enum {string}
-       */
-      format: "onnx" | "olive";
-      /**
-       * Key
-       * @description unique key for model
-       * @default <NOKEY>
-       */
-      key?: string;
-      /**
-       * Original Hash
-       * @description original fasthash of model contents
-       */
-      original_hash?: string | null;
-      /**
-       * Current Hash
-       * @description current fasthash of model contents
-       */
-      current_hash?: string | null;
-      /** Description */
-      description?: string | null;
-      /**
-       * Source
-       * @description Model download source (URL or repo_id)
-       */
-      source?: string | null;
-      /** Vae */
-      vae?: string | null;
-      /** @default normal */
-      variant?: components["schemas"]["invokeai__backend__model_manager__config__ModelVariantType"];
-      /**
-       * Ztsnr Training
-       * @default false
-       */
-      ztsnr_training?: boolean;
-      /** @default v_prediction */
-      prediction_type?: components["schemas"]["invokeai__backend__model_manager__config__SchedulerPredictionType"];
-      /**
-       * Upcast Attention
-       * @default true
-       */
-      upcast_attention?: boolean;
-    };
-    /** ONNXStableDiffusion1ModelConfig */
-    ONNXStableDiffusion1ModelConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default onnx
-       * @constant
-       */
-      model_type: "onnx";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "onnx";
-      error?: components["schemas"]["ModelError"] | null;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
-    };
-    /** ONNXStableDiffusion2ModelConfig */
-    ONNXStableDiffusion2ModelConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default onnx
-       * @constant
-       */
-      model_type: "onnx";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "onnx";
-      error?: components["schemas"]["ModelError"] | null;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
-      prediction_type: components["schemas"]["invokeai__backend__model_management__models__base__SchedulerPredictionType"];
-      /** Upcast Attention */
-      upcast_attention: boolean;
-    };
-    /**
-     * ONNX Text to Latents
-     * @description Generates latents from conditionings.
-     */
-    ONNXTextToLatentsInvocation: {
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default true
-       */
-      use_cache?: boolean;
-      /** @description Positive conditioning tensor */
-      positive_conditioning?: components["schemas"]["ConditioningField"];
-      /** @description Negative conditioning tensor */
-      negative_conditioning?: components["schemas"]["ConditioningField"];
-      /** @description Noise tensor */
-      noise?: components["schemas"]["LatentsField"];
-      /**
-       * Steps
-       * @description Number of steps to run
-       * @default 10
-       */
-      steps?: number;
-      /**
-       * Cfg Scale
-       * @description Classifier-Free Guidance scale
-       * @default 7.5
-       */
-      cfg_scale?: number | number[];
-      /**
-       * Scheduler
-       * @description Scheduler to use during inference
-       * @default euler
-       * @enum {string}
-       */
-      scheduler?: "ddim" | "ddpm" | "deis" | "lms" | "lms_k" | "pndm" | "heun" | "heun_k" | "euler" | "euler_k" | "euler_a" | "kdpm_2" | "kdpm_2_a" | "dpmpp_2s" | "dpmpp_2s_k" | "dpmpp_2m" | "dpmpp_2m_k" | "dpmpp_2m_sde" | "dpmpp_2m_sde_k" | "dpmpp_sde" | "dpmpp_sde_k" | "unipc" | "lcm";
-      /**
-       * Precision
-       * @description Precision to use
-       * @default tensor(float16)
-       * @enum {string}
-       */
-      precision?: "tensor(bool)" | "tensor(int8)" | "tensor(uint8)" | "tensor(int16)" | "tensor(uint16)" | "tensor(int32)" | "tensor(uint32)" | "tensor(int64)" | "tensor(uint64)" | "tensor(float16)" | "tensor(float)" | "tensor(double)";
-      /** @description UNet (scheduler, LoRAs) */
-      unet?: components["schemas"]["UNetField"];
-      /**
-       * Control
-       * @description ControlNet(s) to apply
-       */
-      control?: components["schemas"]["ControlField"] | components["schemas"]["ControlField"][];
-      /**
-       * type
-       * @default t2l_onnx
-       * @constant
-       */
-      type: "t2l_onnx";
     };
     /** OffsetPaginatedResults[BoardDTO] */
     OffsetPaginatedResults_BoardDTO_: {
@@ -8136,103 +7848,6 @@ export type components = {
        * @description Items
        */
       items: components["schemas"]["ImageDTO"][];
-    };
-    /**
-     * OnnxModelField
-     * @description Onnx model field
-     */
-    OnnxModelField: {
-      /**
-       * Model Name
-       * @description Name of the model
-       */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /** @description Model Type */
-      model_type: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"];
-    };
-    /**
-     * ONNX Main Model
-     * @description Loads a main model, outputting its submodels.
-     */
-    OnnxModelLoaderInvocation: {
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default true
-       */
-      use_cache?: boolean;
-      /** @description ONNX Main model (UNet, VAE, CLIP) to load */
-      model: components["schemas"]["OnnxModelField"];
-      /**
-       * type
-       * @default onnx_model_loader
-       * @constant
-       */
-      type: "onnx_model_loader";
-    };
-    /**
-     * Openpose Processor
-     * @description Applies Openpose processing to image
-     */
-    OpenposeImageProcessorInvocation: {
-      /** @description Optional metadata to be saved with the image */
-      metadata?: components["schemas"]["MetadataField"] | null;
-      /**
-       * Id
-       * @description The id of this instance of an invocation. Must be unique among all instances of invocations.
-       */
-      id: string;
-      /**
-       * Is Intermediate
-       * @description Whether or not this is an intermediate invocation.
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Use Cache
-       * @description Whether or not to use the cache
-       * @default true
-       */
-      use_cache?: boolean;
-      /** @description The image to process */
-      image?: components["schemas"]["ImageField"];
-      /**
-       * Hand And Face
-       * @description Whether to use hands and face mode
-       * @default false
-       */
-      hand_and_face?: boolean;
-      /**
-       * Detect Resolution
-       * @description Pixel resolution for detection
-       * @default 512
-       */
-      detect_resolution?: number;
-      /**
-       * Image Resolution
-       * @description Pixel resolution for output image
-       * @default 512
-       */
-      image_resolution?: number;
-      /**
-       * type
-       * @default openpose_image_processor
-       * @constant
-       */
-      type: "openpose_image_processor";
     };
     /** PaginatedResults[ModelSummary] */
     PaginatedResults_ModelSummary_: {
@@ -8339,6 +7954,8 @@ export type components = {
      * @description Applies PIDI processing to image
      */
     PidiImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -8978,18 +8595,21 @@ export type components = {
       /**
        * UNet
        * @description UNet (scheduler, LoRAs)
+       * @default null
        */
-      unet?: components["schemas"]["UNetField"] | null;
+      unet: components["schemas"]["UNetField"] | null;
       /**
        * CLIP 1
        * @description CLIP (tokenizer, text encoder, LoRAs) and skipped layer count
+       * @default null
        */
-      clip?: components["schemas"]["ClipField"] | null;
+      clip: components["schemas"]["ClipField"] | null;
       /**
        * CLIP 2
        * @description CLIP (tokenizer, text encoder, LoRAs) and skipped layer count
+       * @default null
        */
-      clip2?: components["schemas"]["ClipField"] | null;
+      clip2: components["schemas"]["ClipField"] | null;
       /**
        * type
        * @default sdxl_lora_loader_output
@@ -9191,6 +8811,8 @@ export type components = {
      * @description Saves an image. Unlike an image primitive, this invocation stores a copy of the image.
      */
     SaveImageInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -9212,8 +8834,6 @@ export type components = {
       use_cache?: boolean;
       /** @description The image to process */
       image?: components["schemas"]["ImageField"];
-      /** @description The board to save the image to */
-      board?: components["schemas"]["BoardField"];
       /**
        * type
        * @default save_image
@@ -9322,6 +8942,12 @@ export type components = {
       type: "scheduler_output";
     };
     /**
+     * SchedulerPredictionType
+     * @description Scheduler prediction type.
+     * @enum {string}
+     */
+    SchedulerPredictionType: "epsilon" | "v_prediction" | "sample";
+    /**
      * Seamless
      * @description Applies the seamless transformation to the Model UNet and VAE.
      */
@@ -9380,13 +9006,15 @@ export type components = {
       /**
        * UNet
        * @description UNet (scheduler, LoRAs)
+       * @default null
        */
-      unet?: components["schemas"]["UNetField"] | null;
+      unet: components["schemas"]["UNetField"] | null;
       /**
        * VAE
        * @description VAE
+       * @default null
        */
-      vae?: components["schemas"]["VaeField"] | null;
+      vae: components["schemas"]["VaeField"] | null;
       /**
        * type
        * @default seamless_output
@@ -9399,6 +9027,8 @@ export type components = {
      * @description Applies segment anything processing to image
      */
     SegmentAnythingProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -9667,162 +9297,6 @@ export type components = {
        * @constant
        */
       type: "show_image";
-    };
-    /** StableDiffusion1ModelCheckpointConfig */
-    StableDiffusion1ModelCheckpointConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default main
-       * @constant
-       */
-      model_type: "main";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "checkpoint";
-      error?: components["schemas"]["ModelError"] | null;
-      /** Vae */
-      vae?: string | null;
-      /** Config */
-      config: string;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
-    };
-    /** StableDiffusion1ModelDiffusersConfig */
-    StableDiffusion1ModelDiffusersConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default main
-       * @constant
-       */
-      model_type: "main";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "diffusers";
-      error?: components["schemas"]["ModelError"] | null;
-      /** Vae */
-      vae?: string | null;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
-    };
-    /** StableDiffusion2ModelCheckpointConfig */
-    StableDiffusion2ModelCheckpointConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default main
-       * @constant
-       */
-      model_type: "main";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "checkpoint";
-      error?: components["schemas"]["ModelError"] | null;
-      /** Vae */
-      vae?: string | null;
-      /** Config */
-      config: string;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
-    };
-    /** StableDiffusion2ModelDiffusersConfig */
-    StableDiffusion2ModelDiffusersConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default main
-       * @constant
-       */
-      model_type: "main";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "diffusers";
-      error?: components["schemas"]["ModelError"] | null;
-      /** Vae */
-      vae?: string | null;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
-    };
-    /** StableDiffusionXLModelCheckpointConfig */
-    StableDiffusionXLModelCheckpointConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default main
-       * @constant
-       */
-      model_type: "main";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "checkpoint";
-      error?: components["schemas"]["ModelError"] | null;
-      /** Vae */
-      vae?: string | null;
-      /** Config */
-      config: string;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
-    };
-    /** StableDiffusionXLModelDiffusersConfig */
-    StableDiffusionXLModelDiffusersConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default main
-       * @constant
-       */
-      model_type: "main";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "diffusers";
-      error?: components["schemas"]["ModelError"] | null;
-      /** Vae */
-      vae?: string | null;
-      variant: components["schemas"]["invokeai__backend__model_management__models__base__ModelVariantType"];
     };
     /**
      * Step Param Easing
@@ -10279,6 +9753,7 @@ export type components = {
     };
     /**
      * SubModelType
+     * @description Submodel type.
      * @enum {string}
      */
     SubModelType: "unet" | "text_encoder" | "text_encoder_2" | "tokenizer" | "tokenizer_2" | "vae" | "vae_decoder" | "vae_encoder" | "scheduler" | "safety_checker";
@@ -10416,37 +9891,13 @@ export type components = {
        */
       type: "t2i_adapter";
     };
-    /** T2IAdapterModelDiffusersConfig */
-    T2IAdapterModelDiffusersConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default t2i_adapter
-       * @constant
-       */
-      model_type: "t2i_adapter";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /**
-       * Model Format
-       * @constant
-       */
-      model_format: "diffusers";
-      error?: components["schemas"]["ModelError"] | null;
-    };
     /** T2IAdapterModelField */
     T2IAdapterModelField: {
       /**
-       * Model Name
-       * @description Name of the T2I-Adapter model
+       * Key
+       * @description Model record key for the T2I-Adapter model
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
+      key: string;
     };
     /** T2IAdapterOutput */
     T2IAdapterOutput: {
@@ -10467,17 +9918,24 @@ export type components = {
      * @description Model config for T2I.
      */
     T2IConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default t2i_adapter
        * @constant
        */
-      type?: "t2i_adapter";
+      type: "t2i_adapter";
       /**
        * Format
        * @constant
@@ -10488,24 +9946,32 @@ export type components = {
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
     };
     /** TBLR */
     TBLR: {
@@ -10523,17 +9989,24 @@ export type components = {
      * @description Model config for textual inversion embeddings.
      */
     TextualInversionConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default embedding
        * @constant
        */
-      type?: "embedding";
+      type: "embedding";
       /**
        * Format
        * @enum {string}
@@ -10544,43 +10017,32 @@ export type components = {
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
-    };
-    /** TextualInversionModelConfig */
-    TextualInversionModelConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
+      source: string | null;
       /**
-       * Model Type
-       * @default embedding
-       * @constant
+       * Last Modified
+       * @description timestamp for modification time
        */
-      model_type: "embedding";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      /** Model Format */
-      model_format: null;
-      error?: components["schemas"]["ModelError"] | null;
+      last_modified: number | null;
     };
     /** Tile */
     Tile: {
@@ -10594,6 +10056,8 @@ export type components = {
      * @description Tile resampler processor
      */
     TileResamplerProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -10739,12 +10203,15 @@ export type components = {
        * @description Axes("x" and "y") to which apply seamless
        */
       seamless_axes?: string[];
-      /** @description FreeU configuration */
+      /**
+       * @description FreeU configuration
+       * @default null
+       */
       freeu_config?: components["schemas"]["FreeUConfig"] | null;
     };
     /**
      * UNetOutput
-     * @description Base class for invocations that output a UNet field
+     * @description Base class for invocations that output a UNet field.
      */
     UNetOutput: {
       /**
@@ -10783,6 +10250,8 @@ export type components = {
      * @description Applies an unsharp mask filter to an image
      */
     UnsharpMaskInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -10842,12 +10311,10 @@ export type components = {
      */
     VAEModelField: {
       /**
-       * Model Name
-       * @description Name of the model
+       * Key
+       * @description Model's key
        */
-      model_name: string;
-      /** @description Base model */
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
+      key: string;
     };
     /**
      * VAEOutput
@@ -10871,92 +10338,122 @@ export type components = {
      * @description Model config for standalone VAE models.
      */
     VaeCheckpointConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default vae
        * @constant
        */
-      type?: "vae";
+      type: "vae";
       /**
        * Format
        * @default checkpoint
        * @constant
        */
-      format?: "checkpoint";
+      format: "checkpoint";
       /**
        * Key
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
     };
     /**
      * VaeDiffusersConfig
      * @description Model config for standalone VAE models (diffusers version).
      */
     VaeDiffusersConfig: {
-      /** Path */
+      /**
+       * Path
+       * @description filesystem path to the model file or directory
+       */
       path: string;
-      /** Name */
+      /**
+       * Name
+       * @description model name
+       */
       name: string;
-      base: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"];
+      /** @description base model */
+      base: components["schemas"]["BaseModelType"];
       /**
        * Type
        * @default vae
        * @constant
        */
-      type?: "vae";
+      type: "vae";
       /**
        * Format
        * @default diffusers
        * @constant
        */
-      format?: "diffusers";
+      format: "diffusers";
       /**
        * Key
        * @description unique key for model
        * @default <NOKEY>
        */
-      key?: string;
+      key: string;
       /**
        * Original Hash
        * @description original fasthash of model contents
        */
-      original_hash?: string | null;
+      original_hash: string | null;
       /**
        * Current Hash
        * @description current fasthash of model contents
        */
-      current_hash?: string | null;
-      /** Description */
+      current_hash: string | null;
+      /**
+       * Description
+       * @description human readable description of the model
+       */
       description?: string | null;
       /**
        * Source
-       * @description Model download source (URL or repo_id)
+       * @description model original source (path, URL or repo_id)
        */
-      source?: string | null;
+      source: string | null;
+      /**
+       * Last Modified
+       * @description timestamp for modification time
+       */
+      last_modified: number | null;
     };
     /** VaeField */
     VaeField: {
@@ -11002,29 +10499,6 @@ export type components = {
        */
       type: "vae_loader";
     };
-    /** VaeModelConfig */
-    VaeModelConfig: {
-      /** Model Name */
-      model_name: string;
-      base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      /**
-       * Model Type
-       * @default vae
-       * @constant
-       */
-      model_type: "vae";
-      /** Path */
-      path: string;
-      /** Description */
-      description?: string | null;
-      model_format: components["schemas"]["VaeModelFormat"];
-      error?: components["schemas"]["ModelError"] | null;
-    };
-    /**
-     * VaeModelFormat
-     * @enum {string}
-     */
-    VaeModelFormat: "checkpoint" | "diffusers";
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -11251,6 +10725,8 @@ export type components = {
      * @description Applies Zoe depth processing to image
      */
     ZoeDepthImageProcessorInvocation: {
+      /** @description The board to save the image to */
+      board?: components["schemas"]["BoardField"] | null;
       /** @description Optional metadata to be saved with the image */
       metadata?: components["schemas"]["MetadataField"] | null;
       /**
@@ -11279,63 +10755,6 @@ export type components = {
        */
       type: "zoe_depth_image_processor";
     };
-    /**
-     * ModelsList
-     * @description Return list of configs.
-     */
-    invokeai__app__api__routers__model_records__ModelsList: {
-      /** Models */
-      models: ((components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["ONNXSD1Config"] | components["schemas"]["ONNXSD2Config"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"])[];
-    };
-    /** ModelsList */
-    invokeai__app__api__routers__models__ModelsList: {
-      /** Models */
-      models: (components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"])[];
-    };
-    /**
-     * BaseModelType
-     * @enum {string}
-     */
-    invokeai__backend__model_management__models__base__BaseModelType: "any" | "sd-1" | "sd-2" | "sdxl" | "sdxl-refiner";
-    /**
-     * ModelType
-     * @enum {string}
-     */
-    invokeai__backend__model_management__models__base__ModelType: "onnx" | "main" | "vae" | "lora" | "controlnet" | "embedding" | "ip_adapter" | "clip_vision" | "t2i_adapter";
-    /**
-     * ModelVariantType
-     * @enum {string}
-     */
-    invokeai__backend__model_management__models__base__ModelVariantType: "normal" | "inpaint" | "depth";
-    /**
-     * SchedulerPredictionType
-     * @enum {string}
-     */
-    invokeai__backend__model_management__models__base__SchedulerPredictionType: "epsilon" | "v_prediction" | "sample";
-    /**
-     * BaseModelType
-     * @description Base model type.
-     * @enum {string}
-     */
-    invokeai__backend__model_manager__config__BaseModelType: "any" | "sd-1" | "sd-2" | "sdxl" | "sdxl-refiner";
-    /**
-     * ModelType
-     * @description Model type.
-     * @enum {string}
-     */
-    invokeai__backend__model_manager__config__ModelType: "onnx" | "main" | "vae" | "lora" | "controlnet" | "embedding" | "ip_adapter" | "clip_vision" | "t2i_adapter";
-    /**
-     * ModelVariantType
-     * @description Variant type.
-     * @enum {string}
-     */
-    invokeai__backend__model_manager__config__ModelVariantType: "normal" | "inpaint" | "depth";
-    /**
-     * SchedulerPredictionType
-     * @description Scheduler prediction type.
-     * @enum {string}
-     */
-    invokeai__backend__model_manager__config__SchedulerPredictionType: "epsilon" | "v_prediction" | "sample";
     /**
      * Classification
      * @description The classification of an Invocation.
@@ -11502,54 +10921,6 @@ export type components = {
      * @enum {string}
      */
     UIType: "SDXLMainModelField" | "SDXLRefinerModelField" | "ONNXModelField" | "VAEModelField" | "LoRAModelField" | "ControlNetModelField" | "IPAdapterModelField" | "SchedulerField" | "AnyField" | "CollectionField" | "CollectionItemField" | "DEPRECATED_Boolean" | "DEPRECATED_Color" | "DEPRECATED_Conditioning" | "DEPRECATED_Control" | "DEPRECATED_Float" | "DEPRECATED_Image" | "DEPRECATED_Integer" | "DEPRECATED_Latents" | "DEPRECATED_String" | "DEPRECATED_BooleanCollection" | "DEPRECATED_ColorCollection" | "DEPRECATED_ConditioningCollection" | "DEPRECATED_ControlCollection" | "DEPRECATED_FloatCollection" | "DEPRECATED_ImageCollection" | "DEPRECATED_IntegerCollection" | "DEPRECATED_LatentsCollection" | "DEPRECATED_StringCollection" | "DEPRECATED_BooleanPolymorphic" | "DEPRECATED_ColorPolymorphic" | "DEPRECATED_ConditioningPolymorphic" | "DEPRECATED_ControlPolymorphic" | "DEPRECATED_FloatPolymorphic" | "DEPRECATED_ImagePolymorphic" | "DEPRECATED_IntegerPolymorphic" | "DEPRECATED_LatentsPolymorphic" | "DEPRECATED_StringPolymorphic" | "DEPRECATED_MainModel" | "DEPRECATED_UNet" | "DEPRECATED_Vae" | "DEPRECATED_CLIP" | "DEPRECATED_Collection" | "DEPRECATED_CollectionItem" | "DEPRECATED_Enum" | "DEPRECATED_WorkflowField" | "DEPRECATED_IsIntermediate" | "DEPRECATED_BoardField" | "DEPRECATED_MetadataItem" | "DEPRECATED_MetadataItemCollection" | "DEPRECATED_MetadataItemPolymorphic" | "DEPRECATED_MetadataDict";
-    /**
-     * StableDiffusionXLModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    StableDiffusionXLModelFormat: "checkpoint" | "diffusers";
-    /**
-     * CLIPVisionModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    CLIPVisionModelFormat: "diffusers";
-    /**
-     * ControlNetModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    ControlNetModelFormat: "checkpoint" | "diffusers";
-    /**
-     * T2IAdapterModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    T2IAdapterModelFormat: "diffusers";
-    /**
-     * StableDiffusion1ModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    StableDiffusion1ModelFormat: "checkpoint" | "diffusers";
-    /**
-     * StableDiffusion2ModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    StableDiffusion2ModelFormat: "checkpoint" | "diffusers";
-    /**
-     * StableDiffusionOnnxModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    StableDiffusionOnnxModelFormat: "olive" | "onnx";
-    /**
-     * IPAdapterModelFormat
-     * @description An enumeration.
-     * @enum {string}
-     */
-    IPAdapterModelFormat: "invokeai";
   };
   responses: never;
   parameters: never;
@@ -11558,42 +10929,12 @@ export type components = {
   pathItems: never;
 };
 
-export type $defs = Record<string, never>;
+type $defs = Record<string, never>;
 
-export type external = Record<string, never>;
+type external = Record<string, never>;
 
 export type operations = {
 
-  /**
-   * Get Session
-   * @description Gets a session
-   */
-  get_session: {
-    parameters: {
-      path: {
-        /** @description The id of the session to get */
-        session_id: string;
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["GraphExecutionState"];
-        };
-      };
-      /** @description Session not found */
-      404: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
   /**
    * Parse Dynamicprompts
    * @description Creates a batch process
@@ -11620,328 +10961,6 @@ export type operations = {
     };
   };
   /**
-   * List Models
-   * @description Gets a list of models
-   */
-  list_models: {
-    parameters: {
-      query?: {
-        /** @description Base models to include */
-        base_models?: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"][] | null;
-        /** @description The type of model to get */
-        model_type?: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"] | null;
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["invokeai__app__api__routers__models__ModelsList"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  /**
-   * Delete Model
-   * @description Delete Model
-   */
-  del_model: {
-    parameters: {
-      path: {
-        /** @description Base model */
-        base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-        /** @description The type of model */
-        model_type: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"];
-        /** @description model name */
-        model_name: string;
-      };
-    };
-    responses: {
-      /** @description Model deleted successfully */
-      204: {
-        content: never;
-      };
-      /** @description Model not found */
-      404: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  /**
-   * Update Model
-   * @description Update model contents with a new config. If the model name or base fields are changed, then the model is renamed.
-   */
-  update_model: {
-    parameters: {
-      path: {
-        /** @description Base model */
-        base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-        /** @description The type of model */
-        model_type: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"];
-        /** @description model name */
-        model_name: string;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"];
-      };
-    };
-    responses: {
-      /** @description The model was updated successfully */
-      200: {
-        content: {
-          "application/json": components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"];
-        };
-      };
-      /** @description Bad request */
-      400: {
-        content: never;
-      };
-      /** @description The model could not be found */
-      404: {
-        content: never;
-      };
-      /** @description There is already a model corresponding to the new name */
-      409: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  /**
-   * Import Model
-   * @description Add a model using its local path, repo_id, or remote URL. Model characteristics will be probed and configured automatically
-   */
-  import_model: {
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["Body_import_model"];
-      };
-    };
-    responses: {
-      /** @description The model imported successfully */
-      201: {
-        content: {
-          "application/json": components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"];
-        };
-      };
-      /** @description The model could not be found */
-      404: {
-        content: never;
-      };
-      /** @description There is already a model corresponding to this path or repo_id */
-      409: {
-        content: never;
-      };
-      /** @description Unrecognized file/folder format */
-      415: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-      /** @description The model appeared to import successfully, but could not be found in the model manager */
-      424: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * Add Model
-   * @description Add a model using the configuration information appropriate for its type. Only local models can be added by path
-   */
-  add_model: {
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"];
-      };
-    };
-    responses: {
-      /** @description The model added successfully */
-      201: {
-        content: {
-          "application/json": components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"];
-        };
-      };
-      /** @description The model could not be found */
-      404: {
-        content: never;
-      };
-      /** @description There is already a model corresponding to this path or repo_id */
-      409: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-      /** @description The model appeared to add successfully, but could not be found in the model manager */
-      424: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * Convert Model
-   * @description Convert a checkpoint model into a diffusers model, optionally saving to the indicated destination directory, or `models` if none.
-   */
-  convert_model: {
-    parameters: {
-      query?: {
-        /** @description Save the converted model to the designated directory */
-        convert_dest_directory?: string | null;
-      };
-      path: {
-        /** @description Base model */
-        base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-        /** @description The type of model */
-        model_type: components["schemas"]["invokeai__backend__model_management__models__base__ModelType"];
-        /** @description model name */
-        model_name: string;
-      };
-    };
-    responses: {
-      /** @description Model converted successfully */
-      200: {
-        content: {
-          "application/json": components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"];
-        };
-      };
-      /** @description Bad request */
-      400: {
-        content: never;
-      };
-      /** @description Model not found */
-      404: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  /** Search For Models */
-  search_for_models: {
-    parameters: {
-      query: {
-        /** @description Directory path to search for models */
-        search_path: string;
-      };
-    };
-    responses: {
-      /** @description Directory searched successfully */
-      200: {
-        content: {
-          "application/json": string[];
-        };
-      };
-      /** @description Invalid directory path */
-      404: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  /**
-   * List Ckpt Configs
-   * @description Return a list of the legacy checkpoint configuration files stored in `ROOT/configs/stable-diffusion`, relative to ROOT.
-   */
-  list_ckpt_configs: {
-    responses: {
-      /** @description paths retrieved successfully */
-      200: {
-        content: {
-          "application/json": string[];
-        };
-      };
-    };
-  };
-  /**
-   * Sync To Config
-   * @description Call after making changes to models.yaml, autoimport directories or models directory to synchronize
-   * in-memory data structures with disk data structures.
-   */
-  sync_to_config: {
-    responses: {
-      /** @description synchronization successful */
-      201: {
-        content: {
-          "application/json": boolean;
-        };
-      };
-    };
-  };
-  /**
-   * Merge Models
-   * @description Convert a checkpoint model into a diffusers model
-   */
-  merge_models: {
-    parameters: {
-      path: {
-        /** @description Base model */
-        base_model: components["schemas"]["invokeai__backend__model_management__models__base__BaseModelType"];
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["Body_merge_models"];
-      };
-    };
-    responses: {
-      /** @description Model converted successfully */
-      200: {
-        content: {
-          "application/json": components["schemas"]["ONNXStableDiffusion1ModelConfig"] | components["schemas"]["StableDiffusion1ModelCheckpointConfig"] | components["schemas"]["StableDiffusion1ModelDiffusersConfig"] | components["schemas"]["VaeModelConfig"] | components["schemas"]["LoRAModelConfig"] | components["schemas"]["ControlNetModelCheckpointConfig"] | components["schemas"]["ControlNetModelDiffusersConfig"] | components["schemas"]["TextualInversionModelConfig"] | components["schemas"]["IPAdapterModelInvokeAIConfig"] | components["schemas"]["CLIPVisionModelDiffusersConfig"] | components["schemas"]["T2IAdapterModelDiffusersConfig"] | components["schemas"]["ONNXStableDiffusion2ModelConfig"] | components["schemas"]["StableDiffusion2ModelCheckpointConfig"] | components["schemas"]["StableDiffusion2ModelDiffusersConfig"] | components["schemas"]["StableDiffusionXLModelCheckpointConfig"] | components["schemas"]["StableDiffusionXLModelDiffusersConfig"];
-        };
-      };
-      /** @description Incompatible models */
-      400: {
-        content: never;
-      };
-      /** @description One or more models not found */
-      404: {
-        content: never;
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  /**
    * List Model Records
    * @description Get a list of models.
    */
@@ -11949,9 +10968,9 @@ export type operations = {
     parameters: {
       query?: {
         /** @description Base models to include */
-        base_models?: components["schemas"]["invokeai__backend__model_manager__config__BaseModelType"][] | null;
+        base_models?: components["schemas"]["BaseModelType"][] | null;
         /** @description The type of model to get */
-        model_type?: components["schemas"]["invokeai__backend__model_manager__config__ModelType"] | null;
+        model_type?: components["schemas"]["ModelType"] | null;
         /** @description Exact match on the name of the model */
         model_name?: string | null;
         /** @description Exact match on the format of the model (e.g. 'diffusers') */
@@ -11962,7 +10981,38 @@ export type operations = {
       /** @description Successful Response */
       200: {
         content: {
-          "application/json": components["schemas"]["invokeai__app__api__routers__model_records__ModelsList"];
+          "application/json": components["schemas"]["ModelsList"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Get Model Records By Attrs
+   * @description Gets a model by its attributes. The main use of this route is to provide backwards compatibility with the old
+   * model manager, which identified models by a combination of name, base and type.
+   */
+  get_model_records_by_attrs: {
+    parameters: {
+      query: {
+        /** @description The name of the model */
+        name: string;
+        /** @description The type of the model */
+        type: components["schemas"]["ModelType"];
+        /** @description The base model of the model */
+        base: components["schemas"]["BaseModelType"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
         };
       };
       /** @description Validation Error */
@@ -11985,10 +11035,10 @@ export type operations = {
       };
     };
     responses: {
-      /** @description Success */
+      /** @description The model configuration was retrieved successfully */
       200: {
         content: {
-          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["ONNXSD1Config"] | components["schemas"]["ONNXSD2Config"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
+          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
         };
       };
       /** @description Bad request */
@@ -12051,14 +11101,26 @@ export type operations = {
     };
     requestBody: {
       content: {
-        "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["ONNXSD1Config"] | components["schemas"]["ONNXSD2Config"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
+        /**
+         * @example {
+         *   "path": "/path/to/model",
+         *   "name": "model_name",
+         *   "base": "sd-1",
+         *   "type": "main",
+         *   "format": "checkpoint",
+         *   "config": "configs/stable-diffusion/v1-inference.yaml",
+         *   "description": "Model description",
+         *   "variant": "normal"
+         * }
+         */
+        "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
       };
     };
     responses: {
       /** @description The model was updated successfully */
       200: {
         content: {
-          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["ONNXSD1Config"] | components["schemas"]["ONNXSD2Config"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
+          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
         };
       };
       /** @description Bad request */
@@ -12123,7 +11185,7 @@ export type operations = {
       };
     };
     responses: {
-      /** @description Success */
+      /** @description The model metadata was retrieved successfully */
       200: {
         content: {
           "application/json": (components["schemas"]["BaseMetadata"] | components["schemas"]["HuggingFaceMetadata"] | components["schemas"]["CivitaiMetadata"]) | null;
@@ -12131,10 +11193,6 @@ export type operations = {
       };
       /** @description Bad request */
       400: {
-        content: never;
-      };
-      /** @description No metadata available */
-      404: {
         content: never;
       };
       /** @description Validation Error */
@@ -12159,6 +11217,33 @@ export type operations = {
       };
     };
   };
+  /** Scan For Models */
+  scan_for_models: {
+    parameters: {
+      query?: {
+        /** @description Directory path to search for models */
+        scan_path?: string;
+      };
+    };
+    responses: {
+      /** @description Directory scanned successfully */
+      200: {
+        content: {
+          "application/json": components["schemas"]["FoundModel"][];
+        };
+      };
+      /** @description Invalid directory path */
+      400: {
+        content: never;
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /**
    * Search By Metadata Tags
    * @description Get a list of models.
@@ -12174,7 +11259,7 @@ export type operations = {
       /** @description Successful Response */
       200: {
         content: {
-          "application/json": components["schemas"]["invokeai__app__api__routers__model_records__ModelsList"];
+          "application/json": components["schemas"]["ModelsList"];
         };
       };
       /** @description Validation Error */
@@ -12192,14 +11277,26 @@ export type operations = {
   add_model_record: {
     requestBody: {
       content: {
-        "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["ONNXSD1Config"] | components["schemas"]["ONNXSD2Config"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
+        /**
+         * @example {
+         *   "path": "/path/to/model",
+         *   "name": "model_name",
+         *   "base": "sd-1",
+         *   "type": "main",
+         *   "format": "checkpoint",
+         *   "config": "configs/stable-diffusion/v1-inference.yaml",
+         *   "description": "Model description",
+         *   "variant": "normal"
+         * }
+         */
+        "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
       };
     };
     responses: {
       /** @description The model added successfully */
       201: {
         content: {
-          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["ONNXSD1Config"] | components["schemas"]["ONNXSD2Config"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
+          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
         };
       };
       /** @description There is already a model corresponding to this path or repo_id */
@@ -12219,79 +11316,50 @@ export type operations = {
     };
   };
   /**
-   * List Model Install Jobs
-   * @description Return list of model install jobs.
-   */
-  list_model_install_jobs: {
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["ModelInstallJob"][];
-        };
-      };
-    };
-  };
-  /**
-   * Import Model
-   * @description Add a model using its local path, repo_id, or remote URL.
+   * Install Model
+   * @description Install a model using a string identifier.
+   *
+   * `source` can be any of the following.
+   *
+   * 1. A path on the local filesystem ('C:\users\fred\model.safetensors')
+   * 2. A Url pointing to a single downloadable model file
+   * 3. A HuggingFace repo_id with any of the following formats:
+   *    - model/name
+   *    - model/name:fp16:vae
+   *    - model/name::vae          -- use default precision
+   *    - model/name:fp16:path/to/model.safetensors
+   *    - model/name::path/to/model.safetensors
+   *
+   * `config` is an optional dict containing model configuration values that will override
+   * the ones that are probed automatically.
+   *
+   * `access_token` is an optional access token for use with Urls that require
+   * authentication.
    *
    * Models will be downloaded, probed, configured and installed in a
    * series of background threads. The return object has `status` attribute
    * that can be used to monitor progress.
    *
-   * The source object is a discriminated Union of LocalModelSource,
-   * HFModelSource and URLModelSource. Set the "type" field to the
-   * appropriate value:
-   *
-   * * To install a local path using LocalModelSource, pass a source of form:
-   *   `{
-   *     "type": "local",
-   *     "path": "/path/to/model",
-   *     "inplace": false
-   *   }`
-   *    The "inplace" flag, if true, will register the model in place in its
-   *    current filesystem location. Otherwise, the model will be copied
-   *    into the InvokeAI models directory.
-   *
-   * * To install a HuggingFace repo_id using HFModelSource, pass a source of form:
-   *   `{
-   *     "type": "hf",
-   *     "repo_id": "stabilityai/stable-diffusion-2.0",
-   *     "variant": "fp16",
-   *     "subfolder": "vae",
-   *     "access_token": "f5820a918aaf01"
-   *   }`
-   *  The `variant`, `subfolder` and `access_token` fields are optional.
-   *
-   * * To install a remote model using an arbitrary URL, pass:
-   *   `{
-   *     "type": "url",
-   *     "url": "http://www.civitai.com/models/123456",
-   *     "access_token": "f5820a918aaf01"
-   *   }`
-   * The `access_token` field is optonal
-   *
-   * The model's configuration record will be probed and filled in
-   * automatically.  To override the default guesses, pass "metadata"
-   * with a Dict containing the attributes you wish to override.
-   *
-   * Installation occurs in the background. Either use list_model_install_jobs()
-   * to poll for completion, or listen on the event bus for the following events:
-   *
-   *   "model_install_running"
-   *   "model_install_completed"
-   *   "model_install_error"
-   *
-   * On successful completion, the event's payload will contain the field "key"
-   * containing the installed ID of the model. On an error, the event's payload
-   * will contain the fields "error_type" and "error" describing the nature of the
-   * error and its traceback, respectively.
+   * See the documentation for `import_model_record` for more information on
+   * interpreting the job information returned by this route.
    */
-  import_model_record: {
-    requestBody: {
+  install_model: {
+    parameters: {
+      query: {
+        /** @description Model source to install, can be a local path, repo_id, or remote URL */
+        source: string;
+        access_token?: string | null;
+      };
+    };
+    requestBody?: {
       content: {
-        "application/json": components["schemas"]["Body_import_model_record"];
+        /**
+         * @example {
+         *   "name": "string",
+         *   "description": "string"
+         * }
+         */
+        "application/json": Record<string, never> | null;
       };
     };
     responses: {
@@ -12322,6 +11390,37 @@ export type operations = {
     };
   };
   /**
+   * List Model Install Jobs
+   * @description Return the list of model install jobs.
+   *
+   * Install jobs have a numeric `id`, a `status`, and other fields that provide information on
+   * the nature of the job and its progress. The `status` is one of:
+   *
+   * * "waiting" -- Job is waiting in the queue to run
+   * * "downloading" -- Model file(s) are downloading
+   * * "running" -- Model has downloaded and the model probing and registration process is running
+   * * "completed" -- Installation completed successfully
+   * * "error" -- An error occurred. Details will be in the "error_type" and "error" fields.
+   * * "cancelled" -- Job was cancelled before completion.
+   *
+   * Once completed, information about the model such as its size, base
+   * model, type, and metadata can be retrieved from the `config_out`
+   * field. For multi-file models such as diffusers, information on individual files
+   * can be retrieved from `download_parts`.
+   *
+   * See the example and schema below for more information.
+   */
+  list_model_install_jobs: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ModelInstallJob"][];
+        };
+      };
+    };
+  };
+  /**
    * Prune Model Install Jobs
    * @description Prune all completed and errored jobs from the install job list.
    */
@@ -12345,7 +11444,8 @@ export type operations = {
   };
   /**
    * Get Model Install Job
-   * @description Return model install job corresponding to the given source.
+   * @description Return model install job corresponding to the given source. See the documentation for 'List Model Install Jobs'
+   * for information on the format of the return value.
    */
   get_model_install_job: {
     parameters: {
@@ -12425,6 +11525,93 @@ export type operations = {
       /** @description Bad request */
       400: {
         content: never;
+      };
+    };
+  };
+  /**
+   * Convert Model
+   * @description Permanently convert a model into diffusers format, replacing the safetensors version.
+   * Note that during the conversion process the key and model hash will change.
+   * The return value is the model configuration for the converted model.
+   */
+  convert_model: {
+    parameters: {
+      path: {
+        /** @description Unique key of the safetensors main model to convert to diffusers format. */
+        key: string;
+      };
+    };
+    responses: {
+      /** @description Model converted successfully */
+      200: {
+        content: {
+          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
+        };
+      };
+      /** @description Bad request */
+      400: {
+        content: never;
+      };
+      /** @description Model not found */
+      404: {
+        content: never;
+      };
+      /** @description There is already a model registered at this location */
+      409: {
+        content: never;
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Merge
+   * @description Merge diffusers models. The process is controlled by a set parameters provided in the body of the request.
+   * ```
+   * Argument                Description [default]
+   * --------               ----------------------
+   * keys                   List of 2-3 model keys to merge together. All models must use the same base type.
+   * merged_model_name      Name for the merged model [Concat model names]
+   * alpha                  Alpha value (0.0-1.0). Higher values give more weight to the second model [0.5]
+   * force                  If true, force the merge even if the models were generated by different versions of the diffusers library [False]
+   * interp                 Interpolation method. One of "weighted_sum", "sigmoid", "inv_sigmoid" or "add_difference" [weighted_sum]
+   * merge_dest_directory   Specify a directory to store the merged model in [models directory]
+   * ```
+   */
+  merge: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["Body_merge"];
+      };
+    };
+    responses: {
+      /** @description Model converted successfully */
+      200: {
+        content: {
+          "application/json": (components["schemas"]["MainDiffusersConfig"] | components["schemas"]["MainCheckpointConfig"]) | (components["schemas"]["VaeDiffusersConfig"] | components["schemas"]["VaeCheckpointConfig"]) | (components["schemas"]["ControlNetDiffusersConfig"] | components["schemas"]["ControlNetCheckpointConfig"]) | components["schemas"]["LoRAConfig"] | components["schemas"]["TextualInversionConfig"] | components["schemas"]["IPAdapterConfig"] | components["schemas"]["CLIPVisionDiffusersConfig"] | components["schemas"]["T2IConfig"];
+        };
+      };
+      /** @description Bad request */
+      400: {
+        content: never;
+      };
+      /** @description Model not found */
+      404: {
+        content: never;
+      };
+      /** @description There is already a model registered at this location */
+      409: {
+        content: never;
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
       };
     };
   };
@@ -12964,17 +12151,47 @@ export type operations = {
   };
   /** Download Images From List */
   download_images_from_list: {
-    requestBody: {
+    requestBody?: {
       content: {
         "application/json": components["schemas"]["Body_download_images_from_list"];
       };
     };
     responses: {
       /** @description Successful Response */
-      200: {
+      202: {
         content: {
           "application/json": components["schemas"]["ImagesDownloaded"];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Get Bulk Download Item
+   * @description Gets a bulk download zip file
+   */
+  get_bulk_download_item: {
+    parameters: {
+      path: {
+        /** @description The bulk_download_item_name of the bulk download item to get */
+        bulk_download_item_name: string;
+      };
+    };
+    responses: {
+      /** @description Return the complete bulk download item */
+      200: {
+        content: {
+          "application/zip": unknown;
+        };
+      };
+      /** @description Image not found */
+      404: {
+        content: never;
       };
       /** @description Validation Error */
       422: {

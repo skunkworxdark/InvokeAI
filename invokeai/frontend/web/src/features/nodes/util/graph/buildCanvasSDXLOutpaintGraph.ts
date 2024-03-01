@@ -11,7 +11,6 @@ import type {
 
 import { addControlNetToLinearGraph } from './addControlNetToLinearGraph';
 import { addIPAdapterToLinearGraph } from './addIPAdapterToLinearGraph';
-import { addLinearUIOutputNode } from './addLinearUIOutputNode';
 import { addNSFWCheckerToGraph } from './addNSFWCheckerToGraph';
 import { addSDXLLoRAsToGraph } from './addSDXLLoRAstoGraph';
 import { addSDXLRefinerToGraph } from './addSDXLRefinerToGraph';
@@ -20,11 +19,6 @@ import { addT2IAdaptersToLinearGraph } from './addT2IAdapterToLinearGraph';
 import { addVAEToGraph } from './addVAEToGraph';
 import { addWatermarkerToGraph } from './addWatermarkerToGraph';
 import {
-  CANVAS_COHERENCE_DENOISE_LATENTS,
-  CANVAS_COHERENCE_INPAINT_CREATE_MASK,
-  CANVAS_COHERENCE_MASK_EDGE,
-  CANVAS_COHERENCE_NOISE,
-  CANVAS_COHERENCE_NOISE_INCREMENT,
   CANVAS_OUTPUT,
   INPAINT_CREATE_MASK,
   INPAINT_IMAGE,
@@ -46,7 +40,7 @@ import {
   SDXL_REFINER_SEAMLESS,
   SEAMLESS,
 } from './constants';
-import { getSDXLStylePrompts } from './getSDXLStylePrompt';
+import { getBoardField, getIsIntermediate, getSDXLStylePrompts } from './graphBuilderUtils';
 
 /**
  * Builds the Canvas tab's Outpaint graph.
@@ -62,21 +56,22 @@ export const buildCanvasSDXLOutpaintGraph = (
     negativePrompt,
     model,
     cfgScale: cfg_scale,
+    cfgRescaleMultiplier: cfg_rescale_multiplier,
     scheduler,
     steps,
+    img2imgStrength: strength,
     seed,
     vaePrecision,
     shouldUseCpuNoise,
-    maskBlur,
-    canvasCoherenceMode,
-    canvasCoherenceSteps,
-    canvasCoherenceStrength,
     infillTileSize,
     infillPatchmatchDownscaleSize,
     infillMethod,
     seamlessXAxis,
     seamlessYAxis,
-    img2imgStrength: strength,
+    canvasCoherenceMode,
+    canvasCoherenceMinDenoise,
+    canvasCoherenceEdgeSize,
+    maskBlur,
   } = state.generation;
 
   const { refinerModel, refinerStart } = state.sdxl;
@@ -114,12 +109,14 @@ export const buildCanvasSDXLOutpaintGraph = (
       [POSITIVE_CONDITIONING]: {
         type: 'sdxl_compel_prompt',
         id: POSITIVE_CONDITIONING,
+        is_intermediate,
         prompt: positivePrompt,
         style: positiveStylePrompt,
       },
       [NEGATIVE_CONDITIONING]: {
         type: 'sdxl_compel_prompt',
         id: NEGATIVE_CONDITIONING,
+        is_intermediate,
         prompt: negativePrompt,
         style: negativeStylePrompt,
       },
@@ -149,10 +146,12 @@ export const buildCanvasSDXLOutpaintGraph = (
         is_intermediate,
       },
       [INPAINT_CREATE_MASK]: {
-        type: 'create_denoise_mask',
+        type: 'create_gradient_mask',
         id: INPAINT_CREATE_MASK,
         is_intermediate,
-        fp32,
+        coherence_mode: canvasCoherenceMode,
+        edge_radius: canvasCoherenceEdgeSize,
+        minimum_denoise: canvasCoherenceMinDenoise,
       },
       [SDXL_DENOISE_LATENTS]: {
         type: 'denoise_latents',
@@ -160,33 +159,12 @@ export const buildCanvasSDXLOutpaintGraph = (
         is_intermediate,
         steps: steps,
         cfg_scale: cfg_scale,
+        cfg_rescale_multiplier,
         scheduler: scheduler,
         denoising_start: refinerModel ? Math.min(refinerStart, 1 - strength) : 1 - strength,
         denoising_end: refinerModel ? refinerStart : 1,
       },
-      [CANVAS_COHERENCE_NOISE]: {
-        type: 'noise',
-        id: CANVAS_COHERENCE_NOISE,
-        use_cpu,
-        seed: seed + 1,
-        is_intermediate,
-      },
-      [CANVAS_COHERENCE_NOISE_INCREMENT]: {
-        type: 'add',
-        id: CANVAS_COHERENCE_NOISE_INCREMENT,
-        b: 1,
-        is_intermediate,
-      },
-      [CANVAS_COHERENCE_DENOISE_LATENTS]: {
-        type: 'denoise_latents',
-        id: CANVAS_COHERENCE_DENOISE_LATENTS,
-        is_intermediate,
-        steps: canvasCoherenceSteps,
-        cfg_scale: cfg_scale,
-        scheduler: scheduler,
-        denoising_start: 1 - canvasCoherenceStrength,
-        denoising_end: 1,
-      },
+
       [LATENTS_TO_IMAGE]: {
         type: 'l2i',
         id: LATENTS_TO_IMAGE,
@@ -194,10 +172,12 @@ export const buildCanvasSDXLOutpaintGraph = (
         fp32,
       },
       [CANVAS_OUTPUT]: {
-        type: 'color_correct',
+        type: 'canvas_paste_back',
         id: CANVAS_OUTPUT,
-        is_intermediate,
+        is_intermediate: getIsIntermediate(state),
+        board: getBoardField(state),
         use_cache: false,
+        mask_blur: maskBlur,
       },
     },
     edges: [
@@ -274,7 +254,7 @@ export const buildCanvasSDXLOutpaintGraph = (
           field: 'mask1',
         },
       },
-      // Connect Everything To Inpaint
+      // Plug Everything Into Inpaint Node
       {
         source: {
           node_id: POSITIVE_CONDITIONING,
@@ -336,71 +316,10 @@ export const buildCanvasSDXLOutpaintGraph = (
           field: 'denoise_mask',
         },
       },
-      // Canvas Refine
-      {
-        source: {
-          node_id: modelLoaderNodeId,
-          field: 'unet',
-        },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 'unet',
-        },
-      },
-      {
-        source: {
-          node_id: POSITIVE_CONDITIONING,
-          field: 'conditioning',
-        },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 'positive_conditioning',
-        },
-      },
-      {
-        source: {
-          node_id: NEGATIVE_CONDITIONING,
-          field: 'conditioning',
-        },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 'negative_conditioning',
-        },
-      },
-      {
-        source: {
-          node_id: CANVAS_COHERENCE_NOISE,
-          field: 'noise',
-        },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 'noise',
-        },
-      },
+
       {
         source: {
           node_id: SDXL_DENOISE_LATENTS,
-          field: 'latents',
-        },
-        destination: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-          field: 'latents',
-        },
-      },
-      {
-        source: {
-          node_id: INPAINT_INFILL,
-          field: 'image',
-        },
-        destination: {
-          node_id: INPAINT_CREATE_MASK,
-          field: 'image',
-        },
-      },
-      // Decode inpainted latents to image
-      {
-        source: {
-          node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
           field: 'latents',
         },
         destination: {
@@ -491,8 +410,6 @@ export const buildCanvasSDXLOutpaintGraph = (
 
     (graph.nodes[NOISE] as NoiseInvocation).width = scaledWidth;
     (graph.nodes[NOISE] as NoiseInvocation).height = scaledHeight;
-    (graph.nodes[CANVAS_COHERENCE_NOISE] as NoiseInvocation).width = scaledWidth;
-    (graph.nodes[CANVAS_COHERENCE_NOISE] as NoiseInvocation).height = scaledHeight;
 
     // Connect Nodes
     graph.edges.push(
@@ -507,8 +424,7 @@ export const buildCanvasSDXLOutpaintGraph = (
           field: 'image',
         },
       },
-
-      // Take combined mask and resize and then blur
+      // Take combined mask and resize
       {
         source: {
           node_id: MASK_COMBINE,
@@ -519,7 +435,6 @@ export const buildCanvasSDXLOutpaintGraph = (
           field: 'image',
         },
       },
-
       // Resize Results Down
       {
         source: {
@@ -551,7 +466,7 @@ export const buildCanvasSDXLOutpaintGraph = (
           field: 'image',
         },
       },
-      // Color Correct The Inpainted Result
+      // Paste Back
       {
         source: {
           node_id: INPAINT_INFILL_RESIZE_DOWN,
@@ -559,7 +474,7 @@ export const buildCanvasSDXLOutpaintGraph = (
         },
         destination: {
           node_id: CANVAS_OUTPUT,
-          field: 'reference',
+          field: 'source_image',
         },
       },
       {
@@ -569,7 +484,7 @@ export const buildCanvasSDXLOutpaintGraph = (
         },
         destination: {
           node_id: CANVAS_OUTPUT,
-          field: 'image',
+          field: 'target_image',
         },
       },
       {
@@ -592,8 +507,6 @@ export const buildCanvasSDXLOutpaintGraph = (
 
     (graph.nodes[NOISE] as NoiseInvocation).width = width;
     (graph.nodes[NOISE] as NoiseInvocation).height = height;
-    (graph.nodes[CANVAS_COHERENCE_NOISE] as NoiseInvocation).width = width;
-    (graph.nodes[CANVAS_COHERENCE_NOISE] as NoiseInvocation).height = height;
 
     graph.nodes[INPAINT_IMAGE] = {
       ...(graph.nodes[INPAINT_IMAGE] as ImageToLatentsInvocation),
@@ -601,7 +514,6 @@ export const buildCanvasSDXLOutpaintGraph = (
     };
 
     graph.edges.push(
-      // Color Correct The Inpainted Result
       {
         source: {
           node_id: INPAINT_INFILL,
@@ -609,7 +521,7 @@ export const buildCanvasSDXLOutpaintGraph = (
         },
         destination: {
           node_id: CANVAS_OUTPUT,
-          field: 'reference',
+          field: 'source_image',
         },
       },
       {
@@ -619,7 +531,7 @@ export const buildCanvasSDXLOutpaintGraph = (
         },
         destination: {
           node_id: CANVAS_OUTPUT,
-          field: 'image',
+          field: 'target_image',
         },
       },
       {
@@ -635,115 +547,6 @@ export const buildCanvasSDXLOutpaintGraph = (
     );
   }
 
-  // Handle Coherence Mode
-  if (canvasCoherenceMode !== 'unmasked') {
-    graph.nodes[CANVAS_COHERENCE_INPAINT_CREATE_MASK] = {
-      type: 'create_denoise_mask',
-      id: CANVAS_COHERENCE_INPAINT_CREATE_MASK,
-      is_intermediate,
-      fp32,
-    };
-
-    // Handle Image Input For Mask Creation
-    graph.edges.push({
-      source: {
-        node_id: INPAINT_INFILL,
-        field: 'image',
-      },
-      destination: {
-        node_id: CANVAS_COHERENCE_INPAINT_CREATE_MASK,
-        field: 'image',
-      },
-    });
-
-    // Create Mask If Coherence Mode Is Mask
-    if (canvasCoherenceMode === 'mask') {
-      if (isUsingScaledDimensions) {
-        graph.edges.push({
-          source: {
-            node_id: MASK_RESIZE_UP,
-            field: 'image',
-          },
-          destination: {
-            node_id: CANVAS_COHERENCE_INPAINT_CREATE_MASK,
-            field: 'mask',
-          },
-        });
-      } else {
-        graph.edges.push({
-          source: {
-            node_id: MASK_COMBINE,
-            field: 'image',
-          },
-          destination: {
-            node_id: CANVAS_COHERENCE_INPAINT_CREATE_MASK,
-            field: 'mask',
-          },
-        });
-      }
-    }
-
-    if (canvasCoherenceMode === 'edge') {
-      graph.nodes[CANVAS_COHERENCE_MASK_EDGE] = {
-        type: 'mask_edge',
-        id: CANVAS_COHERENCE_MASK_EDGE,
-        is_intermediate,
-        edge_blur: maskBlur,
-        edge_size: maskBlur * 2,
-        low_threshold: 100,
-        high_threshold: 200,
-      };
-
-      // Handle Scaled Dimensions For Mask Edge
-      if (isUsingScaledDimensions) {
-        graph.edges.push({
-          source: {
-            node_id: MASK_RESIZE_UP,
-            field: 'image',
-          },
-          destination: {
-            node_id: CANVAS_COHERENCE_MASK_EDGE,
-            field: 'image',
-          },
-        });
-      } else {
-        graph.edges.push({
-          source: {
-            node_id: MASK_COMBINE,
-            field: 'image',
-          },
-          destination: {
-            node_id: CANVAS_COHERENCE_MASK_EDGE,
-            field: 'image',
-          },
-        });
-      }
-
-      graph.edges.push({
-        source: {
-          node_id: CANVAS_COHERENCE_MASK_EDGE,
-          field: 'image',
-        },
-        destination: {
-          node_id: CANVAS_COHERENCE_INPAINT_CREATE_MASK,
-          field: 'mask',
-        },
-      });
-    }
-
-    // Plug Denoise Mask To Coherence Denoise Latents
-    graph.edges.push({
-      source: {
-        node_id: CANVAS_COHERENCE_INPAINT_CREATE_MASK,
-        field: 'denoise_mask',
-      },
-      destination: {
-        node_id: CANVAS_COHERENCE_DENOISE_LATENTS,
-        field: 'denoise_mask',
-      },
-    });
-  }
-
   // Add Seamless To Graph
   if (seamlessXAxis || seamlessYAxis) {
     addSeamlessToLinearGraph(state, graph, modelLoaderNodeId);
@@ -752,13 +555,13 @@ export const buildCanvasSDXLOutpaintGraph = (
 
   // Add Refiner if enabled
   if (refinerModel) {
-    addSDXLRefinerToGraph(state, graph, CANVAS_COHERENCE_DENOISE_LATENTS, modelLoaderNodeId, canvasInitImage);
+    addSDXLRefinerToGraph(state, graph, SDXL_DENOISE_LATENTS, modelLoaderNodeId, canvasInitImage);
     if (seamlessXAxis || seamlessYAxis) {
       modelLoaderNodeId = SDXL_REFINER_SEAMLESS;
     }
   }
 
-  // optionally add custom VAE
+  // Add VAE
   addVAEToGraph(state, graph, modelLoaderNodeId);
 
   // add LoRA support
@@ -782,8 +585,6 @@ export const buildCanvasSDXLOutpaintGraph = (
     // must add after nsfw checker!
     addWatermarkerToGraph(state, graph, CANVAS_OUTPUT);
   }
-
-  addLinearUIOutputNode(state, graph);
 
   return graph;
 };

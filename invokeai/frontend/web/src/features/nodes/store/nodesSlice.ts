@@ -1,8 +1,7 @@
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { createSlice, isAnyOf } from '@reduxjs/toolkit';
-import type { RootState } from 'app/store/store';
+import type { PersistConfig, RootState } from 'app/store/store';
 import { workflowLoaded } from 'features/nodes/store/actions';
-import { nodeTemplatesBuilt } from 'features/nodes/store/nodeTemplatesSlice';
 import { SHARED_NODE_PROPERTIES } from 'features/nodes/types/constants';
 import type {
   BoardFieldValue,
@@ -19,6 +18,7 @@ import type {
   MainModelFieldValue,
   SchedulerFieldValue,
   SDXLRefinerModelFieldValue,
+  StatefulFieldValue,
   StringFieldValue,
   T2IAdapterModelFieldValue,
   VAEModelFieldValue,
@@ -37,11 +37,12 @@ import {
   zMainModelFieldValue,
   zSchedulerFieldValue,
   zSDXLRefinerModelFieldValue,
+  zStatefulFieldValue,
   zStringFieldValue,
   zT2IAdapterModelFieldValue,
   zVAEModelFieldValue,
 } from 'features/nodes/types/field';
-import type { AnyNode, NodeExecutionState } from 'features/nodes/types/invocation';
+import type { AnyNode, InvocationTemplate, NodeExecutionState } from 'features/nodes/types/invocation';
 import { isInvocationNode, isNotesNode, zNodeStatus } from 'features/nodes/types/invocation';
 import { cloneDeep, forEach } from 'lodash-es';
 import type {
@@ -63,9 +64,7 @@ import {
   getIncomers,
   getOutgoers,
   SelectionMode,
-  updateEdge,
 } from 'reactflow';
-import { receivedOpenAPISchema } from 'services/api/thunks/schema';
 import {
   socketGeneratorProgress,
   socketInvocationComplete,
@@ -88,11 +87,11 @@ const initialNodeExecutionState: Omit<NodeExecutionState, 'nodeId'> = {
   outputs: [],
 };
 
-export const initialNodesState: NodesState = {
+const initialNodesState: NodesState = {
   _version: 1,
   nodes: [],
   edges: [],
-  isReady: false,
+  templates: {},
   connectionStartParams: null,
   connectionStartFieldType: null,
   connectionMade: false,
@@ -139,7 +138,7 @@ const fieldValueReducer = <T extends FieldValue>(
   input.value = result.data;
 };
 
-const nodesSlice = createSlice({
+export const nodesSlice = createSlice({
   name: 'nodes',
   initialState: initialNodesState,
   reducers: {
@@ -191,6 +190,7 @@ const nodesSlice = createSlice({
             node,
             state.nodes,
             state.edges,
+            state.templates,
             nodeId,
             handleId,
             handleType,
@@ -214,10 +214,6 @@ const nodesSlice = createSlice({
     edgeAdded: (state, action: PayloadAction<Edge>) => {
       state.edges = addEdge(action.payload, state.edges);
     },
-    edgeUpdated: (state, action: PayloadAction<{ oldEdge: Edge; newConnection: Connection }>) => {
-      const { oldEdge, newConnection } = action.payload;
-      state.edges = updateEdge(oldEdge, newConnection, state.edges);
-    },
     connectionStarted: (state, action: PayloadAction<OnConnectStartParams>) => {
       state.connectionStartParams = action.payload;
       state.connectionMade = state.modifyingEdge;
@@ -225,12 +221,12 @@ const nodesSlice = createSlice({
       if (!nodeId || !handleId) {
         return;
       }
-      const nodeIndex = state.nodes.findIndex((n) => n.id === nodeId);
-      const node = state.nodes?.[nodeIndex];
+      const node = state.nodes.find((n) => n.id === nodeId);
       if (!isInvocationNode(node)) {
         return;
       }
-      const field = handleType === 'source' ? node.data.outputs[handleId] : node.data.inputs[handleId];
+      const template = state.templates[node.data.type];
+      const field = handleType === 'source' ? template?.outputs[handleId] : template?.inputs[handleId];
       state.connectionStartFieldType = field?.type ?? null;
     },
     connectionMade: (state, action: PayloadAction<Connection>) => {
@@ -261,6 +257,7 @@ const nodesSlice = createSlice({
                 mouseOverNode,
                 state.nodes,
                 state.edges,
+                state.templates,
                 nodeId,
                 handleId,
                 handleType,
@@ -481,6 +478,9 @@ const nodesSlice = createSlice({
     selectedEdgesChanged: (state, action: PayloadAction<string[]>) => {
       state.selectedEdges = action.payload;
     },
+    fieldValueReset: (state, action: FieldValueAction<StatefulFieldValue>) => {
+      fieldValueReducer(state, action, zStatefulFieldValue);
+    },
     fieldStringValueChanged: (state, action: FieldValueAction<StringFieldValue>) => {
       fieldValueReducer(state, action, zStringFieldValue);
     },
@@ -669,18 +669,14 @@ const nodesSlice = createSlice({
       state.connectionStartParams = null;
       state.connectionStartFieldType = null;
     },
-    addNodePopoverToggled: (state) => {
-      state.isAddNodePopoverOpen = !state.isAddNodePopoverOpen;
-    },
     selectionModeChanged: (state, action: PayloadAction<boolean>) => {
       state.selectionMode = action.payload ? SelectionMode.Full : SelectionMode.Partial;
     },
+    nodeTemplatesBuilt: (state, action: PayloadAction<Record<string, InvocationTemplate>>) => {
+      state.templates = action.payload;
+    },
   },
   extraReducers: (builder) => {
-    builder.addCase(receivedOpenAPISchema.pending, (state) => {
-      state.isReady = false;
-    });
-
     builder.addCase(workflowLoaded, (state, action) => {
       const { nodes, edges } = action.payload;
       state.nodes = applyNodeChanges(
@@ -752,16 +748,12 @@ const nodesSlice = createSlice({
         });
       }
     });
-    builder.addCase(nodeTemplatesBuilt, (state) => {
-      state.isReady = true;
-    });
   },
 });
 
 export const {
   addNodePopoverClosed,
   addNodePopoverOpened,
-  addNodePopoverToggled,
   connectionEnded,
   connectionMade,
   connectionStarted,
@@ -769,7 +761,7 @@ export const {
   edgeChangeStarted,
   edgesChanged,
   edgesDeleted,
-  edgeUpdated,
+  fieldValueReset,
   fieldBoardValueChanged,
   fieldBooleanValueChanged,
   fieldColorValueChanged,
@@ -812,6 +804,7 @@ export const {
   shouldValidateGraphChanged,
   viewportChanged,
   edgeAdded,
+  nodeTemplatesBuilt,
 } = nodesSlice.actions;
 
 // This is used for tracking `state.workflow.isTouched`
@@ -821,7 +814,6 @@ export const isAnyNodeOrEdgeMutation = isAnyOf(
   edgeDeleted,
   edgesChanged,
   edgesDeleted,
-  edgeUpdated,
   fieldBoardValueChanged,
   fieldBooleanValueChanged,
   fieldColorValueChanged,
@@ -844,7 +836,6 @@ export const isAnyNodeOrEdgeMutation = isAnyOf(
   nodeIsOpenChanged,
   nodeLabelChanged,
   nodeNotesChanged,
-  nodesChanged,
   nodesDeleted,
   nodeUseCacheChanged,
   notesNodeValueChanged,
@@ -852,14 +843,29 @@ export const isAnyNodeOrEdgeMutation = isAnyOf(
   edgeAdded
 );
 
-export default nodesSlice.reducer;
-
 export const selectNodesSlice = (state: RootState) => state.nodes;
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-export const migrateNodesState = (state: any): any => {
+const migrateNodesState = (state: any): any => {
   if (!('_version' in state)) {
     state._version = 1;
   }
   return state;
+};
+
+export const nodesPersistConfig: PersistConfig<NodesState> = {
+  name: nodesSlice.name,
+  initialState: initialNodesState,
+  migrate: migrateNodesState,
+  persistDenylist: [
+    'connectionStartParams',
+    'connectionStartFieldType',
+    'selectedNodes',
+    'selectedEdges',
+    'nodesToCopy',
+    'edgesToCopy',
+    'connectionMade',
+    'modifyingEdge',
+    'addNewNodePosition',
+  ],
 };

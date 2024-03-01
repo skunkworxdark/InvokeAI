@@ -1,6 +1,6 @@
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { createSlice, isAnyOf } from '@reduxjs/toolkit';
-import type { RootState } from 'app/store/store';
+import type { PersistConfig, RootState } from 'app/store/store';
 import { uniqBy } from 'lodash-es';
 import { boardsApi } from 'services/api/endpoints/boards';
 import { imagesApi } from 'services/api/endpoints/images';
@@ -9,7 +9,7 @@ import type { ImageDTO } from 'services/api/types';
 import type { BoardId, GalleryState, GalleryView } from './types';
 import { IMAGE_LIMIT, INITIAL_IMAGE_LIMIT } from './types';
 
-export const initialGalleryState: GalleryState = {
+const initialGalleryState: GalleryState = {
   selection: [],
   shouldAutoSwitch: true,
   autoAssignBoardOnClick: true,
@@ -109,8 +109,6 @@ export const {
   moreImagesLoaded,
 } = gallerySlice.actions;
 
-export default gallerySlice.reducer;
-
 const isAnyBoardDeleted = isAnyOf(
   imagesApi.endpoints.deleteBoard.matchFulfilled,
   imagesApi.endpoints.deleteBoardAndImages.matchFulfilled
@@ -119,9 +117,16 @@ const isAnyBoardDeleted = isAnyOf(
 export const selectGallerySlice = (state: RootState) => state.gallery;
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-export const migrateGalleryState = (state: any): any => {
+const migrateGalleryState = (state: any): any => {
   if (!('_version' in state)) {
     state._version = 1;
   }
   return state;
+};
+
+export const galleryPersistConfig: PersistConfig<GalleryState> = {
+  name: gallerySlice.name,
+  initialState: initialGalleryState,
+  migrate: migrateGalleryState,
+  persistDenylist: ['selection', 'selectedBoardId', 'galleryView', 'offset', 'limit'],
 };

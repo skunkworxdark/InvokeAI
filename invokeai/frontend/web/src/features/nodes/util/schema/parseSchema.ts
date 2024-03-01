@@ -12,6 +12,7 @@ import {
 import { t } from 'i18next';
 import { reduce } from 'lodash-es';
 import type { OpenAPIV3_1 } from 'openapi-types';
+import { serializeError } from 'serialize-error';
 
 import { buildFieldInputTemplate } from './buildFieldInputTemplate';
 import { buildFieldOutputTemplate } from './buildFieldOutputTemplate';
@@ -21,14 +22,7 @@ const RESERVED_INPUT_FIELD_NAMES = ['id', 'type', 'use_cache'];
 const RESERVED_OUTPUT_FIELD_NAMES = ['type'];
 const RESERVED_FIELD_TYPES = ['IsIntermediate'];
 
-const invocationDenylist: string[] = [
-  'graph',
-  'linear_ui_output',
-  'l2i_onnx',
-  'prompt_onnx',
-  't2l_onnx',
-  'onnx_model_loader',
-];
+const invocationDenylist: string[] = ['graph', 'linear_ui_output'];
 
 const isReservedInputField = (nodeType: string, fieldName: string) => {
   if (RESERVED_INPUT_FIELD_NAMES.includes(fieldName)) {
@@ -103,7 +97,10 @@ export const parseSchema = (
           const fieldType = parseFieldType(property);
 
           if (isReservedFieldType(fieldType.name)) {
-            // Skip processing this reserved field
+            logger('nodes').trace(
+              { node: type, field: propertyName, schema: parseify(property) },
+              'Skipped reserved input field'
+            );
             return inputsAccumulator;
           }
 
@@ -122,6 +119,20 @@ export const parseSchema = (
                 node: type,
                 field: propertyName,
                 message: e.message,
+              })
+            );
+          } else {
+            logger('nodes').warn(
+              {
+                node: type,
+                field: propertyName,
+                schema: parseify(property),
+                error: serializeError(e),
+              },
+              t('nodes.inputFieldTypeParseError', {
+                node: type,
+                field: propertyName,
+                message: 'unknown error',
               })
             );
           }
@@ -201,6 +212,20 @@ export const parseSchema = (
                 node: type,
                 field: propertyName,
                 message: e.message,
+              })
+            );
+          } else {
+            logger('nodes').warn(
+              {
+                node: type,
+                field: propertyName,
+                schema: parseify(property),
+                error: serializeError(e),
+              },
+              t('nodes.outputFieldTypeParseError', {
+                node: type,
+                field: propertyName,
+                message: 'unknown error',
               })
             );
           }

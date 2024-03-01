@@ -1,7 +1,7 @@
 import type { UseToastOptions } from '@invoke-ai/ui-library';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { createSlice, isAnyOf } from '@reduxjs/toolkit';
-import type { RootState } from 'app/store/store';
+import type { PersistConfig, RootState } from 'app/store/store';
 import { calculateStepPercentage } from 'features/system/util/calculateStepPercentage';
 import { makeToast } from 'features/system/util/makeToast';
 import { t } from 'i18next';
@@ -24,7 +24,7 @@ import {
 
 import type { Language, SystemState } from './types';
 
-export const initialSystemState: SystemState = {
+const initialSystemState: SystemState = {
   _version: 1,
   isConnected: false,
   shouldConfirmOnDelete: true,
@@ -194,16 +194,21 @@ export const {
   setShouldEnableInformationalPopovers,
 } = systemSlice.actions;
 
-export default systemSlice.reducer;
-
 const isAnyServerError = isAnyOf(socketInvocationError, socketSessionRetrievalError, socketInvocationRetrievalError);
 
 export const selectSystemSlice = (state: RootState) => state.system;
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-export const migrateSystemState = (state: any): any => {
+const migrateSystemState = (state: any): any => {
   if (!('_version' in state)) {
     state._version = 1;
   }
   return state;
+};
+
+export const systemPersistConfig: PersistConfig<SystemState> = {
+  name: systemSlice.name,
+  initialState: initialSystemState,
+  migrate: migrateSystemState,
+  persistDenylist: ['isConnected', 'denoiseProgress', 'status'],
 };

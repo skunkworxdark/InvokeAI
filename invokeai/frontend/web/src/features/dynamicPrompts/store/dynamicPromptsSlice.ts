@@ -1,13 +1,13 @@
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { createSlice } from '@reduxjs/toolkit';
-import type { RootState } from 'app/store/store';
+import type { PersistConfig, RootState } from 'app/store/store';
 import { z } from 'zod';
 
-export const zSeedBehaviour = z.enum(['PER_ITERATION', 'PER_PROMPT']);
-export type SeedBehaviour = z.infer<typeof zSeedBehaviour>;
+const zSeedBehaviour = z.enum(['PER_ITERATION', 'PER_PROMPT']);
+type SeedBehaviour = z.infer<typeof zSeedBehaviour>;
 export const isSeedBehaviour = (v: unknown): v is SeedBehaviour => zSeedBehaviour.safeParse(v).success;
 
-export interface DynamicPromptsState {
+interface DynamicPromptsState {
   _version: 1;
   maxPrompts: number;
   combinatorial: boolean;
@@ -18,7 +18,7 @@ export interface DynamicPromptsState {
   seedBehaviour: SeedBehaviour;
 }
 
-export const initialDynamicPromptsState: DynamicPromptsState = {
+const initialDynamicPromptsState: DynamicPromptsState = {
   _version: 1,
   maxPrompts: 100,
   combinatorial: true,
@@ -29,11 +29,9 @@ export const initialDynamicPromptsState: DynamicPromptsState = {
   seedBehaviour: 'PER_ITERATION',
 };
 
-const initialState: DynamicPromptsState = initialDynamicPromptsState;
-
 export const dynamicPromptsSlice = createSlice({
   name: 'dynamicPrompts',
-  initialState,
+  initialState: initialDynamicPromptsState,
   reducers: {
     maxPromptsChanged: (state, action: PayloadAction<number>) => {
       state.maxPrompts = action.payload;
@@ -74,14 +72,19 @@ export const {
   seedBehaviourChanged,
 } = dynamicPromptsSlice.actions;
 
-export default dynamicPromptsSlice.reducer;
-
 export const selectDynamicPromptsSlice = (state: RootState) => state.dynamicPrompts;
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-export const migrateDynamicPromptsState = (state: any): any => {
+const migrateDynamicPromptsState = (state: any): any => {
   if (!('_version' in state)) {
     state._version = 1;
   }
   return state;
+};
+
+export const dynamicPromptsPersistConfig: PersistConfig<DynamicPromptsState> = {
+  name: dynamicPromptsSlice.name,
+  initialState: initialDynamicPromptsState,
+  migrate: migrateDynamicPromptsState,
+  persistDenylist: ['prompts'],
 };

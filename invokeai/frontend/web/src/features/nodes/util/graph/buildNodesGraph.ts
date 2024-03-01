@@ -1,33 +1,9 @@
 import type { NodesState } from 'features/nodes/store/types';
-import type { FieldInputInstance } from 'features/nodes/types/field';
-import { isColorFieldInputInstance } from 'features/nodes/types/field';
 import { isInvocationNode } from 'features/nodes/types/invocation';
-import { cloneDeep, omit, reduce } from 'lodash-es';
+import { omit, reduce } from 'lodash-es';
 import type { Graph } from 'services/api/types';
 import type { AnyInvocation } from 'services/events/types';
 import { v4 as uuidv4 } from 'uuid';
-
-/**
- * We need to do special handling for some fields
- */
-export const parseFieldValue = (field: FieldInputInstance) => {
-  if (isColorFieldInputInstance(field)) {
-    if (field.value) {
-      const clonedValue = cloneDeep(field.value);
-
-      const { r, g, b, a } = field.value;
-
-      // scale alpha value to PIL's desired range 0-255
-      const scaledAlpha = Math.max(0, Math.min(a * 255, 255));
-      const transformedColor = { r, g, b, a: scaledAlpha };
-
-      Object.assign(clonedValue, transformedColor);
-      return clonedValue;
-    }
-  }
-
-  return field.value;
-};
 
 /**
  * Builds a graph from the node editor state.
@@ -46,8 +22,7 @@ export const buildNodesGraph = (nodesState: NodesState): Graph => {
     const transformedInputs = reduce(
       inputs,
       (inputsAccumulator, input, name) => {
-        const parsedValue = parseFieldValue(input);
-        inputsAccumulator[name] = parsedValue;
+        inputsAccumulator[name] = input.value;
 
         return inputsAccumulator;
       },
