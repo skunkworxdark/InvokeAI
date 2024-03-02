@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Literal, Optional, Union
+from typing import Any, Dict, Literal, Optional, Union
 
 from pydantic import model_validator
 
@@ -8,22 +8,26 @@ from invokeai.app.invocations.baseinvocation import (
     BaseInvocationOutput,
     Classification,
     Input,
-    InputField,
     InvocationContext,
+    invocation,
+    invocation_output,
+)
+from invokeai.app.invocations.constants import SCHEDULER_NAME_VALUES
+from invokeai.app.invocations.controlnet_image_processors import ControlField
+from invokeai.app.invocations.fields import (
+    FieldDescriptions,
+    InputField,
     MetadataField,
     OutputField,
     UIType,
     WithMetadata,
-    invocation,
-    invocation_output,
 )
-from invokeai.app.invocations.controlnet_image_processors import ControlField
 from invokeai.app.invocations.ip_adapter import (
     IPAdapterField,
     IPAdapterInvocation,
     IPAdapterModelField,
 )
-from invokeai.app.invocations.latent import SAMPLER_NAME_VALUES, DenoiseLatentsInvocation, SchedulerOutput
+from invokeai.app.invocations.latent import DenoiseLatentsInvocation, SchedulerOutput
 from invokeai.app.invocations.metadata import LoRAMetadataField, MetadataOutput
 from invokeai.app.invocations.model import (
     ClipField,
@@ -47,8 +51,7 @@ from invokeai.app.invocations.primitives import (
     StringOutput,
 )
 from invokeai.app.invocations.t2i_adapter import T2IAdapterField
-from invokeai.app.shared.fields import FieldDescriptions
-from invokeai.backend.model_management.models.base import ModelType, SubModelType
+from invokeai.backend.model_manager.config import ModelType, SubModelType
 from invokeai.version import __version__
 
 CUSTOM_LABEL: str = "* CUSTOM LABEL *"
@@ -205,7 +208,7 @@ class MetadataFromImageInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> MetadataOutput:
         data = {}
-        image_metadata = context.services.images.get_metadata(self.image.image_name)
+        image_metadata = context.images.get_metadata(self.image.image_name)
         if image_metadata is not None:
             data.update(image_metadata.model_dump())
 
@@ -361,7 +364,7 @@ class MetadataToSchedulerInvocation(BaseInvocation, WithMetadata):
         description=FieldDescriptions.metadata_item_label,
         input=Input.Direct,
     )
-    default_value: SAMPLER_NAME_VALUES = InputField(
+    default_value: SCHEDULER_NAME_VALUES = InputField(
         default="euler",
         description="The default scheduler to use if not found in the metadata",
         ui_type=UIType.Scheduler,
@@ -436,58 +439,41 @@ class MetadataToModelInvocation(BaseInvocation, WithMetadata):
         else:
             model = self.default_value
 
-        base_model = model.base_model
-        model_name = model.model_name
-        model_type = ModelType.Main
+        if not context.models.exists(model.key):
+            raise Exception(f"Unknown model: {model.key}")
 
-        # TODO: not found exceptions
-        if not context.services.model_manager.model_exists(
-            model_name=model_name,
-            base_model=base_model,
-            model_type=model_type,
-        ):
-            raise Exception(f"Unknown {base_model} {model_type} model: {model_name}")
+        x = context.models.get_config(model.key)
 
         return MetadataToModelOutput(
             model=model,
-            name=f"{base_model}: {model_name}",
+            name=f"{x.base}: {x.name}",
             unet=UNetField(
                 unet=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.UNet,
+                    key=model.key,
+                    submodel_type=SubModelType.UNet,
                 ),
                 scheduler=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.Scheduler,
+                    key=model.key,
+                    submodel_type=SubModelType.Scheduler,
                 ),
                 loras=[],
             ),
             clip=ClipField(
                 tokenizer=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.Tokenizer,
+                    key=model.key,
+                    submodel_type=SubModelType.Tokenizer,
                 ),
                 text_encoder=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.TextEncoder,
+                    key=model.key,
+                    submodel_type=SubModelType.TextEncoder,
                 ),
                 loras=[],
                 skipped_layers=0,
             ),
             vae=VaeField(
                 vae=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.Vae,
+                    key=model.key,
+                    submodel_type=SubModelType.Vae,
                 ),
             ),
         )
@@ -528,73 +514,53 @@ class MetadataToSDXLModelInvocation(BaseInvocation, WithMetadata):
         else:
             model = self.default_value
 
-        base_model = model.base_model
-        model_name = model.model_name
-        model_type = ModelType.Main
+        if not context.models.exists(model.key):
+            raise Exception(f"Unknown model: {model.key}")
 
-        if not context.services.model_manager.model_exists(
-            model_name=model_name,
-            base_model=base_model,
-            model_type=model_type,
-        ):
-            raise Exception(f"Unknown {base_model} {model_type} model: {model_name}")
+        x = context.models.get_config(model.key)
 
         return MetadataToSDXLModelOutput(
             model=model,
-            name=f"{base_model}: {model_name}",
+            name=f"{x.base}: {x.name}",
             unet=UNetField(
                 unet=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.UNet,
+                    key=model.key,
+                    submodel_type=SubModelType.UNet,
                 ),
                 scheduler=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.Scheduler,
+                    key=model.key,
+                    submodel_type=SubModelType.Scheduler,
                 ),
                 loras=[],
             ),
             clip=ClipField(
                 tokenizer=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.Tokenizer,
+                    key=model.key,
+                    submodel_type=SubModelType.Tokenizer,
                 ),
                 text_encoder=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.TextEncoder,
+                    key=model.key,
+                    submodel_type=SubModelType.TextEncoder,
                 ),
                 loras=[],
                 skipped_layers=0,
             ),
             clip2=ClipField(
                 tokenizer=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.Tokenizer2,
+                    key=model.key,
+                    submodel_type=SubModelType.Tokenizer2,
                 ),
                 text_encoder=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.TextEncoder2,
+                    key=model.key,
+                    submodel_type=SubModelType.TextEncoder2,
                 ),
                 loras=[],
                 skipped_layers=0,
             ),
             vae=VaeField(
                 vae=ModelInfo(
-                    model_name=model_name,
-                    base_model=base_model,
-                    model_type=model_type,
-                    submodel=SubModelType.Vae,
+                    key=model.key,
+                    submodel_type=SubModelType.Vae,
                 ),
             ),
         )
@@ -628,9 +594,9 @@ class DenoiseLatentsMetaInvocation(DenoiseLatentsInvocation, WithMetadata):
                 obj = [obj]
 
             return [
-                LoRAMetadataField(
-                    lora=LoRAModelField(model_name=item.model_name, base_model=item.base_model), weight=item.weight
-                ).model_dump(exclude_none=True, exclude={"id", "type", "is_intermediate", "use_cache"})
+                LoRAMetadataField(model=LoRAModelField(key=item.key), weight=item.weight).model_dump(
+                    exclude_none=True, exclude={"id", "type", "is_intermediate", "use_cache"}
+                )
                 for item in obj
             ]
 
@@ -697,20 +663,16 @@ class MetadataToVAEInvocation(BaseInvocation, WithMetadata):
             model = VAEModelField(**data.get(key, ""))
             vae = VaeField(
                 vae=ModelInfo(
-                    model_name=model.model_name,
-                    base_model=model.base_model,
-                    model_type=ModelType.Vae,
+                    key=model.key,
+                    submodel_type=SubModelType.Vae,
                 ),
             )
         else:
             vae = self.default_value
+            model = vae.vae
 
-        if not context.services.model_manager.model_exists(
-            base_model=vae.vae.base_model,
-            model_name=vae.vae.model_name,
-            model_type=vae.vae.model_type,
-        ):
-            raise Exception(f"Unknown vae name: {vae.vae.model_name}!")
+        if not context.models.exists(model.key):
+            raise Exception(f"Unknown vae: {key}!")
 
         return VAEOutput(vae=vae)
 
@@ -757,20 +719,14 @@ class MetadataToLorasInvocation(BaseInvocation, WithMetadata):
 
         for x in loras:
             lora = LoRAMetadataField(**x)
-            if not context.services.model_manager.model_exists(
-                base_model=lora.lora.base_model,
-                model_name=lora.lora.model_name,
-                model_type=ModelType.Lora,
-            ):
-                raise Exception(f"Unknown lora {lora.lora.base_model}:{lora.lora.model_name}")
+            if not context.models.exists(lora.model.key):
+                raise Exception(f"Unknown lora: {lora.model.key}!")
 
             if self.unet is not None:
                 output.unet.loras.append(
                     LoraInfo(
-                        base_model=lora.lora.base_model,
-                        model_name=lora.lora.model_name,
-                        model_type=ModelType.Lora,
-                        submodel=None,
+                        key=lora.model.key,
+                        submodel_type=None,
                         weight=lora.weight,
                     )
                 )
@@ -778,10 +734,8 @@ class MetadataToLorasInvocation(BaseInvocation, WithMetadata):
             if self.clip is not None:
                 output.clip.loras.append(
                     LoraInfo(
-                        base_model=lora.lora.base_model,
-                        model_name=lora.lora.model_name,
-                        model_type=ModelType.Lora,
-                        submodel=None,
+                        key=lora.model.key,
+                        submodel_type=None,
                         weight=lora.weight,
                     )
                 )
@@ -840,20 +794,14 @@ class MetadataToSDXLLorasInvocation(BaseInvocation, WithMetadata):
 
         for x in loras:
             lora = LoRAMetadataField(**x)
-            if not context.services.model_manager.model_exists(
-                base_model=lora.lora.base_model,
-                model_name=lora.lora.model_name,
-                model_type=ModelType.Lora,
-            ):
-                raise Exception(f"Unknown LoRA {lora.lora.base_model}:{lora.lora.model_name}")
+            if not context.models.exists(lora.model.key):
+                raise Exception(f"Unknown lora: {lora.model.key}!")
 
             if self.unet is not None:
                 output.unet.loras.append(
                     LoraInfo(
-                        base_model=lora.lora.base_model,
-                        model_name=lora.lora.model_name,
-                        model_type=ModelType.Lora,
-                        submodel=None,
+                        key=lora.model.key,
+                        submodel_type=None,
                         weight=lora.weight,
                     )
                 )
@@ -861,10 +809,8 @@ class MetadataToSDXLLorasInvocation(BaseInvocation, WithMetadata):
             if self.clip is not None:
                 output.clip.loras.append(
                     LoraInfo(
-                        base_model=lora.lora.base_model,
-                        model_name=lora.lora.model_name,
-                        model_type=ModelType.Lora,
-                        submodel=None,
+                        key=lora.model.key,
+                        submodel_type=None,
                         weight=lora.weight,
                     )
                 )
@@ -872,10 +818,8 @@ class MetadataToSDXLLorasInvocation(BaseInvocation, WithMetadata):
             if self.clip2 is not None:
                 output.clip2.loras.append(
                     LoraInfo(
-                        base_model=lora.lora.base_model,
-                        model_name=lora.lora.model_name,
-                        model_type=ModelType.Lora,
-                        submodel=None,
+                        key=lora.model.key,
+                        submodel_type=None,
                         weight=lora.weight,
                     )
                 )
@@ -886,7 +830,7 @@ class MetadataToSDXLLorasInvocation(BaseInvocation, WithMetadata):
 @invocation_output("md_control_list_output")
 class MDControlListOutput(BaseInvocationOutput):
     # Outputs
-    control_list: list[ControlField] = OutputField(
+    control_list: Optional[Union[ControlField, list[ControlField]]] = OutputField(
         description=FieldDescriptions.control,
         title="ControlNet-List",
     )
@@ -917,10 +861,12 @@ class MetadataToControlnetsInvocation(BaseInvocation, WithMetadata):
         else:
             md_controls = []
 
-        controls = []
+        controls: Optional[Union[ControlField, list[ControlField]]]
 
         if self.control_list is not None:
             controls = self.control_list
+        else:
+            controls = []
 
         for x in md_controls:
             c = ControlField(**x)
@@ -932,7 +878,7 @@ class MetadataToControlnetsInvocation(BaseInvocation, WithMetadata):
 @invocation_output("md_ip_adapter_list_output")
 class MDIPAdapterListOutput(BaseInvocationOutput):
     # Outputs
-    ip_adapter_list: list[IPAdapterField] = OutputField(
+    ip_adapter_list: Optional[Union[IPAdapterField, list[IPAdapterField]]] = OutputField(
         description=FieldDescriptions.ip_adapter, title="IP-Adapter-List"
     )
 
@@ -963,10 +909,12 @@ class MetadataToIPAdaptersInvocation(BaseInvocation, WithMetadata):
         else:
             md_adapters = []
 
-        adapters = []
+        adapters: Optional[Union[IPAdapterField, list[IPAdapterField]]]
 
         if self.ip_adapter_list is not None:
             adapters = self.ip_adapter_list
+        else:
+            adapters = []
 
         for x in md_adapters:
             ipa = IPAdapterInvocation(
@@ -986,7 +934,7 @@ class MetadataToIPAdaptersInvocation(BaseInvocation, WithMetadata):
 @invocation_output("md_ip_adapters_output")
 class MDT2IAdapterListOutput(BaseInvocationOutput):
     # Outputs
-    t2i_adapter_list: list[T2IAdapterField] = OutputField(
+    t2i_adapter_list: Optional[Union[T2IAdapterField, list[T2IAdapterField]]] = OutputField(
         description=FieldDescriptions.t2i_adapter, title="T2I Adapter-List"
     )
 
@@ -1017,10 +965,12 @@ class MetadataToT2IAdaptersInvocation(BaseInvocation, WithMetadata):
         else:
             md_adapters = []
 
-        adapters = []
+        adapters: Optional[Union[T2IAdapterField, list[T2IAdapterField]]]
 
         if self.t2i_adapter_list is not None:
             adapters = self.t2i_adapter_list
+        else:
+            adapters = []
 
         for x in md_adapters:
             a = T2IAdapterField(**x)
