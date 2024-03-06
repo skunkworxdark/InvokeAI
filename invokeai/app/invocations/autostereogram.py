@@ -28,7 +28,6 @@ class AutostereogramInvocation(BaseInvocation, WithMetadata, WithBoard):
     """create an autostereogram from a depth map"""
 
     # Inputs
-    #    board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     depth_map: ImageField = InputField(description="The depth map to create the autostereogram from")
     pattern: Optional[ImageField] = InputField(
         default=None,
@@ -114,7 +113,6 @@ class AdvAutostereogramInvocation(BaseInvocation, WithMetadata, WithBoard):
     """create an advanced autostereogram from a depth map"""
 
     # Inputs
-    #    board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     depth_map: ImageField = InputField(description="The depth map to create the image from")
     pattern: Optional[ImageField] = InputField(
         default=None,
