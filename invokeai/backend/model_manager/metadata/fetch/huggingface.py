@@ -13,6 +13,7 @@ metadata = fetcher.from_url("https://huggingface.co/stabilityai/sdxl-turbo")
 print(metadata.tags)
 """
 
+import json
 import re
 from pathlib import Path
 from typing import Optional
@@ -23,7 +24,7 @@ from huggingface_hub.utils._errors import RepositoryNotFoundError, RevisionNotFo
 from pydantic.networks import AnyHttpUrl
 from requests.sessions import Session
 
-from invokeai.backend.model_manager import ModelRepoVariant
+from invokeai.backend.model_manager.config import ModelRepoVariant
 
 from ..metadata_base import (
     AnyModelRepoMetadata,
@@ -60,6 +61,7 @@ class HuggingFaceMetadataFetch(ModelMetadataFetchBase):
         # Little loop which tries fetching a revision corresponding to the selected variant.
         # If not available, then set variant to None and get the default.
         # If this too fails, raise exception.
+
         model_info = None
         while not model_info:
             try:
@@ -72,23 +74,24 @@ class HuggingFaceMetadataFetch(ModelMetadataFetchBase):
                 else:
                     variant = None
 
+        files: list[RemoteModelFile] = []
+
         _, name = id.split("/")
-        return HuggingFaceMetadata(
-            id=model_info.id,
-            author=model_info.author,
-            name=name,
-            last_modified=model_info.last_modified,
-            tag_dict=model_info.card_data.to_dict() if model_info.card_data else {},
-            tags=model_info.tags,
-            files=[
+
+        for s in model_info.siblings or []:
+            assert s.rfilename is not None
+            assert s.size is not None
+            files.append(
                 RemoteModelFile(
-                    url=hf_hub_url(id, x.rfilename, revision=variant),
-                    path=Path(name, x.rfilename),
-                    size=x.size,
-                    sha256=x.lfs.get("sha256") if x.lfs else None,
+                    url=hf_hub_url(id, s.rfilename, revision=variant),
+                    path=Path(name, s.rfilename),
+                    size=s.size,
+                    sha256=s.lfs.get("sha256") if s.lfs else None,
                 )
-                for x in model_info.siblings
-            ],
+            )
+
+        return HuggingFaceMetadata(
+            id=model_info.id, name=name, files=files, api_response=json.dumps(model_info.__dict__, default=str)
         )
 
     def from_url(self, url: AnyHttpUrl) -> AnyModelRepoMetadata:

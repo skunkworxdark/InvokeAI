@@ -26,6 +26,7 @@ from diffusers.schedulers import SchedulerMixin as Scheduler
 from PIL import Image, ImageFilter
 from pydantic import field_validator
 from torchvision.transforms.functional import resize as tv_resize
+from transformers import CLIPVisionModelWithProjection
 
 from invokeai.app.invocations.constants import LATENT_SCALE_FACTOR, SCHEDULER_NAME_VALUES
 from invokeai.app.invocations.fields import (
@@ -65,7 +66,6 @@ from ...backend.stable_diffusion.diffusers_pipeline import (
     T2IAdapterData,
     image_resized_to_grid_as_tensor,
 )
-from ...backend.stable_diffusion.diffusion.shared_invokeai_diffusion import PostprocessingSettings
 from ...backend.stable_diffusion.schedulers import SCHEDULER_MAP
 from ...backend.util.devices import choose_precision, choose_torch_device
 from .baseinvocation import (
@@ -75,7 +75,7 @@ from .baseinvocation import (
     invocation_output,
 )
 from .controlnet_image_processors import ControlField
-from .model import ModelInfo, UNetField, VaeField
+from .model import ModelIdentifierField, UNetField, VAEField
 
 if choose_torch_device() == torch.device("mps"):
     from torch import mps
@@ -118,7 +118,7 @@ class SchedulerInvocation(BaseInvocation):
 class CreateDenoiseMaskInvocation(BaseInvocation):
     """Creates mask for denoising model run."""
 
-    vae: VaeField = InputField(description=FieldDescriptions.vae, input=Input.Connection, ui_order=0)
+    vae: VAEField = InputField(description=FieldDescriptions.vae, input=Input.Connection, ui_order=0)
     image: Optional[ImageField] = InputField(default=None, description="Image which will be masked", ui_order=1)
     mask: ImageField = InputField(description="The mask to use when pasting", ui_order=2)
     tiled: bool = InputField(default=False, description=FieldDescriptions.tiled, ui_order=3)
@@ -153,7 +153,7 @@ class CreateDenoiseMaskInvocation(BaseInvocation):
         )
 
         if image_tensor is not None:
-            vae_info = context.models.load(**self.vae.vae.model_dump())
+            vae_info = context.models.load(self.vae.vae)
 
             img_mask = tv_resize(mask, image_tensor.shape[-2:], T.InterpolationMode.BILINEAR, antialias=False)
             masked_image = image_tensor * torch.where(img_mask < 0.5, 0.0, 1.0)
@@ -171,6 +171,16 @@ class CreateDenoiseMaskInvocation(BaseInvocation):
             masked_latents_name=masked_latents_name,
             gradient=False,
         )
+
+
+@invocation_output("gradient_mask_output")
+class GradientMaskOutput(BaseInvocationOutput):
+    """Outputs a denoise mask and an image representing the total gradient of the mask."""
+
+    denoise_mask: DenoiseMaskField = OutputField(description="Mask for denoise model run")
+    expanded_mask_area: ImageField = OutputField(
+        description="Image representing the total gradient area of the mask. For paste-back purposes."
+    )
 
 
 @invocation(
@@ -193,49 +203,53 @@ class CreateGradientMaskInvocation(BaseInvocation):
     )
 
     @torch.no_grad()
-    def invoke(self, context: InvocationContext) -> DenoiseMaskOutput:
+    def invoke(self, context: InvocationContext) -> GradientMaskOutput:
         mask_image = context.images.get_pil(self.mask.image_name, mode="L")
-        if self.coherence_mode == "Box Blur":
-            blur_mask = mask_image.filter(ImageFilter.BoxBlur(self.edge_radius))
-        else:  # Gaussian Blur OR Staged
-            # Gaussian Blur uses standard deviation. 1/2 radius is a good approximation
-            blur_mask = mask_image.filter(ImageFilter.GaussianBlur(self.edge_radius / 2))
+        if self.edge_radius > 0:
+            if self.coherence_mode == "Box Blur":
+                blur_mask = mask_image.filter(ImageFilter.BoxBlur(self.edge_radius))
+            else:  # Gaussian Blur OR Staged
+                # Gaussian Blur uses standard deviation. 1/2 radius is a good approximation
+                blur_mask = mask_image.filter(ImageFilter.GaussianBlur(self.edge_radius / 2))
 
-        mask_tensor: torch.Tensor = image_resized_to_grid_as_tensor(mask_image, normalize=False)
-        blur_tensor: torch.Tensor = image_resized_to_grid_as_tensor(blur_mask, normalize=False)
+            blur_tensor: torch.Tensor = image_resized_to_grid_as_tensor(blur_mask, normalize=False)
 
-        # redistribute blur so that the edges are 0 and blur out to 1
-        blur_tensor = (blur_tensor - 0.5) * 2
+            # redistribute blur so that the original edges are 0 and blur outwards to 1
+            blur_tensor = (blur_tensor - 0.5) * 2
 
-        threshold = 1 - self.minimum_denoise
+            threshold = 1 - self.minimum_denoise
 
-        if self.coherence_mode == "Staged":
-            # wherever the blur_tensor is masked to any degree, convert it to threshold
-            blur_tensor = torch.where((blur_tensor < 1), threshold, blur_tensor)
+            if self.coherence_mode == "Staged":
+                # wherever the blur_tensor is less than fully masked, convert it to threshold
+                blur_tensor = torch.where((blur_tensor < 1) & (blur_tensor > 0), threshold, blur_tensor)
+            else:
+                # wherever the blur_tensor is above threshold but less than 1, drop it to threshold
+                blur_tensor = torch.where((blur_tensor > threshold) & (blur_tensor < 1), threshold, blur_tensor)
+
         else:
-            # wherever the blur_tensor is above threshold but less than 1, drop it to threshold
-            blur_tensor = torch.where((blur_tensor > threshold) & (blur_tensor < 1), threshold, blur_tensor)
-
-        # multiply original mask to force actually masked regions to 0
-        blur_tensor = mask_tensor * blur_tensor
+            blur_tensor: torch.Tensor = image_resized_to_grid_as_tensor(mask_image, normalize=False)
 
         mask_name = context.tensors.save(tensor=blur_tensor.unsqueeze(1))
 
-        return DenoiseMaskOutput.build(
-            mask_name=mask_name,
-            masked_latents_name=None,
-            gradient=True,
+        # compute a [0, 1] mask from the blur_tensor
+        expanded_mask = torch.where((blur_tensor < 1), 0, 1)
+        expanded_mask_image = Image.fromarray((expanded_mask.squeeze(0).numpy() * 255).astype(np.uint8), mode="L")
+        expanded_image_dto = context.images.save(expanded_mask_image)
+
+        return GradientMaskOutput(
+            denoise_mask=DenoiseMaskField(mask_name=mask_name, masked_latents_name=None, gradient=True),
+            expanded_mask_area=ImageField(image_name=expanded_image_dto.image_name),
         )
 
 
 def get_scheduler(
     context: InvocationContext,
-    scheduler_info: ModelInfo,
+    scheduler_info: ModelIdentifierField,
     scheduler_name: str,
     seed: int,
 ) -> Scheduler:
     scheduler_class, scheduler_extra_config = SCHEDULER_MAP.get(scheduler_name, SCHEDULER_MAP["ddim"])
-    orig_scheduler_info = context.models.load(**scheduler_info.model_dump())
+    orig_scheduler_info = context.models.load(scheduler_info)
     with orig_scheduler_info as orig_scheduler:
         scheduler_config = orig_scheduler.config
 
@@ -360,7 +374,6 @@ class DenoiseLatentsInvocation(BaseInvocation):
     ) -> ConditioningData:
         positive_cond_data = context.conditioning.load(self.positive_conditioning.conditioning_name)
         c = positive_cond_data.conditionings[0].to(device=unet.device, dtype=unet.dtype)
-        extra_conditioning_info = c.extra_conditioning
 
         negative_cond_data = context.conditioning.load(self.negative_conditioning.conditioning_name)
         uc = negative_cond_data.conditionings[0].to(device=unet.device, dtype=unet.dtype)
@@ -370,13 +383,6 @@ class DenoiseLatentsInvocation(BaseInvocation):
             text_embeddings=c,
             guidance_scale=self.cfg_scale,
             guidance_rescale_multiplier=self.cfg_rescale_multiplier,
-            extra=extra_conditioning_info,
-            postprocessing_settings=PostprocessingSettings(
-                threshold=0.0,  # threshold,
-                warmup=0.2,  # warmup,
-                h_symmetry_time_pct=None,  # h_symmetry_time_pct,
-                v_symmetry_time_pct=None,  # v_symmetry_time_pct,
-            ),
         )
 
         conditioning_data = conditioning_data.add_scheduler_args_if_applicable(  # FIXME
@@ -449,7 +455,7 @@ class DenoiseLatentsInvocation(BaseInvocation):
         #        and if weight is None, populate with default 1.0?
         controlnet_data = []
         for control_info in control_list:
-            control_model = exit_stack.enter_context(context.models.load(key=control_info.control_model.key))
+            control_model = exit_stack.enter_context(context.models.load(control_info.control_model))
 
             # control_models.append(control_model)
             control_image_field = control_info.image
@@ -511,11 +517,10 @@ class DenoiseLatentsInvocation(BaseInvocation):
         conditioning_data.ip_adapter_conditioning = []
         for single_ip_adapter in ip_adapter:
             ip_adapter_model: Union[IPAdapter, IPAdapterPlus] = exit_stack.enter_context(
-                context.models.load(key=single_ip_adapter.ip_adapter_model.key)
+                context.models.load(single_ip_adapter.ip_adapter_model)
             )
 
-            image_encoder_model_info = context.models.load(key=single_ip_adapter.image_encoder_model.key)
-
+            image_encoder_model_info = context.models.load(single_ip_adapter.image_encoder_model)
             # `single_ip_adapter.image` could be a list or a single ImageField. Normalize to a list here.
             single_ipa_image_fields = single_ip_adapter.image
             if not isinstance(single_ipa_image_fields, list):
@@ -526,6 +531,7 @@ class DenoiseLatentsInvocation(BaseInvocation):
             # TODO(ryand): With some effort, the step of running the CLIP Vision encoder could be done before any other
             # models are needed in memory. This would help to reduce peak memory utilization in low-memory environments.
             with image_encoder_model_info as image_encoder_model:
+                assert isinstance(image_encoder_model, CLIPVisionModelWithProjection)
                 # Get image embeddings from CLIP and ImageProjModel.
                 image_prompt_embeds, uncond_image_prompt_embeds = ip_adapter_model.get_image_embeds(
                     single_ipa_images, image_encoder_model
@@ -565,8 +571,8 @@ class DenoiseLatentsInvocation(BaseInvocation):
 
         t2i_adapter_data = []
         for t2i_adapter_field in t2i_adapter:
-            t2i_adapter_model_config = context.models.get_config(key=t2i_adapter_field.t2i_adapter_model.key)
-            t2i_adapter_loaded_model = context.models.load(key=t2i_adapter_field.t2i_adapter_model.key)
+            t2i_adapter_model_config = context.models.get_config(t2i_adapter_field.t2i_adapter_model.key)
+            t2i_adapter_loaded_model = context.models.load(t2i_adapter_field.t2i_adapter_model)
             image = context.images.get_pil(t2i_adapter_field.image.image_name)
 
             # The max_unet_downscale is the maximum amount that the UNet model downscales the latent image internally.
@@ -671,7 +677,7 @@ class DenoiseLatentsInvocation(BaseInvocation):
         if self.denoise_mask.masked_latents_name is not None:
             masked_latents = context.tensors.load(self.denoise_mask.masked_latents_name)
         else:
-            masked_latents = None
+            masked_latents = torch.where(mask < 0.5, 0.0, latents)
 
         return 1 - mask, masked_latents, self.denoise_mask.gradient
 
@@ -719,12 +725,13 @@ class DenoiseLatentsInvocation(BaseInvocation):
 
             def _lora_loader() -> Iterator[Tuple[LoRAModelRaw, float]]:
                 for lora in self.unet.loras:
-                    lora_info = context.models.load(**lora.model_dump(exclude={"weight"}))
+                    lora_info = context.models.load(lora.lora)
+                    assert isinstance(lora_info.model, LoRAModelRaw)
                     yield (lora_info.model, lora.weight)
                     del lora_info
                 return
 
-            unet_info = context.models.load(**self.unet.unet.model_dump())
+            unet_info = context.models.load(self.unet.unet)
             assert isinstance(unet_info.model, UNet2DConditionModel)
             with (
                 ExitStack() as exit_stack,
@@ -777,10 +784,7 @@ class DenoiseLatentsInvocation(BaseInvocation):
                     denoising_end=self.denoising_end,
                 )
 
-                (
-                    result_latents,
-                    result_attention_map_saver,
-                ) = pipeline.latents_from_embeddings(
+                result_latents = pipeline.latents_from_embeddings(
                     latents=latents,
                     timesteps=timesteps,
                     init_timestep=init_timestep,
@@ -821,7 +825,7 @@ class LatentsToImageInvocation(BaseInvocation, WithMetadata, WithBoard):
         description=FieldDescriptions.latents,
         input=Input.Connection,
     )
-    vae: VaeField = InputField(
+    vae: VAEField = InputField(
         description=FieldDescriptions.vae,
         input=Input.Connection,
     )
@@ -832,8 +836,8 @@ class LatentsToImageInvocation(BaseInvocation, WithMetadata, WithBoard):
     def invoke(self, context: InvocationContext) -> ImageOutput:
         latents = context.tensors.load(self.latents.latents_name)
 
-        vae_info = context.models.load(**self.vae.vae.model_dump())
-
+        vae_info = context.models.load(self.vae.vae)
+        assert isinstance(vae_info.model, (UNet2DConditionModel, AutoencoderKL))
         with set_seamless(vae_info.model, self.vae.seamless_axes), vae_info as vae:
             assert isinstance(vae, torch.nn.Module)
             latents = latents.to(vae.device)
@@ -999,7 +1003,7 @@ class ImageToLatentsInvocation(BaseInvocation):
     image: ImageField = InputField(
         description="The image to encode",
     )
-    vae: VaeField = InputField(
+    vae: VAEField = InputField(
         description=FieldDescriptions.vae,
         input=Input.Connection,
     )
@@ -1055,7 +1059,7 @@ class ImageToLatentsInvocation(BaseInvocation):
     def invoke(self, context: InvocationContext) -> LatentsOutput:
         image = context.images.get_pil(self.image.image_name)
 
-        vae_info = context.models.load(**self.vae.vae.model_dump())
+        vae_info = context.models.load(self.vae.vae)
 
         image_tensor = image_resized_to_grid_as_tensor(image.convert("RGB"))
         if image_tensor.dim() == 3:
