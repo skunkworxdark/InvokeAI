@@ -23,16 +23,24 @@ from invokeai.app.invocations.primitives import StringOutput
 
 def csv_line_to_list(csv_string: str) -> list[str]:
     """Converts the first line of a CSV into a list of strings"""
-
-    reader = csv.reader(io.StringIO(csv_string))
-    return next(reader)
+    with io.StringIO(csv_string) as input:
+        reader = csv.reader(input)
+        return next(reader)
 
 
 def csv_to_list(csv_string: str) -> list[list[str]]:
     """Converts a CSV into a list of list of strings"""
+    with io.StringIO(csv_string) as input:
+        reader = csv.reader(input)
+        return list(reader)
 
-    reader = csv.reader(io.StringIO(csv_string))
-    return [list(row) for row in reader]
+
+def list_to_csv(strings: list[str]) -> str:
+    """Converts a list of strings to a CSV"""
+    with io.StringIO() as output:
+        writer = csv.writer(output)
+        writer.writerows(strings)
+        return output.getvalue()
 
 
 @invocation_output("prompt_to_file_output")

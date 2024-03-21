@@ -2,6 +2,7 @@ Nightmare:
   Models:
     - cactusfriend/nightmare-promptgen-XL
     - cactusfriend/nightmare-invokeai-prompts
+    - roborovski/superprompt-v1
   Replace:
     Dunston:
       - Alien Fanky

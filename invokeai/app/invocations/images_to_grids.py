@@ -4,10 +4,10 @@ import csv
 import io
 import json
 import math
+import os
 import re
 import textwrap
 from itertools import product
-from pathlib import Path
 from typing import Any, Literal, Union
 
 import cv2
@@ -15,7 +15,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 from PIL.Image import Image as PILImageType
 
-import invokeai.assets.fonts as font_assets
 from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
     BaseInvocationOutput,
@@ -36,7 +35,11 @@ from invokeai.app.invocations.fields import (
 )
 from invokeai.app.invocations.image import PIL_RESAMPLING_MAP, PIL_RESAMPLING_MODES
 from invokeai.app.invocations.latent import SchedulerOutput
-from invokeai.app.invocations.model import MainModelField, MainModelLoaderInvocation, ModelLoaderOutput
+from invokeai.app.invocations.model import (
+    MainModelLoaderInvocation,
+    ModelIdentifierField,
+    ModelLoaderOutput,
+)
 from invokeai.app.invocations.primitives import (
     ColorField,
     FloatOutput,
@@ -248,16 +251,24 @@ def seam_mask(
 
 def csv_line_to_list(csv_string: str) -> list[str]:
     """Converts the first line of a CSV into a list of strings"""
-
-    reader = csv.reader(io.StringIO(csv_string))
-    return next(reader)
+    with io.StringIO(csv_string) as input:
+        reader = csv.reader(input)
+        return next(reader)
 
 
 def csv_to_list(csv_string: str) -> list[list[str]]:
     """Converts a CSV into a list of list of strings"""
+    with io.StringIO(csv_string) as input:
+        reader = csv.reader(input)
+        return list(reader)
 
-    reader = csv.reader(io.StringIO(csv_string))
-    return [list(row) for row in reader]
+
+def list_to_csv(strings: list[str]) -> str:
+    """Converts a list of strings to a CSV"""
+    with io.StringIO() as output:
+        writer = csv.writer(output)
+        writer.writerows(strings)
+        return output.getvalue()
 
 
 @invocation(
@@ -265,12 +276,12 @@ def csv_to_list(csv_string: str) -> list[list[str]]:
     title="Main Model Input",
     tags=["model"],
     category="model",
-    version="1.0.0",
+    version="1.1.0",
 )
 class MainModelLoaderInputInvocation(MainModelLoaderInvocation):
     """Loads a main model from an input, outputting its submodels."""
 
-    model: MainModelField = InputField(description=FieldDescriptions.main_model)
+    model: ModelIdentifierField = InputField(description=FieldDescriptions.main_model, ui_type=UIType.MainModel)
 
     def invoke(self, context: InvocationContext) -> ModelLoaderOutput:
         return super().invoke(context)
@@ -281,12 +292,12 @@ class MainModelLoaderInputInvocation(MainModelLoaderInvocation):
     title="SDXL Main Model Input",
     tags=["model", "sdxl"],
     category="model",
-    version="1.0.0",
+    version="1.1.0",
 )
 class SDXLModelLoaderInputInvocation(SDXLModelLoaderInvocation):
     """Loads a sdxl model from an input, outputting its submodels."""
 
-    model: MainModelField = InputField(description=FieldDescriptions.main_model, ui_type=UIType.SDXLMainModel)
+    model: ModelIdentifierField = InputField(description=FieldDescriptions.main_model, ui_type=UIType.SDXLMainModel)
 
     def invoke(self, context: InvocationContext) -> SDXLModelLoaderOutput:
         return super().invoke(context)
@@ -296,7 +307,7 @@ class SDXLModelLoaderInputInvocation(SDXLModelLoaderInvocation):
 class StringToModelOutput(BaseInvocationOutput):
     """String to SDXL model output"""
 
-    model: MainModelField = OutputField(description=FieldDescriptions.main_model, title="Model")
+    model: ModelIdentifierField = OutputField(description=FieldDescriptions.main_model, title="Model")
     name: str = OutputField(description="Model Name", title="Name")
 
 
@@ -305,7 +316,7 @@ class StringToModelOutput(BaseInvocationOutput):
     title="String To Main Model",
     tags=["model"],
     category="model",
-    version="1.0.1",
+    version="1.1.0",
 )
 class StringToMainModelInvocation(BaseInvocation):
     """Loads a main model from a json string, outputting its submodels."""
@@ -313,16 +324,15 @@ class StringToMainModelInvocation(BaseInvocation):
     model_string: str = InputField(description="string containing a Model to convert")
 
     def invoke(self, context: InvocationContext) -> StringToModelOutput:
-        model = MainModelField.model_validate_json(self.model_string)
-        model_cfg = context.models.get_config(model.key)
-        return StringToModelOutput(model=model, name=f"{model_cfg.base}: {model_cfg.name}")
+        model = ModelIdentifierField.model_validate_json(self.model_string)
+        return StringToModelOutput(model=model, name=f"{model.base}: {model.name}")
 
 
 @invocation_output("string_to_sdxl_model_output")
 class StringToSDXLModelOutput(BaseInvocationOutput):
     """String to SDXL main model output"""
 
-    model: MainModelField = OutputField(
+    model: ModelIdentifierField = OutputField(
         description=FieldDescriptions.main_model, title="Model", ui_type=UIType.SDXLMainModel
     )
     name: str = OutputField(description="Model Name", title="Name")
@@ -333,7 +343,7 @@ class StringToSDXLModelOutput(BaseInvocationOutput):
     title="String To SDXL Main Model",
     tags=["model", "sdxl"],
     category="model",
-    version="1.0.1",
+    version="1.1.0",
 )
 class StringToSDXLModelInvocation(BaseInvocation):
     """Loads a SDXL model from a json string, outputting its submodels."""
@@ -341,9 +351,8 @@ class StringToSDXLModelInvocation(BaseInvocation):
     model_string: str = InputField(description="string containing a Model to convert")
 
     def invoke(self, context: InvocationContext) -> StringToSDXLModelOutput:
-        model = MainModelField.model_validate_json(self.model_string)
-        model_cfg = context.models.get_config(model.key)
-        return StringToSDXLModelOutput(model=model, name=f"{model_cfg.base}: {model_cfg.name}")
+        model = ModelIdentifierField.model_validate_json(self.model_string)
+        return StringToSDXLModelOutput(model=model, name=f"{model.base}: {model.name}")
 
 
 @invocation(
@@ -351,12 +360,12 @@ class StringToSDXLModelInvocation(BaseInvocation):
     title="Main Model To String",
     tags=["model", "picker"],
     category="model",
-    version="1.0.0",
+    version="1.1.0",
 )
 class MainModelToStringInvocation(BaseInvocation):
     """Converts a Main Model to a JSONString"""
 
-    model: MainModelField = InputField(description=FieldDescriptions.main_model)
+    model: ModelIdentifierField = InputField(description=FieldDescriptions.main_model, ui_type=UIType.MainModel)
 
     def invoke(self, context: InvocationContext) -> StringOutput:
         return StringOutput(value=self.model.model_dump_json())
@@ -367,12 +376,14 @@ class MainModelToStringInvocation(BaseInvocation):
     title="SDXL Model To String",
     tags=["model", "sdxl"],
     category="model",
-    version="1.0.0",
+    version="1.1.0",
 )
 class SDXLModelToStringInvocation(BaseInvocation):
     """Converts an SDXL Model to a JSONString"""
 
-    model: MainModelField = InputField(description=FieldDescriptions.sdxl_main_model, ui_type=UIType.SDXLMainModel)
+    model: ModelIdentifierField = InputField(
+        description=FieldDescriptions.sdxl_main_model, ui_type=UIType.SDXLMainModel
+    )
 
     def invoke(self, context: InvocationContext) -> StringOutput:
         return StringOutput(value=self.model.model_dump_json())
@@ -415,8 +426,6 @@ class FloatsToStringsInvocation(BaseInvocation):
     )
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
-        if self.floats is None:
-            raise Exception("No float or collection of floats provided")
         return StringCollectionOutput(
             collection=[str(x) for x in self.floats] if isinstance(self.floats, list) else [str(self.floats)]
         )
@@ -439,8 +448,6 @@ class IntsToStringsInvocation(BaseInvocation):
     )
 
     def invoke(self, context: InvocationContext) -> StringCollectionOutput:
-        if self.ints is None:
-            raise Exception("No int or collection of ints provided")
         return StringCollectionOutput(
             collection=[str(x) for x in self.ints] if isinstance(self.ints, list) else [str(self.ints)]
         )
@@ -711,8 +718,14 @@ class XYImagesToGridInvocation(BaseInvocation, WithMetadata, WithBoard):
         resample_mode = PIL_RESAMPLING_MAP[self.resample_mode]
 
         # Note - font may be found either in the repo if running an editable install, or in the venv if running a package install
-        font_path = [x for x in [Path(y, "inter/Inter-Regular.ttf") for y in font_assets.__path__] if x.exists()]
-        font = ImageFont.truetype(font_path[0].as_posix(), self.label_font_size)
+        # font_path = [x for x in [Path(y, "inter/Inter-Regular.ttf") for y in font_assets.__path__] if x.exists()]
+        # font = ImageFont.truetype(font_path[0].as_posix(), self.label_font_size)
+
+        import invokeai.assets.fonts.inter as fp
+
+        font_path = os.path.join(fp.__path__[0], "Inter-Regular.ttf")
+        assert os.path.exists(font_path), f"Font file not found: {font_path}"
+        font = ImageFont.truetype(font_path, self.label_font_size)
 
         # Wrap labels
         x_labels_max_chars = int(column_width // (self.label_font_size * 0.6))
@@ -721,10 +734,10 @@ class XYImagesToGridInvocation(BaseInvocation, WithMetadata, WithBoard):
         y_labels_wrapped = [textwrap.wrap(y.rstrip(), y_labels_max_chars) for y in y_labels]
 
         # Calculate x_label_height based on the number of lines they are wrapped to
-        top_label_heights = [
-            len(label) * (font.getbbox("hg")[3] - font.getbbox("hg")[1] + 5) for label in x_labels_wrapped
-        ]
-        top_label_height = max(top_label_heights)
+        # font_height = font.getbbox("hg")[3] - font.getbbox("hg")[1]
+        font_height = sum(font.getmetrics())
+        max_lines = max(len(label) for label in x_labels_wrapped)
+        top_label_height = (max_lines * font_height) + 5
 
         # Calculate output image size
         output_width = column_width * columns + left_label_width
@@ -1385,3 +1398,26 @@ class CropLatentsInvocation(BaseInvocation):
         name = context.tensors.save(tensor=cropped_latents)
 
         return LatentsOutput.build(latents_name=name, latents=cropped_latents)
+
+
+@invocation(
+    "strings_to_csv",
+    title="Strings To CSV",
+    tags=["string", "csv"],
+    category="util",
+    version="1.0.0",
+    use_cache=False,
+)
+class StringsToCSVInvocation(BaseInvocation):
+    """Strings To CSV converts a CSV to a String at index with a random option"""
+
+    strings: Union[str, list[str]] = InputField(
+        default="",
+        description="String or Collection of Strings to convert to CSV format",
+        ui_component=UIComponent.Textarea,
+    )
+
+    def invoke(self, context: InvocationContext) -> StringOutput:
+        context.models.get_config
+        output = list_to_csv(self.strings if isinstance(self.strings, list) else [self.strings])
+        return StringOutput(value=output)
