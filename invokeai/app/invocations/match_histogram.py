@@ -2,7 +2,11 @@
 
 from typing import Any
 
+import cv2
 import numpy as np
+import torch
+import torchvision.transforms as T
+from cv2.ximgproc import guidedFilter
 from PIL import Image
 
 from invokeai.app.invocations.baseinvocation import (
@@ -50,7 +54,6 @@ class MatchHistogramInvocation(BaseInvocation, WithMetadata, WithBoard):
     """match a histogram from one image to another"""
 
     # Inputs
-    #    board: Optional[BoardField] = InputField(default=None, description=FieldDescriptions.board, input=Input.Direct)
     image: ImageField = InputField(description="The image to receive the histogram")
     reference_image: ImageField = InputField(description="The reference image with the source histogram")
     match_luminance_only: bool = InputField(
