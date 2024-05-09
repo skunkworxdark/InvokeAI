@@ -6,15 +6,22 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from invokeai.app.invocations.baseinvocation import (
+from invokeai.invocation_api import (
     BaseInvocation,
     BaseInvocationOutput,
+    BooleanOutput,
+    FloatOutput,
+    ImageField,
+    ImageOutput,
+    InputField,
+    IntegerOutput,
     InvocationContext,
+    OutputField,
+    StringOutput,
+    UIType,
     invocation,
     invocation_output,
 )
-from invokeai.app.invocations.fields import ImageField, InputField, OutputField, UIType
-from invokeai.app.invocations.primitives import BooleanOutput, FloatOutput, ImageOutput, IntegerOutput, StringOutput
 
 
 @invocation_output("collection_sort_output")
@@ -100,7 +107,7 @@ class CollectionIndexInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> CollectionIndexOutput:
         total = len(self.collection)
-        index = random.choice(range(total)) % total if self.random else self.index % total
+        index = random.randrange(total) if self.random else self.index % total
         item = self.collection[index]
 
         return CollectionIndexOutput(item=item, index=index, total=total)
@@ -132,15 +139,9 @@ class ImageCollectionIndexInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> ImageOutput:
         total = len(self.collection)
-        index = random.choice(range(total)) % total if self.random else self.index % total
-        image_name = self.collection[index].image_name
-        image = context.images.get_pil(image_name)
+        index = random.randrange(total) if self.random else self.index % total
 
-        return ImageOutput(
-            image=ImageField(image_name=image_name),
-            width=image.width,
-            height=image.height,
-        )
+        return ImageOutput.build(context.images.get_dto(self.collection[index].image_name))
 
 
 @invocation(
@@ -169,7 +170,7 @@ class StringCollectionIndexInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> StringOutput:
         total = len(self.collection)
-        index = random.choice(range(total)) % total if self.random else self.index % total
+        index = random.randrange(total) if self.random else self.index % total
 
         return StringOutput(value=self.collection[index])
 
@@ -200,7 +201,7 @@ class IntegerCollectionIndexInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> IntegerOutput:
         total = len(self.collection)
-        index = random.choice(range(total)) % total if self.random else self.index % total
+        index = random.randrange(total) if self.random else self.index % total
 
         return IntegerOutput(value=self.collection[index])
 
@@ -231,7 +232,7 @@ class FloatCollectionIndexInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> FloatOutput:
         total = len(self.collection)
-        index = random.choice(range(total)) % total if self.random else self.index % total
+        index = random.randrange(total) if self.random else self.index % total
 
         return FloatOutput(value=self.collection[index])
 
@@ -262,6 +263,6 @@ class BoolCollectionIndexInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> BooleanOutput:
         total = len(self.collection)
-        index = random.choice(range(total)) % total if self.random else self.index % total
+        index = random.randrange(total) if self.random else self.index % total
 
         return BooleanOutput(value=self.collection[index])

@@ -1,16 +1,18 @@
 from typing import Any, Optional, Union
 
-from invokeai.app.invocations.baseinvocation import (
+from invokeai.app.invocations.controlnet_image_processors import ControlField, ControlNetInvocation
+from invokeai.app.invocations.ip_adapter import IPAdapterField, IPAdapterInvocation
+from invokeai.app.invocations.t2i_adapter import T2IAdapterField, T2IAdapterInvocation
+from invokeai.invocation_api import (
     BaseInvocationOutput,
+    FieldDescriptions,
     Input,
+    InputField,
     InvocationContext,
+    OutputField,
     invocation,
     invocation_output,
 )
-from invokeai.app.invocations.controlnet_image_processors import ControlField, ControlNetInvocation
-from invokeai.app.invocations.fields import FieldDescriptions, InputField, OutputField
-from invokeai.app.invocations.ip_adapter import IPAdapterField, IPAdapterInvocation
-from invokeai.app.invocations.t2i_adapter import T2IAdapterField, T2IAdapterInvocation
 
 
 def append_list(item_cls: type[Any], new_item: Any, items: Union[Any, list[Any], None] = None) -> list[Any]:
