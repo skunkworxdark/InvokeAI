@@ -8,17 +8,20 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel
 
-from invokeai.app.invocations.baseinvocation import (
+from invokeai.invocation_api import (
+    SCHEDULER_NAME_VALUES,
     BaseInvocation,
     BaseInvocationOutput,
+    FieldDescriptions,
     Input,
+    InputField,
     InvocationContext,
+    OutputField,
+    StringOutput,
+    UIComponent,
     invocation,
     invocation_output,
 )
-from invokeai.app.invocations.constants import SCHEDULER_NAME_VALUES
-from invokeai.app.invocations.fields import FieldDescriptions, InputField, OutputField, UIComponent
-from invokeai.app.invocations.primitives import StringOutput
 
 
 def csv_line_to_list(csv_string: str) -> list[str]:
@@ -28,6 +31,7 @@ def csv_line_to_list(csv_string: str) -> list[str]:
         return next(reader)
 
 
+# not currently used but kept just incase
 def csv_to_list(csv_string: str) -> list[list[str]]:
     """Converts a CSV into a list of list of strings"""
     with io.StringIO(csv_string) as input:
@@ -337,4 +341,26 @@ class CSVToIndexStringInvocation(BaseInvocation):
             output = random.choice(strings)
         else:
             output = strings[self.index % len(strings)]
+        return StringOutput(value=output)
+
+
+@invocation(
+    "strings_to_csv",
+    title="Strings To CSV",
+    tags=["string", "csv"],
+    category="util",
+    version="1.0.0",
+    use_cache=False,
+)
+class StringsToCSVInvocation(BaseInvocation):
+    """Strings To CSV converts a a list of Strings into a CSV"""
+
+    strings: Union[str, list[str]] = InputField(
+        default="",
+        description="String or Collection of Strings to convert to CSV format",
+        ui_component=UIComponent.Textarea,
+    )
+
+    def invoke(self, context: InvocationContext) -> StringOutput:
+        output = list_to_csv(self.strings if isinstance(self.strings, list) else [self.strings])
         return StringOutput(value=output)

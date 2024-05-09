@@ -5,15 +5,15 @@ from typing import Optional
 import numpy as np
 from PIL import Image, ImageOps
 
-from invokeai.app.invocations.baseinvocation import (
+from invokeai.invocation_api import (
     BaseInvocation,
-    InvocationContext,
-    invocation,
-)
-from invokeai.app.invocations.fields import InputField, WithBoard, WithMetadata
-from invokeai.app.invocations.primitives import (
     ImageField,
     ImageOutput,
+    InputField,
+    InvocationContext,
+    WithBoard,
+    WithMetadata,
+    invocation,
 )
 
 
@@ -76,6 +76,8 @@ class AutostereogramInvocation(BaseInvocation, WithMetadata, WithBoard):
         # Create an output image
         output_image = Image.new("RGB", (depth_width, depth_height))
         pixels = output_image.load()
+
+        assert pixels is not None
 
         # Generate the autostereogram
         for y in range(depth_height):
@@ -164,6 +166,8 @@ class AdvAutostereogramInvocation(BaseInvocation, WithMetadata, WithBoard):
         # Create an output image
         output_image = Image.new("RGB", (depth_width, depth_height))
         pixels = output_image.load()
+
+        assert pixels is not None
 
         # Generate the autostereogram
         for y in range(depth_height):

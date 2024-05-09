@@ -15,44 +15,39 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 from PIL.Image import Image as PILImageType
 
-from invokeai.app.invocations.baseinvocation import (
+from invokeai.app.invocations.constants import LATENT_SCALE_FACTOR
+from invokeai.app.invocations.image import PIL_RESAMPLING_MAP, PIL_RESAMPLING_MODES
+from invokeai.app.invocations.model import MainModelLoaderInvocation
+from invokeai.app.invocations.sdxl import SDXLModelLoaderInvocation, SDXLModelLoaderOutput
+from invokeai.invocation_api import (
+    SCHEDULER_NAME_VALUES,
     BaseInvocation,
     BaseInvocationOutput,
-    Input,
-    InvocationContext,
-    invocation,
-    invocation_output,
-)
-from invokeai.app.invocations.constants import LATENT_SCALE_FACTOR, SCHEDULER_NAME_VALUES
-from invokeai.app.invocations.fields import (
-    FieldDescriptions,
-    InputField,
-    OutputField,
-    UIComponent,
-    UIType,
-    WithBoard,
-    WithMetadata,
-)
-from invokeai.app.invocations.image import PIL_RESAMPLING_MAP, PIL_RESAMPLING_MODES
-from invokeai.app.invocations.latent import SchedulerOutput
-from invokeai.app.invocations.model import (
-    MainModelLoaderInvocation,
-    ModelIdentifierField,
-    ModelLoaderOutput,
-)
-from invokeai.app.invocations.primitives import (
     ColorField,
+    FieldDescriptions,
     FloatOutput,
     ImageCollectionOutput,
     ImageField,
     ImageOutput,
+    Input,
+    InputField,
     IntegerOutput,
+    InvocationContext,
     LatentsField,
     LatentsOutput,
+    ModelIdentifierField,
+    ModelLoaderOutput,
+    OutputField,
+    SchedulerOutput,
     StringCollectionOutput,
     StringOutput,
+    UIComponent,
+    UIType,
+    WithBoard,
+    WithMetadata,
+    invocation,
+    invocation_output,
 )
-from invokeai.app.invocations.sdxl import SDXLModelLoaderInvocation, SDXLModelLoaderOutput
 
 _downsampling_factor = LATENT_SCALE_FACTOR
 
@@ -256,21 +251,6 @@ def csv_line_to_list(csv_string: str) -> list[str]:
         return next(reader)
 
 
-def csv_to_list(csv_string: str) -> list[list[str]]:
-    """Converts a CSV into a list of list of strings"""
-    with io.StringIO(csv_string) as input:
-        reader = csv.reader(input)
-        return list(reader)
-
-
-def list_to_csv(strings: list[str]) -> str:
-    """Converts a list of strings to a CSV"""
-    with io.StringIO() as output:
-        writer = csv.writer(output)
-        writer.writerows(strings)
-        return output.getvalue()
-
-
 @invocation(
     "main_model_loader_input",
     title="Main Model Input",
@@ -414,7 +394,7 @@ class SchedulerToStringInvocation(BaseInvocation):
     title="Floats To Strings",
     tags=["float", "string"],
     category="util",
-    version="1.0.0",
+    version="1.0.1",
 )
 class FloatsToStringsInvocation(BaseInvocation):
     """Converts a float or collections of floats to a collection of strings"""
@@ -436,7 +416,7 @@ class FloatsToStringsInvocation(BaseInvocation):
     title="Ints To Strings",
     tags=["int", "string"],
     category="util",
-    version="1.1.0",
+    version="1.1.1",
 )
 class IntsToStringsInvocation(BaseInvocation):
     """Converts an integer or collection of integers to a collection of strings"""
@@ -676,7 +656,7 @@ class XYImageCollectInvocation(BaseInvocation):
     title="XYImages To Grid",
     tags=["xy", "grid", "image"],
     category="grid",
-    version="1.3.0",
+    version="1.3.1",
 )
 class XYImagesToGridInvocation(BaseInvocation, WithMetadata, WithBoard):
     """Takes Collection of XYImages (json of (x_item,y_item,image_name)array), sorts the images into X,Y and creates a grid image with labels"""
@@ -717,10 +697,6 @@ class XYImagesToGridInvocation(BaseInvocation, WithMetadata, WithBoard):
         row_height = int(max([image.height for image in images]) * self.scale_factor)
         resample_mode = PIL_RESAMPLING_MAP[self.resample_mode]
 
-        # Note - font may be found either in the repo if running an editable install, or in the venv if running a package install
-        # font_path = [x for x in [Path(y, "inter/Inter-Regular.ttf") for y in font_assets.__path__] if x.exists()]
-        # font = ImageFont.truetype(font_path[0].as_posix(), self.label_font_size)
-
         import invokeai.assets.fonts.inter as fp
 
         font_path = os.path.join(fp.__path__[0], "Inter-Regular.ttf")
@@ -734,7 +710,6 @@ class XYImagesToGridInvocation(BaseInvocation, WithMetadata, WithBoard):
         y_labels_wrapped = [textwrap.wrap(y.rstrip(), y_labels_max_chars) for y in y_labels]
 
         # Calculate x_label_height based on the number of lines they are wrapped to
-        # font_height = font.getbbox("hg")[3] - font.getbbox("hg")[1]
         font_height = sum(font.getmetrics())
         max_lines = max(len(label) for label in x_labels_wrapped)
         top_label_height = (max_lines * font_height) + 5
@@ -1398,26 +1373,3 @@ class CropLatentsInvocation(BaseInvocation):
         name = context.tensors.save(tensor=cropped_latents)
 
         return LatentsOutput.build(latents_name=name, latents=cropped_latents)
-
-
-@invocation(
-    "strings_to_csv",
-    title="Strings To CSV",
-    tags=["string", "csv"],
-    category="util",
-    version="1.0.0",
-    use_cache=False,
-)
-class StringsToCSVInvocation(BaseInvocation):
-    """Strings To CSV converts a CSV to a String at index with a random option"""
-
-    strings: Union[str, list[str]] = InputField(
-        default="",
-        description="String or Collection of Strings to convert to CSV format",
-        ui_component=UIComponent.Textarea,
-    )
-
-    def invoke(self, context: InvocationContext) -> StringOutput:
-        context.models.get_config
-        output = list_to_csv(self.strings if isinstance(self.strings, list) else [self.strings])
-        return StringOutput(value=output)
