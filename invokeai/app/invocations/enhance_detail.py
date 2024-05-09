@@ -6,15 +6,15 @@ import numpy as np
 from cv2.ximgproc import guidedFilter
 from PIL import Image
 
-from invokeai.app.invocations.baseinvocation import (
+from invokeai.invocation_api import (
     BaseInvocation,
-    InvocationContext,
-    invocation,
-)
-from invokeai.app.invocations.fields import InputField, WithBoard, WithMetadata
-from invokeai.app.invocations.primitives import (
     ImageField,
     ImageOutput,
+    InputField,
+    InvocationContext,
+    WithBoard,
+    WithMetadata,
+    invocation,
 )
 
 
@@ -23,7 +23,7 @@ from invokeai.app.invocations.primitives import (
     title="Enhance Detail",
     tags=["enhance", "detail", "image"],
     category="image",
-    version="1.0.0",
+    version="1.0.1",
 )
 class EnhanceDetailInvocation(BaseInvocation, WithMetadata, WithBoard):
     """Enhance Detail using guided filter"""
