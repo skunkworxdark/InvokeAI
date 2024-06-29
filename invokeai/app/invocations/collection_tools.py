@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from invokeai.app.invocations.model import LoRAField
 from invokeai.invocation_api import (
     BaseInvocation,
     BaseInvocationOutput,
@@ -22,6 +23,27 @@ from invokeai.invocation_api import (
     invocation,
     invocation_output,
 )
+
+
+@invocation_output("lora_collection_output")
+class LoRACollectionOutput(BaseInvocationOutput):
+    collection: list[LoRAField] = OutputField(description="The collection of input items", title="Collection")
+
+
+@invocation(
+    "lora_collection",
+    title="LoRA Collection Primitive",
+    tags=["primitives", "lora", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class LoRACollectionInvocation(BaseInvocation):
+    """A collection of LoRA primitive values"""
+
+    collection: list[LoRAField] = InputField(default=[], description="The collection of LoRA values")
+
+    def invoke(self, context: InvocationContext) -> LoRACollectionOutput:
+        return LoRACollectionOutput(collection=self.collection)
 
 
 @invocation_output("collection_sort_output")
