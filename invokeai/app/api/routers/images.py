@@ -323,18 +323,12 @@ async def list_image_dtos(
     limit: int = Query(default=10, description="The number of images per page"),
     order_dir: SQLiteDirection = Query(default=SQLiteDirection.Descending, description="The order of sort"),
     starred_first: bool = Query(default=True, description="Whether to sort by starred images first"),
+    search_term: Optional[str] = Query(default=None, description="The term to search for"),
 ) -> OffsetPaginatedResults[ImageDTO]:
     """Gets a list of image DTOs"""
 
     image_dtos = ApiDependencies.invoker.services.images.get_many(
-        offset,
-        limit,
-        starred_first,
-        order_dir,
-        image_origin,
-        categories,
-        is_intermediate,
-        board_id,
+        offset, limit, starred_first, order_dir, image_origin, categories, is_intermediate, board_id, search_term
     )
 
     return image_dtos
