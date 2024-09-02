@@ -233,13 +233,13 @@ class IntegerCollectionIndexInvocation(BaseInvocation):
     title="Float Collection Index",
     tags=["collection", "index"],
     category="util",
-    version="1.0.0",
+    version="1.1.0",
     use_cache=False,
 )
 class FloatCollectionIndexInvocation(BaseInvocation):
     """CollectionIndex Picks an index out of a collection with a random option"""
 
-    collection: list[int] = InputField(
+    collection: list[float] = InputField(
         description="image collection",
     )
     random: bool = InputField(
