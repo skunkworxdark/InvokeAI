@@ -5,7 +5,7 @@ import { moveOneToEnd, moveOneToStart, moveToEnd, moveToStart } from 'common/uti
 import { deepClone } from 'common/util/deepClone';
 import { roundDownToMultiple, roundToMultiple } from 'common/util/roundDownToMultiple';
 import { getPrefixedId } from 'features/controlLayers/konva/util';
-import { canvasReset } from 'features/controlLayers/store/actions';
+import { canvasReset, newSessionRequested } from 'features/controlLayers/store/actions';
 import { modelChanged } from 'features/controlLayers/store/paramsSlice';
 import {
   selectAllEntities,
@@ -857,6 +857,9 @@ export const canvasSlice = createSlice({
           break;
         case 'regional_guidance':
           newEntity.id = getPrefixedId('regional_guidance');
+          for (const refImage of newEntity.referenceImages) {
+            refImage.id = getPrefixedId('regional_guidance_ip_adapter');
+          }
           state.regionalGuidance.entities.push(newEntity);
           break;
         case 'reference_image':
@@ -1129,6 +1132,9 @@ export const canvasSlice = createSlice({
         state.bbox.modelBase = base;
         syncScaledSize(state);
       }
+    });
+    builder.addMatcher(newSessionRequested, (state) => {
+      return resetState(state);
     });
   },
 });
