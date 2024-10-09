@@ -13,7 +13,7 @@ import { selectSelectedEntityIdentifier } from 'features/controlLayers/store/sel
 import type { Coordinate, Rect, RectWithRotation } from 'features/controlLayers/store/types';
 import Konva from 'konva';
 import type { GroupConfig } from 'konva/lib/Group';
-import { debounce, get } from 'lodash-es';
+import { clamp, debounce, get } from 'lodash-es';
 import { atom } from 'nanostores';
 import type { Logger } from 'roarr';
 import { serializeError } from 'serialize-error';
@@ -146,6 +146,18 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
    * Whether the transformer is currently processing (rasterizing and uploading) the transformed entity.
    */
   $isProcessing = atom(false);
+
+  /**
+   * Whether the transformer is currently in silent mode. In silent mode, the transform operation should not show any
+   * visual feedback.
+   *
+   * This is set every time a transform is started.
+   *
+   * This is used for transform operations like directly fitting the entity to the bbox, which should not show the
+   * transform controls, Transform react component or have any other visual feedback. The transform should just happen
+   * silently.
+   */
+  $silentTransform = atom(false);
 
   konva: {
     transformer: Konva.Transformer;
@@ -376,9 +388,13 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   };
 
   /**
-   * Fits the proxy rect to the bounding box of the parent entity, then syncs the object group with the proxy rect.
+   * Fits the entity to the bbox using the "fill" strategy.
    */
-  fitProxyRectToBbox = () => {
+  fitToBboxFill = () => {
+    if (!this.$isTransformEnabled.get()) {
+      this.log.warn('Cannot fit to bbox contain when transform is disabled');
+      return;
+    }
     const { rect } = this.manager.stateApi.getBbox();
     const scaleX = rect.width / this.konva.proxyRect.width();
     const scaleY = rect.height / this.konva.proxyRect.height();
@@ -387,6 +403,68 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       y: rect.y,
       scaleX,
       scaleY,
+      rotation: 0,
+    });
+    this.syncObjectGroupWithProxyRect();
+  };
+
+  /**
+   * Fits the entity to the bbox using the "contain" strategy.
+   */
+  fitToBboxContain = () => {
+    if (!this.$isTransformEnabled.get()) {
+      this.log.warn('Cannot fit to bbox contain when transform is disabled');
+      return;
+    }
+    const { rect } = this.manager.stateApi.getBbox();
+    const width = this.konva.proxyRect.width();
+    const height = this.konva.proxyRect.height();
+    const scaleX = rect.width / width;
+    const scaleY = rect.height / height;
+
+    // "contain" means that the entity should be scaled to fit within the bbox, but it should not exceed the bbox.
+    const scale = Math.min(scaleX, scaleY);
+
+    // Center the shape within the bounding box
+    const offsetX = (rect.width - width * scale) / 2;
+    const offsetY = (rect.height - height * scale) / 2;
+
+    this.konva.proxyRect.setAttrs({
+      x: clamp(Math.round(rect.x + offsetX), rect.x, rect.x + rect.width),
+      y: clamp(Math.round(rect.y + offsetY), rect.y, rect.y + rect.height),
+      scaleX: scale,
+      scaleY: scale,
+      rotation: 0,
+    });
+    this.syncObjectGroupWithProxyRect();
+  };
+
+  /**
+   * Fits the entity to the bbox using the "cover" strategy.
+   */
+  fitToBboxCover = () => {
+    if (!this.$isTransformEnabled.get()) {
+      this.log.warn('Cannot fit to bbox contain when transform is disabled');
+      return;
+    }
+    const { rect } = this.manager.stateApi.getBbox();
+    const width = this.konva.proxyRect.width();
+    const height = this.konva.proxyRect.height();
+    const scaleX = rect.width / width;
+    const scaleY = rect.height / height;
+
+    // "cover" is the same as "contain", but we choose the larger scale to cover the shape
+    const scale = Math.max(scaleX, scaleY);
+
+    // Center the shape within the bounding box
+    const offsetX = (rect.width - width * scale) / 2;
+    const offsetY = (rect.height - height * scale) / 2;
+
+    this.konva.proxyRect.setAttrs({
+      x: Math.round(rect.x + offsetX),
+      y: Math.round(rect.y + offsetY),
+      scaleX: scale,
+      scaleY: scale,
       rotation: 0,
     });
     this.syncObjectGroupWithProxyRect();
@@ -558,13 +636,18 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
 
   /**
    * Starts the transformation of the entity.
+   * @param arg Options for starting the transformation
+   * @param arg.silent Whether the transformation should be silent. If silent, the transform controls will not be shown,
+   * so you _must_ immediately call `applyTransform` or `stopTransform` to complete the transformation.
    */
-  startTransform = () => {
+  startTransform = (arg?: { silent: boolean }) => {
     const transformingAdapter = this.manager.stateApi.$transformingAdapter.get();
     if (transformingAdapter) {
       assert(false, `Already transforming an entity: ${transformingAdapter.id}`);
     }
     this.log.debug('Starting transform');
+    const { silent } = { silent: false, ...arg };
+    this.$silentTransform.set(silent);
     this.$isTransforming.set(true);
     this.manager.stateApi.$transformingAdapter.set(this.parent);
     this.syncInteractionState();
@@ -576,9 +659,15 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   applyTransform = async () => {
     this.log.debug('Applying transform');
     this.$isProcessing.set(true);
+    this._setInteractionMode('off');
     const rect = this.getRelativeRect();
     const rasterizeResult = await withResultAsync(() =>
-      this.parent.renderer.rasterize({ rect, replaceObjects: true, attrs: { opacity: 1, filters: [] } })
+      this.parent.renderer.rasterize({
+        rect,
+        replaceObjects: true,
+        ignoreCache: true,
+        attrs: { opacity: 1, filters: [] },
+      })
     );
     if (rasterizeResult.isErr()) {
       this.log.error({ error: serializeError(rasterizeResult.error) }, 'Failed to rasterize entity');

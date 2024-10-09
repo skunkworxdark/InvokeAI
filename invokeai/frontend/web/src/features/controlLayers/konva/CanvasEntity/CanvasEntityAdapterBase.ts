@@ -68,7 +68,7 @@ export abstract class CanvasEntityAdapterBase<
    *
    * If `prevState` is undefined, this is the first time the entity is being synced.
    */
-  abstract sync: (state: T | undefined, prevState: T | undefined) => void;
+  abstract sync: (state: T | undefined, prevState: T | undefined) => Promise<void>;
 
   /**
    * Gets the canvas element for the entity. If `rect` is provided, the canvas will be clipped to that rectangle.
@@ -264,8 +264,13 @@ export abstract class CanvasEntityAdapterBase<
     }
 
     if (this.manager.stateApi.runSelector(selectIsolatedTransformingPreview)) {
-      const transformingEntityIdentifier = this.manager.stateApi.$transformingAdapter.get()?.entityIdentifier;
-      if (transformingEntityIdentifier && transformingEntityIdentifier.id !== this.id) {
+      const transformingEntity = this.manager.stateApi.$transformingAdapter.get();
+      if (
+        transformingEntity &&
+        transformingEntity.entityIdentifier.id !== this.id &&
+        // Silent transforms should be transparent to the user, so we don't need to hide the entity.
+        !transformingEntity.transformer.$silentTransform.get()
+      ) {
         isHidden = true;
       }
     }
