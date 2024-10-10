@@ -1,3 +1,4 @@
+import { Mutex } from 'async-mutex';
 import { withResultAsync } from 'common/util/result';
 import { roundToMultiple } from 'common/util/roundDownToMultiple';
 import type { CanvasEntityAdapter } from 'features/controlLayers/konva/CanvasEntity/types';
@@ -165,6 +166,13 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
    * silently.
    */
   $silentTransform = atom(false);
+
+  /**
+   * A mutex to prevent concurrent operations.
+   *
+   * The mutex is locked during transformation and during rect calculations which are handled in a web worker.
+   */
+  transformMutex = new Mutex();
 
   konva: {
     transformer: Konva.Transformer;
@@ -424,6 +432,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       return;
     }
     const { rect } = this.manager.stateApi.getBbox();
+    const gridSize = this.manager.stateApi.getGridSize();
     const width = this.konva.proxyRect.width();
     const height = this.konva.proxyRect.height();
     const scaleX = rect.width / width;
@@ -437,8 +446,8 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     const offsetY = (rect.height - height * scale) / 2;
 
     this.konva.proxyRect.setAttrs({
-      x: clamp(Math.round(rect.x + offsetX), rect.x, rect.x + rect.width),
-      y: clamp(Math.round(rect.y + offsetY), rect.y, rect.y + rect.height),
+      x: clamp(roundToMultiple(rect.x + offsetX, gridSize), rect.x, rect.x + rect.width),
+      y: clamp(roundToMultiple(rect.y + offsetY, gridSize), rect.y, rect.y + rect.height),
       scaleX: scale,
       scaleY: scale,
       rotation: 0,
@@ -455,6 +464,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       return;
     }
     const { rect } = this.manager.stateApi.getBbox();
+    const gridSize = this.manager.stateApi.getGridSize();
     const width = this.konva.proxyRect.width();
     const height = this.konva.proxyRect.height();
     const scaleX = rect.width / width;
@@ -468,8 +478,8 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     const offsetY = (rect.height - height * scale) / 2;
 
     this.konva.proxyRect.setAttrs({
-      x: Math.round(rect.x + offsetX),
-      y: Math.round(rect.y + offsetY),
+      x: roundToMultiple(rect.x + offsetX, gridSize),
+      y: roundToMultiple(rect.y + offsetY, gridSize),
       scaleX: scale,
       scaleY: scale,
       rotation: 0,
@@ -647,11 +657,13 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
    * @param arg.silent Whether the transformation should be silent. If silent, the transform controls will not be shown,
    * so you _must_ immediately call `applyTransform` or `stopTransform` to complete the transformation.
    */
-  startTransform = (arg?: { silent: boolean }) => {
+  startTransform = async (arg?: { silent: boolean }) => {
     const transformingAdapter = this.manager.stateApi.$transformingAdapter.get();
     if (transformingAdapter) {
       assert(false, `Already transforming an entity: ${transformingAdapter.id}`);
     }
+    // This will be released when the transformation is stopped
+    await this.transformMutex.acquire();
     this.log.debug('Starting transform');
     const { silent } = { silent: false, ...arg };
     this.$silentTransform.set(silent);
@@ -704,6 +716,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.syncInteractionState();
     this.manager.stateApi.$transformingAdapter.set(null);
     this.$isProcessing.set(false);
+    this.transformMutex.release();
   };
 
   /**
@@ -807,7 +820,6 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   calculateRect = debounce(() => {
     this.log.debug('Calculating bbox');
 
-    this.$isPendingRectCalculation.set(true);
     const canvas = this.parent.getCanvas();
 
     if (!this.parent.renderer.hasObjects()) {
@@ -817,6 +829,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       this.parent.$canvasCache.set(canvas);
       this.$isPendingRectCalculation.set(false);
       this.updateBbox();
+      this.transformMutex.release();
       return;
     }
 
@@ -829,6 +842,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       this.parent.$canvasCache.set(canvas);
       this.$isPendingRectCalculation.set(false);
       this.updateBbox();
+      this.transformMutex.release();
       return;
     }
 
@@ -857,11 +871,14 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
         this.parent.$canvasCache.set(canvas);
         this.$isPendingRectCalculation.set(false);
         this.updateBbox();
+        this.transformMutex.release();
       }
     );
   }, this.config.RECT_CALC_DEBOUNCE_MS);
 
-  requestRectCalculation = () => {
+  requestRectCalculation = async () => {
+    // This will be released when the rect calculation is complete
+    await this.transformMutex.acquire();
     this.$isPendingRectCalculation.set(true);
     this.syncInteractionState();
     this.calculateRect();
