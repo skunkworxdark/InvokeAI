@@ -9,14 +9,21 @@ import type { CanvasEntityObjectRenderer } from 'features/controlLayers/konva/Ca
 import type { CanvasEntityTransformer } from 'features/controlLayers/konva/CanvasEntity/CanvasEntityTransformer';
 import type { CanvasManager } from 'features/controlLayers/konva/CanvasManager';
 import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase';
+import { getKonvaNodeDebugAttrs, getRectIntersection } from 'features/controlLayers/konva/util';
 import {
   selectIsolatedFilteringPreview,
   selectIsolatedTransformingPreview,
 } from 'features/controlLayers/store/canvasSettingsSlice';
-import { buildEntityIsHiddenSelector, selectCanvasSlice, selectEntity } from 'features/controlLayers/store/selectors';
+import {
+  buildEntityIsHiddenSelector,
+  selectBboxRect,
+  selectCanvasSlice,
+  selectEntity,
+} from 'features/controlLayers/store/selectors';
 import type { CanvasEntityIdentifier, CanvasRenderableEntityState, Rect } from 'features/controlLayers/store/types';
 import Konva from 'konva';
 import { atom, computed } from 'nanostores';
+import rafThrottle from 'raf-throttle';
 import type { Logger } from 'roarr';
 import type { ImageDTO } from 'services/api/types';
 import stableHash from 'stable-hash';
@@ -80,7 +87,7 @@ export abstract class CanvasEntityAdapterBase<
    */
   abstract getHashableState: () => SerializableObject;
 
-  private _selectIsHidden: Selector<RootState, boolean> | null = null;
+  selectIsHidden: Selector<RootState, boolean>;
 
   /**
    * The Konva nodes that make up the entity adapter:
@@ -124,6 +131,18 @@ export abstract class CanvasEntityAdapterBase<
   $isInteractable = computed([this.$isLocked, this.$isDisabled, this.$isHidden], (isLocked, isDisabled, isHidden) => {
     return !isLocked && !isDisabled && !isHidden;
   });
+  /**
+   * A cache of the entity's canvas element. This is generated from a clone of the entity's Konva layer.
+   */
+  $canvasCache = atom<HTMLCanvasElement | null>(null);
+  /**
+   * Whether this entity is onscreen. This is computed based on the entity's bounding box and the stage's viewport rect.
+   */
+  $isOnScreen = atom(true);
+  /**
+   * Whether this entity's rect intersects the bbox rect.
+   */
+  $intersectsBbox = atom(false);
 
   constructor(entityIdentifier: CanvasEntityIdentifier<T['type']>, manager: CanvasManager, adapterType: U) {
     super();
@@ -152,6 +171,8 @@ export abstract class CanvasEntityAdapterBase<
     assert(state !== undefined, 'Missing entity state on creation');
     this.state = state;
 
+    this.selectIsHidden = buildEntityIsHiddenSelector(this.entityIdentifier);
+
     /**
      * There are a number of reason we may need to show or hide a layer:
      * - The entity is enabled/disabled
@@ -175,6 +196,21 @@ export abstract class CanvasEntityAdapterBase<
      * entity, we should hide the tool preview & change the cursor.
      */
     this.subscriptions.add(this.$isInteractable.subscribe(this.manager.tool.render));
+
+    /**
+     * When the stage is transformed in any way (panning, zooming, resizing) or the entity is moved, we need to update
+     * the entity's onscreen status. We also need to subscribe to changes to the entity's pixel rect, but this is
+     * handled in the initialize method.
+     */
+    this.subscriptions.add(this.manager.stage.$stageAttrs.listen(this.syncIsOnscreen));
+    this.subscriptions.add(this.manager.stateApi.createStoreSubscription(this.selectPosition, this.syncIsOnscreen));
+
+    /**
+     * When the bbox rect changes or the entity is moved, we need to update the intersectsBbox status. We also need to
+     * subscribe to changes to the entity's pixel rect, but this is handled in the initialize method.
+     */
+    this.subscriptions.add(this.manager.stateApi.createStoreSubscription(selectBboxRect, this.syncIntersectsBbox));
+    this.subscriptions.add(this.manager.stateApi.createStoreSubscription(this.selectPosition, this.syncIntersectsBbox));
   }
 
   /**
@@ -185,16 +221,79 @@ export abstract class CanvasEntityAdapterBase<
     (canvas) => selectEntity(canvas, this.entityIdentifier) as T | undefined
   );
 
-  // This must be a getter because the selector depends on the entityIdentifier, which is set in the constructor.
-  get selectIsHidden() {
-    if (!this._selectIsHidden) {
-      this._selectIsHidden = buildEntityIsHiddenSelector(this.entityIdentifier);
+  /**
+   * A redux selector that selects the entity's position from the canvas slice.
+   */
+  selectPosition = createSelector(this.selectState, (entity) => entity?.position);
+
+  syncIsOnscreen = () => {
+    const stageRect = this.manager.stage.getScaledStageRect();
+    const entityRect = this.transformer.$pixelRect.get();
+    const position = this.manager.stateApi.runSelector(this.selectPosition);
+    if (!position) {
+      return;
     }
-    return this._selectIsHidden;
-  }
+    const entityRectRelativeToStage = {
+      x: entityRect.x + position.x,
+      y: entityRect.y + position.y,
+      width: entityRect.width,
+      height: entityRect.height,
+    };
+
+    const intersection = getRectIntersection(stageRect, entityRectRelativeToStage);
+    const prevIsOnScreen = this.$isOnScreen.get();
+    const isOnScreen = intersection.width > 0 && intersection.height > 0;
+    this.$isOnScreen.set(isOnScreen);
+    if (prevIsOnScreen !== isOnScreen) {
+      this.log.trace(`Moved ${isOnScreen ? 'on-screen' : 'off-screen'}`);
+    }
+    this.syncVisibility();
+  };
+
+  syncIntersectsBbox = () => {
+    const bboxRect = this.manager.stateApi.getBbox().rect;
+    const entityRect = this.transformer.$pixelRect.get();
+    const position = this.manager.stateApi.runSelector(this.selectPosition);
+    if (!position) {
+      return;
+    }
+    const entityRectRelativeToStage = {
+      x: entityRect.x + position.x,
+      y: entityRect.y + position.y,
+      width: entityRect.width,
+      height: entityRect.height,
+    };
+
+    const intersection = getRectIntersection(bboxRect, entityRectRelativeToStage);
+    const prevIntersectsBbox = this.$intersectsBbox.get();
+    const intersectsBbox = intersection.width > 0 && intersection.height > 0;
+    this.$intersectsBbox.set(intersectsBbox);
+    if (prevIntersectsBbox !== intersectsBbox) {
+      this.log.trace(`Moved ${intersectsBbox ? 'into bbox' : 'out of bbox'}`);
+    }
+  };
 
   initialize = async () => {
     this.log.debug('Initializing module');
+
+    /**
+     * When the pixel rect changes, we need to sync the onscreen state of the parent entity.
+     *
+     * TODO(psyche): It'd be nice to set this listener in the constructor, but the transformer is only created in the
+     * concrete classes, so we have to do this here. IIRC the reason for this awkwardness was to satisfy a circular
+     * dependency between the transformer and concrete adapter classes
+     */
+    this.subscriptions.add(this.transformer.$pixelRect.listen(this.syncIsOnscreen));
+
+    /**
+     * When the pixel rect changes, we need to sync the bbox intersection state of the parent entity.
+     *
+     * TODO(psyche): It'd be nice to set this listener in the constructor, but the transformer is only created in the
+     * concrete classes, so we have to do this here. IIRC the reason for this awkwardness was to satisfy a circular
+     * dependency between the transformer and concrete adapter classes
+     */
+    this.subscriptions.add(this.transformer.$pixelRect.listen(this.syncIntersectsBbox));
+
     await this.sync(this.manager.stateApi.runSelector(this.selectState), undefined);
     this.transformer.initialize();
     await this.renderer.initialize();
@@ -221,7 +320,7 @@ export abstract class CanvasEntityAdapterBase<
   syncIsEnabled = () => {
     this.log.trace('Updating visibility');
     this.konva.layer.visible(this.state.isEnabled);
-    this.renderer.syncCache(this.state.isEnabled);
+    this.renderer.syncKonvaCache(this.state.isEnabled);
     this.transformer.syncInteractionState();
     this.$isDisabled.set(!this.state.isEnabled);
   };
@@ -252,14 +351,19 @@ export abstract class CanvasEntityAdapterBase<
     this.renderer.updateOpacity();
   };
 
-  syncVisibility = () => {
-    let isHidden = this.manager.stateApi.runSelector(this.selectIsHidden);
+  syncVisibility = rafThrottle(() => {
+    // Handle the base hidden state
+    if (this.manager.stateApi.runSelector(this.selectIsHidden)) {
+      this.setVisibility(false);
+      return;
+    }
 
     // Handle isolated preview modes - if another entity is filtering or transforming, we may need to hide this entity.
     if (this.manager.stateApi.runSelector(selectIsolatedFilteringPreview)) {
       const filteringEntityIdentifier = this.manager.stateApi.$filteringAdapter.get()?.entityIdentifier;
       if (filteringEntityIdentifier && filteringEntityIdentifier.id !== this.id) {
-        isHidden = true;
+        this.setVisibility(false);
+        return;
       }
     }
 
@@ -271,12 +375,33 @@ export abstract class CanvasEntityAdapterBase<
         // Silent transforms should be transparent to the user, so we don't need to hide the entity.
         !transformingEntity.transformer.$silentTransform.get()
       ) {
-        isHidden = true;
+        this.setVisibility(false);
+        return;
       }
     }
 
-    this.$isHidden.set(isHidden);
-    this.konva.layer.visible(!isHidden);
+    // If the entity is not selected and offscreen, we can hide it
+    if (!this.$isOnScreen.get() && !this.manager.stateApi.getIsSelected(this.entityIdentifier.id)) {
+      this.setVisibility(false);
+      return;
+    }
+
+    this.setVisibility(true);
+  });
+
+  setVisibility = (isVisible: boolean) => {
+    const isHidden = this.$isHidden.get();
+    const isLayerVisible = this.konva.layer.visible();
+
+    if (isHidden === !isVisible && isLayerVisible === isVisible) {
+      // No change
+      return;
+    }
+    this.log.trace(isVisible ? 'Showing' : 'Hiding');
+    this.$isHidden.set(!isVisible);
+    this.konva.layer.visible(isVisible);
+
+    this.renderer.syncKonvaCache();
   };
 
   /**
@@ -333,6 +458,15 @@ export abstract class CanvasEntityAdapterBase<
       renderer: this.renderer.repr(),
       bufferRenderer: this.bufferRenderer.repr(),
       filterer: this.filterer?.repr(),
+      hasCache: this.$canvasCache.get() !== null,
+      isLocked: this.$isLocked.get(),
+      isDisabled: this.$isDisabled.get(),
+      isHidden: this.$isHidden.get(),
+      isEmpty: this.$isEmpty.get(),
+      isInteractable: this.$isInteractable.get(),
+      isOnScreen: this.$isOnScreen.get(),
+      intersectsBbox: this.$intersectsBbox.get(),
+      konva: getKonvaNodeDebugAttrs(this.konva.layer),
     };
   };
 }
