@@ -1,14 +1,8 @@
 import type { Property } from 'csstype';
 import type { CanvasManager } from 'features/controlLayers/konva/CanvasManager';
 import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase';
-import { getKonvaNodeDebugAttrs, getPrefixedId, getRectUnion } from 'features/controlLayers/konva/util';
-import type {
-  CanvasEntityIdentifier,
-  Coordinate,
-  Dimensions,
-  Rect,
-  StageAttrs,
-} from 'features/controlLayers/store/types';
+import { getKonvaNodeDebugAttrs, getPrefixedId } from 'features/controlLayers/konva/util';
+import type { Coordinate, Dimensions, Rect, StageAttrs } from 'features/controlLayers/store/types';
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { clamp } from 'lodash-es';
@@ -146,24 +140,6 @@ export class CanvasStageModule extends CanvasModuleBase {
     }
   };
 
-  getVisibleRect = (type?: Exclude<CanvasEntityIdentifier['type'], 'ip_adapter'>): Rect => {
-    const rects = [];
-
-    for (const adapter of this.manager.getAllAdapters()) {
-      if (!adapter.state.isEnabled) {
-        continue;
-      }
-      if (type && adapter.state.type !== type) {
-        continue;
-      }
-      if (adapter.renderer.hasObjects()) {
-        rects.push(adapter.transformer.getRelativeRect());
-      }
-    }
-
-    return getRectUnion(...rects);
-  };
-
   /**
    * Fits the bbox to the stage. This will center the bbox and scale it to fit the stage with some padding.
    */
@@ -177,7 +153,7 @@ export class CanvasStageModule extends CanvasModuleBase {
    * Fits the visible canvas to the stage. This will center the canvas and scale it to fit the stage with some padding.
    */
   fitLayersToStage = (): void => {
-    const rect = this.getVisibleRect();
+    const rect = this.manager.compositor.getVisibleRectOfType();
     if (rect.width === 0 || rect.height === 0) {
       this.fitBboxToStage();
     } else {
@@ -311,7 +287,7 @@ export class CanvasStageModule extends CanvasModuleBase {
     this.setIsDraggable(true);
 
     // Then start dragging the stage if it's not already being dragged
-    if (!this.konva.stage.isDragging()) {
+    if (!this.getIsDragging()) {
       this.konva.stage.startDrag();
     }
 
@@ -328,7 +304,7 @@ export class CanvasStageModule extends CanvasModuleBase {
     this.setIsDraggable(this.manager.tool.$tool.get() === 'view');
 
     // Stop dragging the stage if it's being dragged
-    if (this.konva.stage.isDragging()) {
+    if (this.getIsDragging()) {
       this.konva.stage.stopDrag();
     }
 
@@ -402,6 +378,10 @@ export class CanvasStageModule extends CanvasModuleBase {
 
   setIsDraggable = (isDraggable: boolean) => {
     this.konva.stage.draggable(isDraggable);
+  };
+
+  getIsDragging = () => {
+    return this.konva.stage.isDragging();
   };
 
   addLayer = (layer: Konva.Layer) => {

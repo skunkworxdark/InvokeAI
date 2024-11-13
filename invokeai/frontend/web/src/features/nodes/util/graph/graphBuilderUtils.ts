@@ -106,10 +106,12 @@ export const getInfill = (
   }
 
   if (infillMethod === 'color') {
+    const { a, ...rgb } = infillColorValue;
+    const color = { ...rgb, a: Math.round(a * 255) };
     return g.addNode({
       id: 'infill_rgba',
       type: 'infill_rgba',
-      color: infillColorValue,
+      color,
     });
   }
 
@@ -127,3 +129,5 @@ export const addImageToLatents = (g: Graph, isFlux: boolean, fp32: boolean, imag
     return g.addNode({ id: 'i2l', type: 'i2l', fp32, image: image_name ? { image_name } : undefined });
   }
 };
+
+export const CANVAS_OUTPUT_PREFIX = 'canvas_output';

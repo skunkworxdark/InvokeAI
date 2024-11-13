@@ -168,6 +168,11 @@ export const handlers = {
     parser: parsers.cfgScale,
     recaller: recallers.cfgScale,
   }),
+  guidance: buildHandlers({
+    getLabel: () => t('metadata.guidance'),
+    parser: parsers.guidance,
+    recaller: recallers.guidance,
+  }),
   height: buildHandlers({ getLabel: () => t('metadata.height'), parser: parsers.height, recaller: recallers.height }),
   negativePrompt: buildHandlers({
     getLabel: () => t('metadata.negativePrompt'),
@@ -193,6 +198,16 @@ export const handlers = {
     getLabel: () => t('sdxl.posStylePrompt'),
     parser: parsers.sdxlPositiveStylePrompt,
     recaller: recallers.sdxlPositiveStylePrompt,
+  }),
+  seamlessX: buildHandlers({
+    getLabel: () => t('metadata.seamlessXAxis'),
+    parser: parsers.seamlessX,
+    recaller: recallers.seamlessX,
+  }),
+  seamlessY: buildHandlers({
+    getLabel: () => t('metadata.seamlessYAxis'),
+    parser: parsers.seamlessY,
+    recaller: recallers.seamlessY,
   }),
   seed: buildHandlers({ getLabel: () => t('metadata.seed'), parser: parsers.seed, recaller: recallers.seed }),
   steps: buildHandlers({ getLabel: () => t('metadata.steps'), parser: parsers.steps, recaller: recallers.steps }),

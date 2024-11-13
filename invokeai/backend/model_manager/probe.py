@@ -1,7 +1,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Callable, Dict, Literal, Optional, Union
 
 import safetensors.torch
 import spandrel
@@ -14,6 +14,7 @@ from invokeai.backend.flux.controlnet.state_dict_utils import (
     is_state_dict_instantx_controlnet,
     is_state_dict_xlabs_controlnet,
 )
+from invokeai.backend.flux.ip_adapter.state_dict_utils import is_state_dict_xlabs_ip_adapter
 from invokeai.backend.lora.conversions.flux_diffusers_lora_conversion_utils import (
     is_state_dict_likely_in_flux_diffusers_format,
 )
@@ -21,6 +22,7 @@ from invokeai.backend.lora.conversions.flux_kohya_lora_conversion_utils import i
 from invokeai.backend.model_hash.model_hash import HASHING_ALGORITHMS, ModelHash
 from invokeai.backend.model_manager.config import (
     AnyModelConfig,
+    AnyVariant,
     BaseModelType,
     ControlAdapterDefaultSettings,
     InvalidModelConfigException,
@@ -32,8 +34,15 @@ from invokeai.backend.model_manager.config import (
     ModelType,
     ModelVariantType,
     SchedulerPredictionType,
+    SubmodelDefinition,
+    SubModelType,
 )
-from invokeai.backend.model_manager.util.model_util import lora_token_vector_length, read_checkpoint_meta
+from invokeai.backend.model_manager.load.model_loaders.generic_diffusers import ConfigLoader
+from invokeai.backend.model_manager.util.model_util import (
+    get_clip_variant_type,
+    lora_token_vector_length,
+    read_checkpoint_meta,
+)
 from invokeai.backend.quantization.gguf.ggml_tensor import GGMLTensor
 from invokeai.backend.quantization.gguf.loaders import gguf_sd_loader
 from invokeai.backend.spandrel_image_to_image_model import SpandrelImageToImageModel
@@ -111,6 +120,7 @@ class ModelProbe(object):
         "StableDiffusionXLPipeline": ModelType.Main,
         "StableDiffusionXLImg2ImgPipeline": ModelType.Main,
         "StableDiffusionXLInpaintPipeline": ModelType.Main,
+        "StableDiffusion3Pipeline": ModelType.Main,
         "LatentConsistencyModelPipeline": ModelType.Main,
         "AutoencoderKL": ModelType.VAE,
         "AutoencoderTiny": ModelType.VAE,
@@ -121,7 +131,11 @@ class ModelProbe(object):
         "CLIPTextModel": ModelType.CLIPEmbed,
         "T5EncoderModel": ModelType.T5Encoder,
         "FluxControlNetModel": ModelType.ControlNet,
+        "SD3Transformer2DModel": ModelType.Main,
+        "CLIPTextModelWithProjection": ModelType.CLIPEmbed,
     }
+
+    TYPE2VARIANT: Dict[ModelType, Callable[[str], Optional[AnyVariant]]] = {ModelType.CLIPEmbed: get_clip_variant_type}
 
     @classmethod
     def register_probe(
@@ -169,7 +183,10 @@ class ModelProbe(object):
         fields["path"] = model_path.as_posix()
         fields["type"] = fields.get("type") or model_type
         fields["base"] = fields.get("base") or probe.get_base_type()
-        fields["variant"] = fields.get("variant") or probe.get_variant_type()
+        variant_func = cls.TYPE2VARIANT.get(fields["type"], None)
+        fields["variant"] = (
+            fields.get("variant") or (variant_func and variant_func(model_path.as_posix())) or probe.get_variant_type()
+        )
         fields["prediction_type"] = fields.get("prediction_type") or probe.get_scheduler_prediction_type()
         fields["image_encoder_model_id"] = fields.get("image_encoder_model_id") or probe.get_image_encoder_model_id()
         fields["name"] = fields.get("name") or cls.get_model_name(model_path)
@@ -216,6 +233,10 @@ class ModelProbe(object):
                 and fields["prediction_type"] == SchedulerPredictionType.VPrediction
             )
 
+        get_submodels = getattr(probe, "get_submodels", None)
+        if fields["base"] == BaseModelType.StableDiffusion3 and callable(get_submodels):
+            fields["submodels"] = get_submodels()
+
         model_info = ModelConfigFactory.make_config(fields)  # , key=fields.get("key", None))
         return model_info
 
@@ -243,14 +264,16 @@ class ModelProbe(object):
                     "cond_stage_model.",
                     "first_stage_model.",
                     "model.diffusion_model.",
-                    # FLUX models in the official BFL format contain keys with the "double_blocks." prefix.
-                    "double_blocks.",
                     # Some FLUX checkpoint files contain transformer keys prefixed with "model.diffusion_model".
                     # This prefix is typically used to distinguish between multiple models bundled in a single file.
                     "model.diffusion_model.double_blocks.",
                 )
             ):
                 # Keys starting with double_blocks are associated with Flux models
+                return ModelType.Main
+            # FLUX models in the official BFL format contain keys with the "double_blocks." prefix, but we must be
+            # careful to avoid false positives on XLabs FLUX IP-Adapter models.
+            elif key.startswith("double_blocks.") and "ip_adapter" not in key:
                 return ModelType.Main
             elif key.startswith(("encoder.conv_in", "decoder.conv_in")):
                 return ModelType.VAE
@@ -274,7 +297,14 @@ class ModelProbe(object):
                 )
             ):
                 return ModelType.ControlNet
-            elif key.startswith(("image_proj.", "ip_adapter.")):
+            elif key.startswith(
+                (
+                    "image_proj.",
+                    "ip_adapter.",
+                    # XLabs FLUX IP-Adapter models have keys startinh with "ip_adapter_proj_model.".
+                    "ip_adapter_proj_model.",
+                )
+            ):
                 return ModelType.IPAdapter
             elif key in {"emb_params", "string_to_param"}:
                 return ModelType.TextualInversion
@@ -452,8 +482,9 @@ MODEL_NAME_TO_PREPROCESSOR = {
     "normal": "normalbae_image_processor",
     "sketch": "pidi_image_processor",
     "scribble": "lineart_image_processor",
-    "lineart": "lineart_image_processor",
+    "lineart anime": "lineart_anime_image_processor",
     "lineart_anime": "lineart_anime_image_processor",
+    "lineart": "lineart_image_processor",
     "softedge": "hed_image_processor",
     "hed": "hed_image_processor",
     "shuffle": "content_shuffle_image_processor",
@@ -672,6 +703,10 @@ class IPAdapterCheckpointProbe(CheckpointProbeBase):
 
     def get_base_type(self) -> BaseModelType:
         checkpoint = self.checkpoint
+
+        if is_state_dict_xlabs_ip_adapter(checkpoint):
+            return BaseModelType.Flux
+
         for key in checkpoint.keys():
             if not key.startswith(("image_proj.", "ip_adapter.")):
                 continue
@@ -732,18 +767,33 @@ class FolderProbeBase(ProbeBase):
 
 class PipelineFolderProbe(FolderProbeBase):
     def get_base_type(self) -> BaseModelType:
-        with open(self.model_path / "unet" / "config.json", "r") as file:
-            unet_conf = json.load(file)
-        if unet_conf["cross_attention_dim"] == 768:
-            return BaseModelType.StableDiffusion1
-        elif unet_conf["cross_attention_dim"] == 1024:
-            return BaseModelType.StableDiffusion2
-        elif unet_conf["cross_attention_dim"] == 1280:
-            return BaseModelType.StableDiffusionXLRefiner
-        elif unet_conf["cross_attention_dim"] == 2048:
-            return BaseModelType.StableDiffusionXL
-        else:
-            raise InvalidModelConfigException(f"Unknown base model for {self.model_path}")
+        # Handle pipelines with a UNet (i.e SD 1.x, SD2, SDXL).
+        config_path = self.model_path / "unet" / "config.json"
+        if config_path.exists():
+            with open(config_path) as file:
+                unet_conf = json.load(file)
+            if unet_conf["cross_attention_dim"] == 768:
+                return BaseModelType.StableDiffusion1
+            elif unet_conf["cross_attention_dim"] == 1024:
+                return BaseModelType.StableDiffusion2
+            elif unet_conf["cross_attention_dim"] == 1280:
+                return BaseModelType.StableDiffusionXLRefiner
+            elif unet_conf["cross_attention_dim"] == 2048:
+                return BaseModelType.StableDiffusionXL
+            else:
+                raise InvalidModelConfigException(f"Unknown base model for {self.model_path}")
+
+        # Handle pipelines with a transformer (i.e. SD3).
+        config_path = self.model_path / "transformer" / "config.json"
+        if config_path.exists():
+            with open(config_path) as file:
+                transformer_conf = json.load(file)
+            if transformer_conf["_class_name"] == "SD3Transformer2DModel":
+                return BaseModelType.StableDiffusion3
+            else:
+                raise InvalidModelConfigException(f"Unknown base model for {self.model_path}")
+
+        raise InvalidModelConfigException(f"Unknown base model for {self.model_path}")
 
     def get_scheduler_prediction_type(self) -> SchedulerPredictionType:
         with open(self.model_path / "scheduler" / "scheduler_config.json", "r") as file:
@@ -754,6 +804,23 @@ class PipelineFolderProbe(FolderProbeBase):
             return SchedulerPredictionType.Epsilon
         else:
             raise InvalidModelConfigException("Unknown scheduler prediction type: {scheduler_conf['prediction_type']}")
+
+    def get_submodels(self) -> Dict[SubModelType, SubmodelDefinition]:
+        config = ConfigLoader.load_config(self.model_path, config_name="model_index.json")
+        submodels: Dict[SubModelType, SubmodelDefinition] = {}
+        for key, value in config.items():
+            if key.startswith("_") or not (isinstance(value, list) and len(value) == 2):
+                continue
+            model_loader = str(value[1])
+            if model_type := ModelProbe.CLASS2TYPE.get(model_loader):
+                variant_func = ModelProbe.TYPE2VARIANT.get(model_type, None)
+                submodels[SubModelType(key)] = SubmodelDefinition(
+                    path_or_prefix=(self.model_path / key).resolve().as_posix(),
+                    model_type=model_type,
+                    variant=variant_func and variant_func((self.model_path / key).as_posix()),
+                )
+
+        return submodels
 
     def get_variant_type(self) -> ModelVariantType:
         # This only works for pipelines! Any kind of

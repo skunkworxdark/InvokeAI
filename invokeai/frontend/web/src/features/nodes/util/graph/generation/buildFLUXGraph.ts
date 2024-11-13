@@ -14,12 +14,19 @@ import { addOutpaint } from 'features/nodes/util/graph/generation/addOutpaint';
 import { addTextToImage } from 'features/nodes/util/graph/generation/addTextToImage';
 import { addWatermarker } from 'features/nodes/util/graph/generation/addWatermarker';
 import { Graph } from 'features/nodes/util/graph/generation/Graph';
-import { getBoardField, getPresetModifiedPrompts, getSizes } from 'features/nodes/util/graph/graphBuilderUtils';
+import {
+  CANVAS_OUTPUT_PREFIX,
+  getBoardField,
+  getPresetModifiedPrompts,
+  getSizes,
+} from 'features/nodes/util/graph/graphBuilderUtils';
 import type { Invocation } from 'services/api/types';
 import { isNonRefinerMainModelConfig } from 'services/api/types';
+import type { Equals } from 'tsafe';
 import { assert } from 'tsafe';
 
 import { addControlNets } from './addControlAdapters';
+import { addIPAdapters } from './addIPAdapters';
 
 const log = logger('system');
 
@@ -27,7 +34,7 @@ export const buildFLUXGraph = async (
   state: RootState,
   manager: CanvasManager
 ): Promise<{ g: Graph; noise: Invocation<'noise' | 'flux_denoise'>; posCond: Invocation<'flux_text_encoder'> }> => {
-  const generationMode = manager.compositor.getGenerationMode();
+  const generationMode = await manager.compositor.getGenerationMode();
   log.debug({ generationMode }, 'Building FLUX graph');
 
   const params = selectParamsSlice(state);
@@ -73,7 +80,7 @@ export const buildFLUXGraph = async (
     prompt: positivePrompt,
   });
 
-  const noise = g.addNode({
+  const denoise = g.addNode({
     type: 'flux_denoise',
     id: getPrefixedId('flux_denoise'),
     guidance,
@@ -90,23 +97,19 @@ export const buildFLUXGraph = async (
     id: getPrefixedId('flux_vae_decode'),
   });
 
-  let canvasOutput: Invocation<
-    'l2i' | 'img_nsfw' | 'img_watermark' | 'img_resize' | 'canvas_v2_mask_and_crop' | 'flux_vae_decode'
-  > = l2i;
-
-  g.addEdge(modelLoader, 'transformer', noise, 'transformer');
-  g.addEdge(modelLoader, 'vae', noise, 'controlnet_vae');
+  g.addEdge(modelLoader, 'transformer', denoise, 'transformer');
+  g.addEdge(modelLoader, 'vae', denoise, 'controlnet_vae');
   g.addEdge(modelLoader, 'vae', l2i, 'vae');
 
   g.addEdge(modelLoader, 'clip', posCond, 'clip');
   g.addEdge(modelLoader, 't5_encoder', posCond, 't5_encoder');
   g.addEdge(modelLoader, 'max_seq_len', posCond, 't5_max_seq_len');
 
-  addFLUXLoRAs(state, g, noise, modelLoader, posCond);
+  addFLUXLoRAs(state, g, denoise, modelLoader, posCond);
 
-  g.addEdge(posCond, 'conditioning', noise, 'positive_text_conditioning');
+  g.addEdge(posCond, 'conditioning', denoise, 'positive_text_conditioning');
 
-  g.addEdge(noise, 'latents', l2i, 'latents');
+  g.addEdge(denoise, 'latents', l2i, 'latents');
 
   const modelConfig = await fetchModelConfigWithTypeGuard(model.key, isNonRefinerMainModelConfig);
   assert(modelConfig.base === 'flux');
@@ -125,59 +128,65 @@ export const buildFLUXGraph = async (
     clip_embed_model: clipEmbedModel,
   });
 
-  let denoisingStart: number;
+  let denoising_start: number;
   if (optimizedDenoisingEnabled) {
     // We rescale the img2imgStrength (with exponent 0.2) to effectively use the entire range [0, 1] and make the scale
     // more user-friendly for FLUX. Without this, most of the 'change' is concentrated in the high denoise strength
     // range (>0.9).
-    denoisingStart = 1 - img2imgStrength ** 0.2;
+    denoising_start = 1 - img2imgStrength ** 0.2;
   } else {
-    denoisingStart = 1 - img2imgStrength;
+    denoising_start = 1 - img2imgStrength;
   }
 
+  let canvasOutput: Invocation<
+    'l2i' | 'img_nsfw' | 'img_watermark' | 'img_resize' | 'canvas_v2_mask_and_crop' | 'flux_vae_decode'
+  > = l2i;
+
   if (generationMode === 'txt2img') {
-    canvasOutput = addTextToImage(g, l2i, originalSize, scaledSize);
+    canvasOutput = addTextToImage({ g, l2i, originalSize, scaledSize });
   } else if (generationMode === 'img2img') {
-    canvasOutput = await addImageToImage(
+    canvasOutput = await addImageToImage({
       g,
       manager,
       l2i,
-      noise,
-      modelLoader,
+      denoise,
+      vaeSource: modelLoader,
       originalSize,
       scaledSize,
       bbox,
-      denoisingStart,
-      false
-    );
+      denoising_start,
+      fp32: false,
+    });
   } else if (generationMode === 'inpaint') {
-    canvasOutput = await addInpaint(
+    canvasOutput = await addInpaint({
       state,
       g,
       manager,
       l2i,
-      noise,
-      modelLoader,
+      denoise,
+      vaeSource: modelLoader,
       modelLoader,
       originalSize,
       scaledSize,
-      denoisingStart,
-      false
-    );
+      denoising_start,
+      fp32: false,
+    });
   } else if (generationMode === 'outpaint') {
-    canvasOutput = await addOutpaint(
+    canvasOutput = await addOutpaint({
       state,
       g,
       manager,
       l2i,
-      noise,
-      modelLoader,
+      denoise,
+      vaeSource: modelLoader,
       modelLoader,
       originalSize,
       scaledSize,
-      denoisingStart,
-      false
-    );
+      denoising_start,
+      fp32: false,
+    });
+  } else {
+    assert<Equals<typeof generationMode, never>>(false);
   }
 
   const controlNetCollector = g.addNode({
@@ -193,9 +202,43 @@ export const buildFLUXGraph = async (
     modelConfig.base
   );
   if (controlNetResult.addedControlNets > 0) {
-    g.addEdge(controlNetCollector, 'collection', noise, 'control');
+    g.addEdge(controlNetCollector, 'collection', denoise, 'control');
   } else {
     g.deleteNode(controlNetCollector.id);
+  }
+
+  const ipAdapterCollector = g.addNode({
+    type: 'collect',
+    id: getPrefixedId('ip_adapter_collector'),
+  });
+  const ipAdapterResult = addIPAdapters(canvas.referenceImages.entities, g, ipAdapterCollector, modelConfig.base);
+
+  const totalIPAdaptersAdded = ipAdapterResult.addedIPAdapters;
+  if (totalIPAdaptersAdded > 0) {
+    assert(steps > 2);
+    const cfg_scale_start_step = 1;
+    const cfg_scale_end_step = Math.ceil(steps / 2);
+    assert(cfg_scale_end_step > cfg_scale_start_step);
+
+    const negCond = g.addNode({
+      type: 'flux_text_encoder',
+      id: getPrefixedId('flux_text_encoder'),
+      prompt: '',
+    });
+
+    g.addEdge(modelLoader, 'clip', negCond, 'clip');
+    g.addEdge(modelLoader, 't5_encoder', negCond, 't5_encoder');
+    g.addEdge(modelLoader, 'max_seq_len', negCond, 't5_max_seq_len');
+    g.addEdge(negCond, 'conditioning', denoise, 'negative_text_conditioning');
+
+    g.updateNode(denoise, {
+      cfg_scale: 3,
+      cfg_scale_start_step,
+      cfg_scale_end_step,
+    });
+    g.addEdge(ipAdapterCollector, 'collection', denoise, 'ip_adapter');
+  } else {
+    g.deleteNode(ipAdapterCollector.id);
   }
 
   if (state.system.shouldUseNSFWChecker) {
@@ -215,12 +258,12 @@ export const buildFLUXGraph = async (
   }
 
   g.updateNode(canvasOutput, {
-    id: getPrefixedId('canvas_output'),
+    id: getPrefixedId(CANVAS_OUTPUT_PREFIX),
     is_intermediate,
     use_cache: false,
     board,
   });
 
   g.setMetadataReceivingNode(canvasOutput);
-  return { g, noise, posCond };
+  return { g, noise: denoise, posCond };
 };

@@ -19,6 +19,10 @@ from invokeai.backend.flux.controlnet.state_dict_utils import (
     is_state_dict_xlabs_controlnet,
 )
 from invokeai.backend.flux.controlnet.xlabs_controlnet_flux import XLabsControlNetFlux
+from invokeai.backend.flux.ip_adapter.state_dict_utils import infer_xlabs_ip_adapter_params_from_state_dict
+from invokeai.backend.flux.ip_adapter.xlabs_ip_adapter_flux import (
+    XlabsIpAdapterFlux,
+)
 from invokeai.backend.flux.model import Flux
 from invokeai.backend.flux.modules.autoencoder import AutoEncoder
 from invokeai.backend.flux.util import ae_params, params
@@ -35,6 +39,7 @@ from invokeai.backend.model_manager.config import (
     CLIPEmbedDiffusersConfig,
     ControlNetCheckpointConfig,
     ControlNetDiffusersConfig,
+    IPAdapterCheckpointConfig,
     MainBnbQuantized4bCheckpointConfig,
     MainCheckpointConfig,
     MainGGUFCheckpointConfig,
@@ -123,9 +128,9 @@ class BnbQuantizedLlmInt8bCheckpointModel(ModelLoader):
                 "The bnb modules are not available. Please install bitsandbytes if available on your platform."
             )
         match submodel_type:
-            case SubModelType.Tokenizer2:
+            case SubModelType.Tokenizer2 | SubModelType.Tokenizer3:
                 return T5Tokenizer.from_pretrained(Path(config.path) / "tokenizer_2", max_length=512)
-            case SubModelType.TextEncoder2:
+            case SubModelType.TextEncoder2 | SubModelType.TextEncoder3:
                 te2_model_path = Path(config.path) / "text_encoder_2"
                 model_config = AutoConfig.from_pretrained(te2_model_path)
                 with accelerate.init_empty_weights():
@@ -167,10 +172,10 @@ class T5EncoderCheckpointModel(ModelLoader):
             raise ValueError("Only T5EncoderConfig models are currently supported here.")
 
         match submodel_type:
-            case SubModelType.Tokenizer2:
+            case SubModelType.Tokenizer2 | SubModelType.Tokenizer3:
                 return T5Tokenizer.from_pretrained(Path(config.path) / "tokenizer_2", max_length=512)
-            case SubModelType.TextEncoder2:
-                return T5EncoderModel.from_pretrained(Path(config.path) / "text_encoder_2")
+            case SubModelType.TextEncoder2 | SubModelType.TextEncoder3:
+                return T5EncoderModel.from_pretrained(Path(config.path) / "text_encoder_2", torch_dtype="auto")
 
         raise ValueError(
             f"Only Tokenizer and TextEncoder submodels are currently supported. Received: {submodel_type.value if submodel_type else 'None'}"
@@ -351,4 +356,27 @@ class FluxControlnetModel(ModelLoader):
             model = InstantXControlNetFlux(flux_params, num_control_modes)
 
         model.load_state_dict(sd, assign=True)
+        return model
+
+
+@ModelLoaderRegistry.register(base=BaseModelType.Flux, type=ModelType.IPAdapter, format=ModelFormat.Checkpoint)
+class FluxIpAdapterModel(ModelLoader):
+    """Class to load FLUX IP-Adapter models."""
+
+    def _load_model(
+        self,
+        config: AnyModelConfig,
+        submodel_type: Optional[SubModelType] = None,
+    ) -> AnyModel:
+        if not isinstance(config, IPAdapterCheckpointConfig):
+            raise ValueError(f"Unexpected model config type: {type(config)}.")
+
+        sd = load_file(Path(config.path))
+
+        params = infer_xlabs_ip_adapter_params_from_state_dict(sd)
+
+        with accelerate.init_empty_weights():
+            model = XlabsIpAdapterFlux(params=params)
+
+        model.load_xlabs_state_dict(sd, assign=True)
         return model

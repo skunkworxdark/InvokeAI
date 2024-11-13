@@ -4,13 +4,12 @@ import type { StudioInitAction } from 'app/hooks/useStudioInitAction';
 import { useStudioInitAction } from 'app/hooks/useStudioInitAction';
 import { useSyncQueueStatus } from 'app/hooks/useSyncQueueStatus';
 import { useLogger } from 'app/logging/useLogger';
+import { useSyncLoggingConfig } from 'app/logging/useSyncLoggingConfig';
 import { appStarted } from 'app/store/middleware/listenerMiddleware/listeners/appStarted';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import type { PartialAppConfig } from 'app/types/invokeai';
-import ImageUploadOverlay from 'common/components/ImageUploadOverlay';
 import { useFocusRegionWatcher } from 'common/hooks/focus';
 import { useClearStorage } from 'common/hooks/useClearStorage';
-import { useFullscreenDropzone } from 'common/hooks/useFullscreenDropzone';
 import { useGlobalHotkeys } from 'common/hooks/useGlobalHotkeys';
 import ChangeBoardModal from 'features/changeBoardModal/components/ChangeBoardModal';
 import {
@@ -18,6 +17,7 @@ import {
   NewGallerySessionDialog,
 } from 'features/controlLayers/components/NewSessionConfirmationAlertDialog';
 import DeleteImageModal from 'features/deleteImageModal/components/DeleteImageModal';
+import { FullscreenDropzone } from 'features/dnd/FullscreenDropzone';
 import { DynamicPromptsModal } from 'features/dynamicPrompts/components/DynamicPromptsPreviewModal';
 import DeleteBoardModal from 'features/gallery/components/Boards/DeleteBoardModal';
 import { ImageContextMenu } from 'features/gallery/components/ImageContextMenu/ImageContextMenu';
@@ -32,7 +32,6 @@ import { selectLanguage } from 'features/system/store/systemSelectors';
 import { AppContent } from 'features/ui/components/AppContent';
 import { DeleteWorkflowDialog } from 'features/workflowLibrary/components/DeleteLibraryWorkflowConfirmationAlertDialog';
 import { NewWorkflowConfirmationAlertDialog } from 'features/workflowLibrary/components/NewWorkflowConfirmationAlertDialog';
-import { AnimatePresence } from 'framer-motion';
 import i18n from 'i18n';
 import { size } from 'lodash-es';
 import { memo, useCallback, useEffect } from 'react';
@@ -60,8 +59,7 @@ const App = ({ config = DEFAULT_CONFIG, studioInitAction }: Props) => {
   useGlobalModifiersInit();
   useGlobalHotkeys();
   useGetOpenAPISchemaQuery();
-
-  const { dropzone, isHandlingUpload, setIsHandlingUpload } = useFullscreenDropzone();
+  useSyncLoggingConfig();
 
   const handleReset = useCallback(() => {
     clearStorage();
@@ -91,21 +89,8 @@ const App = ({ config = DEFAULT_CONFIG, studioInitAction }: Props) => {
 
   return (
     <ErrorBoundary onReset={handleReset} FallbackComponent={AppErrorBoundaryFallback}>
-      <Box
-        id="invoke-app-wrapper"
-        w="100dvw"
-        h="100dvh"
-        position="relative"
-        overflow="hidden"
-        {...dropzone.getRootProps()}
-      >
-        <input {...dropzone.getInputProps()} />
+      <Box id="invoke-app-wrapper" w="100dvw" h="100dvh" position="relative" overflow="hidden">
         <AppContent />
-        <AnimatePresence>
-          {dropzone.isDragActive && isHandlingUpload && (
-            <ImageUploadOverlay dropzone={dropzone} setIsHandlingUpload={setIsHandlingUpload} />
-          )}
-        </AnimatePresence>
       </Box>
       <DeleteImageModal />
       <ChangeBoardModal />
@@ -122,6 +107,7 @@ const App = ({ config = DEFAULT_CONFIG, studioInitAction }: Props) => {
       <NewGallerySessionDialog />
       <NewCanvasSessionDialog />
       <ImageContextMenu />
+      <FullscreenDropzone />
     </ErrorBoundary>
   );
 };

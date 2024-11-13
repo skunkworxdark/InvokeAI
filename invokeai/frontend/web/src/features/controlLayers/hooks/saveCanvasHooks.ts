@@ -1,10 +1,9 @@
 import { logger } from 'app/logging/logger';
 import { useAppDispatch, useAppSelector, useAppStore } from 'app/store/storeHooks';
-import type { SerializableObject } from 'common/types';
 import { deepClone } from 'common/util/deepClone';
 import { withResultAsync } from 'common/util/result';
 import { useCanvasManager } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
-import { selectDefaultControlAdapter, selectDefaultIPAdapter } from 'features/controlLayers/hooks/addLayerHooks';
+import { selectDefaultIPAdapter } from 'features/controlLayers/hooks/addLayerHooks';
 import { getPrefixedId } from 'features/controlLayers/konva/util';
 import {
   controlLayerAdded,
@@ -25,12 +24,13 @@ import type {
   Rect,
   RegionalGuidanceReferenceImageState,
 } from 'features/controlLayers/store/types';
-import { imageDTOToImageObject, imageDTOToImageWithDims } from 'features/controlLayers/store/util';
+import { imageDTOToImageObject, imageDTOToImageWithDims, initialControlNet } from 'features/controlLayers/store/util';
 import { toast } from 'features/toast/toast';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { serializeError } from 'serialize-error';
 import type { ImageDTO } from 'services/api/types';
+import type { JsonObject } from 'type-fest';
 
 const log = logger('canvas');
 
@@ -51,7 +51,9 @@ const useSaveCanvas = ({ region, saveToGallery, toastOk, toastError, onSave, wit
 
   const saveCanvas = useCallback(async () => {
     const rect =
-      region === 'bbox' ? canvasManager.stateApi.getBbox().rect : canvasManager.stage.getVisibleRect('raster_layer');
+      region === 'bbox'
+        ? canvasManager.stateApi.getBbox().rect
+        : canvasManager.compositor.getVisibleRectOfType('raster_layer');
 
     if (rect.width === 0 || rect.height === 0) {
       toast({
@@ -62,18 +64,25 @@ const useSaveCanvas = ({ region, saveToGallery, toastOk, toastError, onSave, wit
       return;
     }
 
-    let metadata: SerializableObject | undefined = undefined;
+    let metadata: JsonObject | undefined = undefined;
 
     if (withMetadata) {
       metadata = selectCanvasMetadata(store.getState());
     }
 
-    const result = await withResultAsync(() =>
-      canvasManager.compositor.rasterizeAndUploadCompositeRasterLayer(rect, {
-        is_intermediate: !saveToGallery,
-        metadata,
-      })
-    );
+    const result = await withResultAsync(() => {
+      const rasterAdapters = canvasManager.compositor.getVisibleAdaptersOfType('raster_layer');
+      return canvasManager.compositor.getCompositeImageDTO(
+        rasterAdapters,
+        rect,
+        {
+          is_intermediate: !saveToGallery,
+          metadata,
+        },
+        undefined,
+        true // force upload the image to ensure it gets added to the gallery
+      );
+    });
 
     if (result.isOk()) {
       if (onSave) {
@@ -86,7 +95,6 @@ const useSaveCanvas = ({ region, saveToGallery, toastOk, toastError, onSave, wit
     }
   }, [
     canvasManager.compositor,
-    canvasManager.stage,
     canvasManager.stateApi,
     onSave,
     region,
@@ -221,13 +229,12 @@ export const useNewRasterLayerFromBbox = () => {
 export const useNewControlLayerFromBbox = () => {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
-  const defaultControlAdapter = useAppSelector(selectDefaultControlAdapter);
 
   const arg = useMemo<UseSaveCanvasArg>(() => {
     const onSave = (imageDTO: ImageDTO, rect: Rect) => {
       const overrides: Partial<CanvasControlLayerState> = {
         objects: [imageDTOToImageObject(imageDTO)],
-        controlAdapter: deepClone(defaultControlAdapter),
+        controlAdapter: deepClone(initialControlNet),
         position: { x: rect.x, y: rect.y },
       };
       dispatch(controlLayerAdded({ overrides, isSelected: true }));
@@ -240,7 +247,7 @@ export const useNewControlLayerFromBbox = () => {
       toastOk: t('controlLayers.newControlLayerOk'),
       toastError: t('controlLayers.newControlLayerError'),
     };
-  }, [defaultControlAdapter, dispatch, t]);
+  }, [dispatch, t]);
   const func = useSaveCanvas(arg);
   return func;
 };

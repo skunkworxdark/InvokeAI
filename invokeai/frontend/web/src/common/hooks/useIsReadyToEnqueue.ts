@@ -119,11 +119,20 @@ const createSelector = (
             reasons.push({ content: i18n.t('upscaling.exceedsMaxSize') });
           }
         }
-        if (!upscale.upscaleModel) {
-          reasons.push({ content: i18n.t('upscaling.missingUpscaleModel') });
-        }
-        if (!upscale.tileControlnetModel) {
-          reasons.push({ content: i18n.t('upscaling.missingTileControlNetModel') });
+        if (model && !['sd-1', 'sdxl'].includes(model.base)) {
+          // When we are using an upsupported model, do not add the other warnings
+          reasons.push({ content: i18n.t('upscaling.incompatibleBaseModel') });
+        } else {
+          // Using a compatible model, add all warnings
+          if (!model) {
+            reasons.push({ content: i18n.t('parameters.invoke.noModelSelected') });
+          }
+          if (!upscale.upscaleModel) {
+            reasons.push({ content: i18n.t('upscaling.missingUpscaleModel') });
+          }
+          if (!upscale.tileControlnetModel) {
+            reasons.push({ content: i18n.t('upscaling.missingTileControlNetModel') });
+          }
         }
       } else {
         if (canvasIsFiltering) {
@@ -202,46 +211,6 @@ const createSelector = (
             if (controlLayer.controlAdapter.model?.base !== model?.base) {
               problems.push(i18n.t('parameters.invoke.layer.controlAdapterIncompatibleBaseModel'));
             }
-            // T2I Adapters require images have dimensions that are multiples of 64 (SD1.5) or 32 (SDXL)
-            if (controlLayer.controlAdapter.type === 't2i_adapter') {
-              const multiple = model?.base === 'sdxl' ? 32 : 64;
-              if (bbox.scaleMethod === 'none') {
-                if (bbox.rect.width % 16 !== 0) {
-                  reasons.push({
-                    content: i18n.t('parameters.invoke.layer.t2iAdapterIncompatibleBboxWidth', {
-                      multiple,
-                      width: bbox.rect.width,
-                    }),
-                  });
-                }
-                if (bbox.rect.height % 16 !== 0) {
-                  reasons.push({
-                    content: i18n.t('parameters.invoke.layer.t2iAdapterIncompatibleBboxHeight', {
-                      multiple,
-                      height: bbox.rect.height,
-                    }),
-                  });
-                }
-              } else {
-                if (bbox.scaledSize.width % 16 !== 0) {
-                  reasons.push({
-                    content: i18n.t('parameters.invoke.layer.t2iAdapterIncompatibleScaledBboxWidth', {
-                      multiple,
-                      width: bbox.scaledSize.width,
-                    }),
-                  });
-                }
-                if (bbox.scaledSize.height % 16 !== 0) {
-                  reasons.push({
-                    content: i18n.t('parameters.invoke.layer.t2iAdapterIncompatibleScaledBboxHeight', {
-                      multiple,
-                      height: bbox.scaledSize.height,
-                    }),
-                  });
-                }
-              }
-            }
-
             if (problems.length) {
               const content = upperFirst(problems.join(', '));
               reasons.push({ prefix, content });

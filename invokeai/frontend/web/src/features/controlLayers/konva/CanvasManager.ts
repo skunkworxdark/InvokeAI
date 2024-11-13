@@ -1,15 +1,13 @@
 import { logger } from 'app/logging/logger';
 import type { AppStore } from 'app/store/store';
-import type { SerializableObject } from 'common/types';
 import { SyncableMap } from 'common/util/SyncableMap/SyncableMap';
-import { CanvasBboxModule } from 'features/controlLayers/konva/CanvasBboxModule';
 import { CanvasCacheModule } from 'features/controlLayers/konva/CanvasCacheModule';
 import { CanvasCompositorModule } from 'features/controlLayers/konva/CanvasCompositorModule';
 import { CanvasEntityAdapterControlLayer } from 'features/controlLayers/konva/CanvasEntity/CanvasEntityAdapterControlLayer';
 import { CanvasEntityAdapterInpaintMask } from 'features/controlLayers/konva/CanvasEntity/CanvasEntityAdapterInpaintMask';
 import { CanvasEntityAdapterRasterLayer } from 'features/controlLayers/konva/CanvasEntity/CanvasEntityAdapterRasterLayer';
 import { CanvasEntityAdapterRegionalGuidance } from 'features/controlLayers/konva/CanvasEntity/CanvasEntityAdapterRegionalGuidance';
-import type { CanvasEntityAdapter } from 'features/controlLayers/konva/CanvasEntity/types';
+import type { CanvasEntityAdapter, CanvasEntityAdapterFromType } from 'features/controlLayers/konva/CanvasEntity/types';
 import { CanvasEntityRendererModule } from 'features/controlLayers/konva/CanvasEntityRendererModule';
 import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase';
 import { CanvasProgressImageModule } from 'features/controlLayers/konva/CanvasProgressImageModule';
@@ -19,7 +17,11 @@ import { CanvasToolModule } from 'features/controlLayers/konva/CanvasTool/Canvas
 import { CanvasWorkerModule } from 'features/controlLayers/konva/CanvasWorkerModule.js';
 import { getPrefixedId } from 'features/controlLayers/konva/util';
 import { $canvasManager } from 'features/controlLayers/store/ephemeral';
-import type { CanvasEntityIdentifier, CanvasEntityType } from 'features/controlLayers/store/types';
+import type {
+  CanvasEntityIdentifier,
+  CanvasRenderableEntityIdentifier,
+  CanvasRenderableEntityType,
+} from 'features/controlLayers/store/types';
 import {
   isControlLayerEntityIdentifier,
   isInpaintMaskEntityIdentifier,
@@ -32,6 +34,7 @@ import { computed } from 'nanostores';
 import type { Logger } from 'roarr';
 import type { AppSocket } from 'services/events/types';
 import { assert } from 'tsafe';
+import type { JsonObject } from 'type-fest';
 
 import { CanvasBackgroundModule } from './CanvasBackgroundModule';
 import { CanvasStateApiModule } from './CanvasStateApiModule';
@@ -62,7 +65,6 @@ export class CanvasManager extends CanvasModuleBase {
   entityRenderer: CanvasEntityRendererModule;
   compositor: CanvasCompositorModule;
   tool: CanvasToolModule;
-  bbox: CanvasBboxModule;
   stagingArea: CanvasStagingAreaModule;
   progressImage: CanvasProgressImageModule;
 
@@ -111,11 +113,12 @@ export class CanvasManager extends CanvasModuleBase {
         this.stateApi.$isFiltering,
         this.stateApi.$isTransforming,
         this.stateApi.$isRasterizing,
+        this.stateApi.$isSegmenting,
         this.stagingArea.$isStaging,
         this.compositor.$isBusy,
       ],
-      (isFiltering, isTransforming, isRasterizing, isStaging, isCompositing) => {
-        return isFiltering || isTransforming || isRasterizing || isStaging || isCompositing;
+      (isFiltering, isTransforming, isRasterizing, isSegmenting, isStaging, isCompositing) => {
+        return isFiltering || isTransforming || isRasterizing || isSegmenting || isStaging || isCompositing;
       }
     );
 
@@ -123,59 +126,48 @@ export class CanvasManager extends CanvasModuleBase {
     this.stage.addLayer(this.background.konva.layer);
 
     this.konva = {
-      previewLayer: new Konva.Layer({ listening: false, imageSmoothingEnabled: false }),
+      previewLayer: new Konva.Layer({ listening: true, imageSmoothingEnabled: false }),
     };
     this.stage.addLayer(this.konva.previewLayer);
 
     this.tool = new CanvasToolModule(this);
     this.progressImage = new CanvasProgressImageModule(this);
-    this.bbox = new CanvasBboxModule(this);
 
     // Must add in this order for correct z-index
     this.konva.previewLayer.add(this.stagingArea.konva.group);
     this.konva.previewLayer.add(this.progressImage.konva.group);
-    this.konva.previewLayer.add(this.bbox.konva.group);
     this.konva.previewLayer.add(this.tool.konva.group);
   }
 
-  getAdapter = <T extends CanvasEntityType = CanvasEntityType>(
+  getAdapter = <T extends CanvasRenderableEntityType = CanvasRenderableEntityType>(
     entityIdentifier: CanvasEntityIdentifier<T>
-  ): Extract<CanvasEntityAdapter, { state: { type: T } }> | null => {
+  ): CanvasEntityAdapterFromType<T> | null => {
+    let adapter: CanvasEntityAdapter | undefined;
+
     switch (entityIdentifier.type) {
       case 'raster_layer':
-        return (
-          (this.adapters.rasterLayers.get(entityIdentifier.id) as Extract<
-            CanvasEntityAdapter,
-            { state: { type: T } }
-          >) ?? null
-        );
+        adapter = this.adapters.rasterLayers.get(entityIdentifier.id);
+        break;
       case 'control_layer':
-        return (
-          (this.adapters.controlLayers.get(entityIdentifier.id) as Extract<
-            CanvasEntityAdapter,
-            { state: { type: T } }
-          >) ?? null
-        );
+        adapter = this.adapters.controlLayers.get(entityIdentifier.id);
+        break;
       case 'regional_guidance':
-        return (
-          (this.adapters.regionMasks.get(entityIdentifier.id) as Extract<
-            CanvasEntityAdapter,
-            { state: { type: T } }
-          >) ?? null
-        );
+        adapter = this.adapters.regionMasks.get(entityIdentifier.id);
+        break;
       case 'inpaint_mask':
-        return (
-          (this.adapters.inpaintMasks.get(entityIdentifier.id) as Extract<
-            CanvasEntityAdapter,
-            { state: { type: T } }
-          >) ?? null
-        );
+        adapter = this.adapters.inpaintMasks.get(entityIdentifier.id);
+        break;
       default:
         return null;
     }
+    if (!adapter) {
+      return null;
+    }
+
+    return adapter as CanvasEntityAdapterFromType<T>;
   };
 
-  deleteAdapter = (entityIdentifier: CanvasEntityIdentifier): boolean => {
+  deleteAdapter = (entityIdentifier: CanvasRenderableEntityIdentifier): boolean => {
     switch (entityIdentifier.type) {
       case 'raster_layer':
         return this.adapters.rasterLayers.delete(entityIdentifier.id);
@@ -190,6 +182,18 @@ export class CanvasManager extends CanvasModuleBase {
     }
   };
 
+  getAdapters = (entityIdentifiers: CanvasRenderableEntityIdentifier[]): CanvasEntityAdapter[] => {
+    const adapters: CanvasEntityAdapter[] = [];
+    for (const entityIdentifier of entityIdentifiers) {
+      const adapter = this.getAdapter(entityIdentifier);
+      if (!adapter) {
+        continue;
+      }
+      adapters.push(adapter);
+    }
+    return adapters;
+  };
+
   getAllAdapters = (): CanvasEntityAdapter[] => {
     return [
       ...this.adapters.rasterLayers.values(),
@@ -199,7 +203,7 @@ export class CanvasManager extends CanvasModuleBase {
     ];
   };
 
-  createAdapter = (entityIdentifier: CanvasEntityIdentifier): CanvasEntityAdapter => {
+  createAdapter = (entityIdentifier: CanvasRenderableEntityIdentifier): CanvasEntityAdapter => {
     if (isRasterLayerEntityIdentifier(entityIdentifier)) {
       const adapter = new CanvasEntityAdapterRasterLayer(entityIdentifier, this);
       this.adapters.rasterLayers.set(adapter.id, adapter);
@@ -232,7 +236,6 @@ export class CanvasManager extends CanvasModuleBase {
 
   getAllModules = (): CanvasModuleBase[] => {
     return [
-      this.bbox,
       this.stagingArea,
       this.tool,
       this.progressImage,
@@ -280,7 +283,6 @@ export class CanvasManager extends CanvasModuleBase {
       inpaintMasks: Array.from(this.adapters.inpaintMasks.values()).map((adapter) => adapter.repr()),
       regionMasks: Array.from(this.adapters.regionMasks.values()).map((adapter) => adapter.repr()),
       stateApi: this.stateApi.repr(),
-      bbox: this.bbox.repr(),
       stagingArea: this.stagingArea.repr(),
       tool: this.tool.repr(),
       progressImage: this.progressImage.repr(),
@@ -292,7 +294,7 @@ export class CanvasManager extends CanvasModuleBase {
     };
   };
 
-  getLoggingContext = (): SerializableObject => ({ path: this.path });
+  getLoggingContext = (): JsonObject => ({ path: this.path });
 
   buildPath = (canvasModule: CanvasModuleBase): string[] => {
     return canvasModule.parent.path.concat(canvasModule.id);

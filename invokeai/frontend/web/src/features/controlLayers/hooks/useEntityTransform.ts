@@ -1,18 +1,20 @@
-import { useStore } from '@nanostores/react';
-import { $false } from 'app/store/nanostores/util';
 import { useCanvasManager } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
 import { useEntityAdapterSafe } from 'features/controlLayers/contexts/EntityAdapterContext';
 import { useCanvasIsBusy } from 'features/controlLayers/hooks/useCanvasIsBusy';
+import { useEntityIsEmpty } from 'features/controlLayers/hooks/useEntityIsEmpty';
+import { useEntityIsLocked } from 'features/controlLayers/hooks/useEntityIsLocked';
 import type { CanvasEntityIdentifier } from 'features/controlLayers/store/types';
 import { isTransformableEntityIdentifier } from 'features/controlLayers/store/types';
+import { useImageViewer } from 'features/gallery/components/ImageViewer/useImageViewer';
 import { useCallback, useMemo } from 'react';
 
 export const useEntityTransform = (entityIdentifier: CanvasEntityIdentifier | null) => {
   const canvasManager = useCanvasManager();
   const adapter = useEntityAdapterSafe(entityIdentifier);
+  const imageViewer = useImageViewer();
   const isBusy = useCanvasIsBusy();
-  const isInteractable = useStore(adapter?.$isInteractable ?? $false);
-  const isEmpty = useStore(adapter?.$isEmpty ?? $false);
+  const isLocked = useEntityIsLocked(entityIdentifier);
+  const isEmpty = useEntityIsEmpty(entityIdentifier);
 
   const isDisabled = useMemo(() => {
     if (!entityIdentifier) {
@@ -27,16 +29,16 @@ export const useEntityTransform = (entityIdentifier: CanvasEntityIdentifier | nu
     if (isBusy) {
       return true;
     }
-    if (!isInteractable) {
+    if (isLocked) {
       return true;
     }
     if (isEmpty) {
       return true;
     }
     return false;
-  }, [entityIdentifier, adapter, isBusy, isInteractable, isEmpty]);
+  }, [entityIdentifier, adapter, isBusy, isLocked, isEmpty]);
 
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
     if (isDisabled) {
       return;
     }
@@ -50,10 +52,11 @@ export const useEntityTransform = (entityIdentifier: CanvasEntityIdentifier | nu
     if (!adapter) {
       return;
     }
-    adapter.transformer.startTransform();
-  }, [isDisabled, entityIdentifier, canvasManager]);
+    imageViewer.close();
+    await adapter.transformer.startTransform();
+  }, [isDisabled, entityIdentifier, canvasManager, imageViewer]);
 
-  const fitToBbox = useCallback(() => {
+  const fitToBbox = useCallback(async () => {
     if (isDisabled) {
       return;
     }
@@ -67,10 +70,11 @@ export const useEntityTransform = (entityIdentifier: CanvasEntityIdentifier | nu
     if (!adapter) {
       return;
     }
-    adapter.transformer.startTransform({ silent: true });
+    imageViewer.close();
+    await adapter.transformer.startTransform({ silent: true });
     adapter.transformer.fitToBboxContain();
-    adapter.transformer.applyTransform();
-  }, [canvasManager, entityIdentifier, isDisabled]);
+    await adapter.transformer.applyTransform();
+  }, [canvasManager, entityIdentifier, imageViewer, isDisabled]);
 
   return { isDisabled, start, fitToBbox } as const;
 };

@@ -27,6 +27,7 @@ import { zControlField, zIPAdapterField, zModelIdentifierField, zT2IAdapterField
 import type {
   ParameterCFGRescaleMultiplier,
   ParameterCFGScale,
+  ParameterGuidance,
   ParameterHeight,
   ParameterHRFEnabled,
   ParameterHRFMethod,
@@ -40,6 +41,8 @@ import type {
   ParameterSDXLRefinerNegativeAestheticScore,
   ParameterSDXLRefinerPositiveAestheticScore,
   ParameterSDXLRefinerStart,
+  ParameterSeamlessX,
+  ParameterSeamlessY,
   ParameterSeed,
   ParameterSteps,
   ParameterStrength,
@@ -49,6 +52,7 @@ import type {
 import {
   isParameterCFGRescaleMultiplier,
   isParameterCFGScale,
+  isParameterGuidance,
   isParameterHeight,
   isParameterHRFEnabled,
   isParameterHRFMethod,
@@ -61,6 +65,8 @@ import {
   isParameterSDXLRefinerNegativeAestheticScore,
   isParameterSDXLRefinerPositiveAestheticScore,
   isParameterSDXLRefinerStart,
+  isParameterSeamlessX,
+  isParameterSeamlessY,
   isParameterSeed,
   isParameterSteps,
   isParameterStrength,
@@ -142,6 +148,9 @@ const parseCFGScale: MetadataParseFunc<ParameterCFGScale> = (metadata) =>
 const parseCFGRescaleMultiplier: MetadataParseFunc<ParameterCFGRescaleMultiplier> = (metadata) =>
   getProperty(metadata, 'cfg_rescale_multiplier', isParameterCFGRescaleMultiplier);
 
+const parseGuidance: MetadataParseFunc<ParameterGuidance> = (metadata) =>
+  getProperty(metadata, 'guidance', isParameterGuidance);
+
 const parseScheduler: MetadataParseFunc<ParameterScheduler> = (metadata) =>
   getProperty(metadata, 'scheduler', isParameterScheduler);
 
@@ -154,6 +163,12 @@ const parseSteps: MetadataParseFunc<ParameterSteps> = (metadata) => getProperty(
 
 const parseStrength: MetadataParseFunc<ParameterStrength> = (metadata) =>
   getProperty(metadata, 'strength', isParameterStrength);
+
+const parseSeamlessX: MetadataParseFunc<ParameterSeamlessX> = (metadata) =>
+  getProperty(metadata, 'seamless_x', isParameterSeamlessX);
+
+const parseSeamlessY: MetadataParseFunc<ParameterSeamlessY> = (metadata) =>
+  getProperty(metadata, 'seamless_y', isParameterSeamlessY);
 
 const parseHRFEnabled: MetadataParseFunc<ParameterHRFEnabled> = async (metadata) => {
   try {
@@ -636,11 +651,14 @@ export const parsers = {
   seed: parseSeed,
   cfgScale: parseCFGScale,
   cfgRescaleMultiplier: parseCFGRescaleMultiplier,
+  guidance: parseGuidance,
   scheduler: parseScheduler,
   width: parseWidth,
   height: parseHeight,
   steps: parseSteps,
   strength: parseStrength,
+  seamlessX: parseSeamlessX,
+  seamlessY: parseSeamlessY,
   hrfEnabled: parseHRFEnabled,
   hrfStrength: parseHRFStrength,
   hrfMethod: parseHRFMethod,

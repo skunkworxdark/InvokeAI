@@ -33,7 +33,10 @@ const ImageMetadataActions = (props: Props) => {
       <MetadataItem metadata={metadata} handlers={handlers.scheduler} />
       <MetadataItem metadata={metadata} handlers={handlers.cfgScale} />
       <MetadataItem metadata={metadata} handlers={handlers.cfgRescaleMultiplier} />
+      <MetadataItem metadata={metadata} handlers={handlers.guidance} />
       {activeTabName !== 'canvas' && <MetadataItem metadata={metadata} handlers={handlers.strength} />}
+      <MetadataItem metadata={metadata} handlers={handlers.seamlessX} />
+      <MetadataItem metadata={metadata} handlers={handlers.seamlessY} />
       <MetadataItem metadata={metadata} handlers={handlers.hrfEnabled} />
       <MetadataItem metadata={metadata} handlers={handlers.hrfMethod} />
       <MetadataItem metadata={metadata} handlers={handlers.hrfStrength} />
