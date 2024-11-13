@@ -671,6 +671,8 @@ class DenoiseLatentsMetaInvocation(DenoiseLatentsInvocation, WithMetadata):
     version="1.0.0",
 )
 class FluxDenoiseLatentsMetaInvocation(FluxDenoiseInvocation, WithMetadata):
+    """Run denoising process with a FLUX transformer model + metadata."""
+
     def invoke(self, context: InvocationContext) -> LatentsMetaOutput:
         def _loras_to_json(obj: Union[Any, list[Any]]):
             if not isinstance(obj, list):
