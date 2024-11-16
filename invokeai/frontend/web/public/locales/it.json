@@ -94,7 +94,8 @@
         "view": "Vista",
         "close": "Chiudi",
         "clipboard": "Appunti",
-        "ok": "Ok"
+        "ok": "Ok",
+        "generating": "Generazione"
     },
     "gallery": {
         "galleryImageSize": "Dimensione dell'immagine",
@@ -597,7 +598,18 @@
         "huggingFace": "HuggingFace",
         "huggingFaceRepoID": "HuggingFace Repository ID",
         "clipEmbed": "CLIP Embed",
-        "t5Encoder": "T5 Encoder"
+        "t5Encoder": "T5 Encoder",
+        "hfTokenInvalidErrorMessage": "Gettone HuggingFace non valido o mancante.",
+        "hfTokenRequired": "Stai tentando di scaricare un modello che richiede un gettone HuggingFace valido.",
+        "hfTokenUnableToVerifyErrorMessage": "Impossibile verificare il gettone HuggingFace. Ciò è probabilmente dovuto a un errore di rete. Riprova più tardi.",
+        "hfTokenHelperText": "Per utilizzare alcuni modelli è necessario un gettone HF. Fai clic qui per creare o ottenere il tuo gettone.",
+        "hfTokenInvalid": "Gettone HF non valido o mancante",
+        "hfTokenUnableToVerify": "Impossibile verificare il gettone HF",
+        "hfTokenSaved": "Gettone HF salvato",
+        "hfForbidden": "Non hai accesso a questo modello HF",
+        "hfTokenLabel": "Gettone HuggingFace (richiesto per alcuni modelli)",
+        "hfForbiddenErrorMessage": "Consigliamo di visitare la pagina del repository su HuggingFace.com. Il proprietario potrebbe richiedere l'accettazione dei termini per poter effettuare il download.",
+        "hfTokenInvalidErrorMessage2": "Aggiornalo in "
     },
     "parameters": {
         "images": "Immagini",
@@ -699,7 +711,9 @@
         "staged": "Maschera espansa",
         "optimizedImageToImage": "Immagine-a-immagine ottimizzata",
         "sendToCanvas": "Invia alla Tela",
-        "coherenceMinDenoise": "Riduzione minima del rumore"
+        "coherenceMinDenoise": "Min rid. rumore",
+        "recallMetadata": "Richiama i metadati",
+        "disabledNoRasterContent": "Disabilitato (nessun contenuto Raster)"
     },
     "settings": {
         "models": "Modelli",
@@ -737,7 +751,8 @@
         "confirmOnNewSession": "Conferma su nuova sessione",
         "enableModelDescriptions": "Abilita le descrizioni dei modelli nei menu a discesa",
         "modelDescriptionsDisabled": "Descrizioni dei modelli nei menu a discesa disabilitate",
-        "modelDescriptionsDisabledDesc": "Le descrizioni dei modelli nei menu a discesa sono state disabilitate. Abilitale nelle Impostazioni."
+        "modelDescriptionsDisabledDesc": "Le descrizioni dei modelli nei menu a discesa sono state disabilitate. Abilitale nelle Impostazioni.",
+        "showDetailedInvocationProgress": "Mostra dettagli avanzamento"
     },
     "toast": {
         "uploadFailed": "Caricamento fallito",
@@ -1263,8 +1278,9 @@
         },
         "paramDenoisingStrength": {
             "paragraphs": [
-                "Quanto rumore viene aggiunto all'immagine in ingresso.",
-                "0 risulterà in un'immagine identica, mentre 1 risulterà in un'immagine completamente nuova."
+                "Controlla la differenza tra l'immagine generata e il/i livello/i raster.",
+                "Una forza inferiore rimane più vicina ai livelli raster visibili combinati. Una forza superiore si basa maggiormente sul prompt globale.",
+                "Se non sono presenti livelli raster con contenuto visibile, questa impostazione viene ignorata."
             ],
             "heading": "Forza di riduzione del rumore"
         },
@@ -1276,7 +1292,7 @@
         },
         "infillMethod": {
             "paragraphs": [
-                "Metodo di riempimento durante il processo di Outpainting o Inpainting."
+                "Metodo di riempimento durante il processo di Outpaint o Inpaint."
             ],
             "heading": "Metodo di riempimento"
         },
@@ -1444,7 +1460,7 @@
             "heading": "Livello minimo di riduzione del rumore",
             "paragraphs": [
                 "Intensità minima di riduzione rumore per la modalità di Coerenza",
-                "L'intensità minima di riduzione del rumore per la regione di coerenza durante l'inpainting o l'outpainting"
+                "L'intensità minima di riduzione del rumore per la regione di coerenza durante l'inpaint o l'outpaint"
             ]
         },
         "compositingMaskBlur": {
@@ -1498,7 +1514,7 @@
         "optimizedDenoising": {
             "heading": "Immagine-a-immagine ottimizzata",
             "paragraphs": [
-                "Abilita 'Immagine-a-immagine ottimizzata' per una scala di riduzione del rumore più graduale per le trasformazioni da immagine a immagine e di inpainting con modelli Flux. Questa impostazione migliora la capacità di controllare la quantità di modifica applicata a un'immagine, ma può essere disattivata se preferisci usare la scala di riduzione rumore standard. Questa impostazione è ancora in fase di messa a punto ed è in stato beta."
+                "Abilita 'Immagine-a-immagine ottimizzata' per una scala di riduzione del rumore più graduale per le trasformazioni da immagine a immagine e di inpaint con modelli Flux. Questa impostazione migliora la capacità di controllare la quantità di modifica applicata a un'immagine, ma può essere disattivata se preferisci usare la scala di riduzione rumore standard. Questa impostazione è ancora in fase di messa a punto ed è in stato beta."
             ]
         },
         "paramGuidance": {
@@ -1734,7 +1750,7 @@
         "newControlLayerOk": "Livello di controllo creato",
         "bboxOverlay": "Mostra sovrapposizione riquadro",
         "resetCanvas": "Reimposta la tela",
-        "outputOnlyMaskedRegions": "Solo regioni mascherate in uscita",
+        "outputOnlyMaskedRegions": "In uscita solo le regioni generate",
         "enableAutoNegative": "Abilita Auto Negativo",
         "disableAutoNegative": "Disabilita Auto Negativo",
         "showHUD": "Mostra HUD",
@@ -1771,7 +1787,7 @@
         "globalReferenceImage_withCount_many": "Immagini di riferimento Globali",
         "globalReferenceImage_withCount_other": "Immagini di riferimento Globali",
         "controlMode": {
-            "balanced": "Bilanciato",
+            "balanced": "Bilanciato (consigliato)",
             "controlMode": "Modalità di controllo",
             "prompt": "Prompt",
             "control": "Controllo",
@@ -1782,7 +1798,7 @@
         "beginEndStepPercentShort": "Inizio/Fine %",
         "stagingOnCanvas": "Genera immagini nella",
         "ipAdapterMethod": {
-            "full": "Completo",
+            "full": "Stile e Composizione",
             "style": "Solo Stile",
             "composition": "Solo Composizione",
             "ipAdapterMethod": "Metodo Adattatore IP"
@@ -1881,7 +1897,10 @@
             "lineart_anime_edge_detection": {
                 "description": "Genera una mappa dei bordi dal livello selezionato utilizzando il modello di rilevamento dei bordi Lineart Anime.",
                 "label": "Rilevamento bordi Lineart Anime"
-            }
+            },
+            "forMoreControl": "Per un maggiore controllo, fare clic su Avanzate qui sotto.",
+            "advanced": "Avanzate",
+            "processingLayerWith": "Elaborazione del livello con il filtro {{type}}."
         },
         "controlLayers_withCount_hidden": "Livelli di controllo ({{count}} nascosti)",
         "regionalGuidance_withCount_hidden": "Guida regionale ({{count}} nascosti)",
@@ -2025,7 +2044,10 @@
         "newControlLayer": "Nuovo $t(controlLayers.controlLayer)",
         "newInpaintMask": "Nuova $t(controlLayers.inpaintMask)",
         "replaceCurrent": "Sostituisci corrente",
-        "mergeDown": "Unire in basso"
+        "mergeDown": "Unire in basso",
+        "newFromImage": "Nuovo da Immagine",
+        "mergingLayers": "Unione dei livelli",
+        "controlLayerEmptyState": "<UploadButton>Carica un'immagine</UploadButton>, trascina un'immagine dalla <GalleryButton>galleria</GalleryButton> su questo livello oppure disegna sulla tela per iniziare."
     },
     "ui": {
         "tabs": {
@@ -2057,7 +2079,9 @@
         "postProcessingMissingModelWarning": "Visita <LinkComponent>Gestione modelli</LinkComponent> per installare un modello di post-elaborazione (da immagine a immagine).",
         "exceedsMaxSize": "Le impostazioni di ampliamento superano il limite massimo delle dimensioni",
         "exceedsMaxSizeDetails": "Il limite massimo di ampliamento è {{maxUpscaleDimension}}x{{maxUpscaleDimension}} pixel. Prova un'immagine più piccola o diminuisci la scala selezionata.",
-        "upscale": "Amplia"
+        "upscale": "Amplia",
+        "incompatibleBaseModel": "Architettura del modello principale non supportata per l'ampliamento",
+        "incompatibleBaseModelDesc": "L'ampliamento è supportato solo per i modelli di architettura SD1.5 e SDXL. Cambia il modello principale per abilitare l'ampliamento."
     },
     "upsell": {
         "inviteTeammates": "Invita collaboratori",
@@ -2119,12 +2143,13 @@
     },
     "whatsNew": {
         "whatsNewInInvoke": "Novità in Invoke",
-        "line2": "Supporto Flux esteso, ora con immagini di riferimento globali",
-        "line3": "Tooltip e menu contestuali migliorati",
         "readReleaseNotes": "Leggi le note di rilascio",
         "watchRecentReleaseVideos": "Guarda i video su questa versione",
-        "line1": "Strumento <ItalicComponent>Seleziona oggetto</ItalicComponent> per la selezione e la modifica precise degli oggetti",
-        "watchUiUpdatesOverview": "Guarda le novità dell'interfaccia"
+        "watchUiUpdatesOverview": "Guarda le novità dell'interfaccia",
+        "items": [
+            "<StrongComponent>SD 3.5</StrongComponent>: supporto per SD 3.5 Medium e Large.",
+            "<StrongComponent>Tela</StrongComponent>: elaborazione semplificata del livello di controllo e impostazioni di controllo predefinite migliorate."
+        ]
     },
     "system": {
         "logLevel": {

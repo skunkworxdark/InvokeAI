@@ -122,6 +122,7 @@
         "goTo": "Go to",
         "hotkeysLabel": "Hotkeys",
         "loadingImage": "Loading Image",
+        "loadingModel": "Loading Model",
         "imageFailedToLoad": "Unable to Load Image",
         "img2img": "Image To Image",
         "inpaint": "inpaint",
@@ -174,7 +175,8 @@
         "placeholderSelectAModel": "Select a model",
         "reset": "Reset",
         "none": "None",
-        "new": "New"
+        "new": "New",
+        "generating": "Generating"
     },
     "hrf": {
         "hrf": "High Resolution Fix",
@@ -704,6 +706,8 @@
         "baseModel": "Base Model",
         "cancel": "Cancel",
         "clipEmbed": "CLIP Embed",
+        "clipLEmbed": "CLIP-L Embed",
+        "clipGEmbed": "CLIP-G Embed",
         "config": "Config",
         "convert": "Convert",
         "convertingModelBegin": "Converting Model. Please wait.",
@@ -1137,6 +1141,7 @@
         "resetWebUI": "Reset Web UI",
         "resetWebUIDesc1": "Resetting the web UI only resets the browser's local cache of your images and remembered settings. It does not delete any images from disk.",
         "resetWebUIDesc2": "If images aren't showing up in the gallery or something else isn't working, please try resetting before submitting an issue on GitHub.",
+        "showDetailedInvocationProgress": "Show Progress Details",
         "showProgressInViewer": "Show Progress Images in Viewer",
         "ui": "User Interface",
         "clearIntermediatesDisabled": "Queue must be empty to clear intermediates",
@@ -1318,7 +1323,7 @@
         "controlNetProcessor": {
             "heading": "Processor",
             "paragraphs": [
-                "Method of processing the input image to guide the generation process. Different processors will providedifferent effects or styles in your generated images."
+                "Method of processing the input image to guide the generation process. Different processors will provide different effects or styles in your generated images."
             ]
         },
         "controlNetResizeMode": {
@@ -1671,7 +1676,7 @@
         "clearCaches": "Clear Caches",
         "recalculateRects": "Recalculate Rects",
         "clipToBbox": "Clip Strokes to Bbox",
-        "outputOnlyMaskedRegions": "Output Only Masked Regions",
+        "outputOnlyMaskedRegions": "Output Only Generated Regions",
         "addLayer": "Add Layer",
         "duplicate": "Duplicate",
         "moveToFront": "Move to Front",
@@ -1787,7 +1792,7 @@
         },
         "ipAdapterMethod": {
             "ipAdapterMethod": "IP Adapter Method",
-            "full": "Full",
+            "full": "Style and Composition",
             "style": "Style Only",
             "composition": "Composition Only"
         },
@@ -2105,7 +2110,7 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "<StrongComponent>SD 3.5</StrongComponent>: Support for Text-to-Image in Workflows with SD 3.5 Medium and Large.",
+            "<StrongComponent>SD 3.5</StrongComponent>: Support for SD 3.5 Medium and Large.",
             "<StrongComponent>Canvas</StrongComponent>: Streamlined Control Layer processing and improved default Control settings."
         ],
         "readReleaseNotes": "Read Release Notes",

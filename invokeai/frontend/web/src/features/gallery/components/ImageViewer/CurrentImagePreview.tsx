@@ -2,6 +2,7 @@ import { Box, Flex } from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { skipToken } from '@reduxjs/toolkit/query';
 import { useAppSelector } from 'app/store/storeHooks';
+import { CanvasAlertsInvocationProgress } from 'features/controlLayers/components/CanvasAlerts/CanvasAlertsInvocationProgress';
 import { CanvasAlertsSendingToCanvas } from 'features/controlLayers/components/CanvasAlerts/CanvasAlertsSendingTo';
 import { DndImage } from 'features/dnd/DndImage';
 import ImageMetadataViewer from 'features/gallery/components/ImageMetadataViewer/ImageMetadataViewer';
@@ -48,9 +49,18 @@ const CurrentImagePreview = () => {
       position="relative"
     >
       <ImageContent imageDTO={imageDTO} />
-      <Box position="absolute" top={0} insetInlineStart={0}>
+      <Flex
+        flexDir="column"
+        gap={2}
+        position="absolute"
+        top={0}
+        insetInlineStart={0}
+        pointerEvents="none"
+        alignItems="flex-start"
+      >
         <CanvasAlertsSendingToCanvas />
-      </Box>
+        <CanvasAlertsInvocationProgress />
+      </Flex>
       {shouldShowImageDetails && imageDTO && (
         <Box position="absolute" opacity={0.8} top={0} width="full" height="full" borderRadius="base">
           <ImageMetadataViewer image={imageDTO} />

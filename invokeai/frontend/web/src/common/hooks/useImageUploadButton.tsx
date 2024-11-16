@@ -61,6 +61,11 @@ export const useImageUploadButton = ({ onUpload, isDisabled, allowMultiple }: Us
           log.warn('Multiple files dropped but only one allowed');
           return;
         }
+        if (files.length === 0) {
+          // Should never happen
+          log.warn('No files dropped');
+          return;
+        }
         const file = files[0];
         assert(file !== undefined); // should never happen
         const imageDTO = await uploadImage({
@@ -68,18 +73,20 @@ export const useImageUploadButton = ({ onUpload, isDisabled, allowMultiple }: Us
           image_category: 'user',
           is_intermediate: false,
           board_id: autoAddBoardId === 'none' ? undefined : autoAddBoardId,
+          silent: true,
         }).unwrap();
         if (onUpload) {
           onUpload(imageDTO);
         }
       } else {
-        //
         const imageDTOs = await uploadImages(
-          files.map((file) => ({
+          files.map((file, i) => ({
             file,
             image_category: 'user',
             is_intermediate: false,
             board_id: autoAddBoardId === 'none' ? undefined : autoAddBoardId,
+            silent: false,
+            isFirstUploadOfBatch: i === 0,
           }))
         );
         if (onUpload) {

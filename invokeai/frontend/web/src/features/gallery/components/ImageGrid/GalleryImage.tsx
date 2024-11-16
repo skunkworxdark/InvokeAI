@@ -12,6 +12,7 @@ import type { DndDragPreviewMultipleImageState } from 'features/dnd/DndDragPrevi
 import { createMultipleImageDragPreview, setMultipleImageDragPreview } from 'features/dnd/DndDragPreviewMultipleImage';
 import type { DndDragPreviewSingleImageState } from 'features/dnd/DndDragPreviewSingleImage';
 import { createSingleImageDragPreview, setSingleImageDragPreview } from 'features/dnd/DndDragPreviewSingleImage';
+import { firefoxDndFix } from 'features/dnd/util';
 import { useImageContextMenu } from 'features/gallery/components/ImageContextMenu/ImageContextMenu';
 import { GalleryImageHoverIcons } from 'features/gallery/components/ImageGrid/GalleryImageHoverIcons';
 import { getGalleryImageDataTestId } from 'features/gallery/components/ImageGrid/getGalleryImageDataTestId';
@@ -66,7 +67,7 @@ const galleryImageContainerSX = {
     },
     '&:hover::before': {
       boxShadow:
-        'inset 0px 0px 0px 2px var(--invoke-colors-invokeBlue-300), inset 0px 0px 0px 3px var(--invoke-colors-invokeBlue-800)',
+        'inset 0px 0px 0px 1px var(--invoke-colors-invokeBlue-300), inset 0px 0px 0px 2px var(--invoke-colors-invokeBlue-800)',
     },
     '&:hover[data-selected=true]::before': {
       boxShadow:
@@ -115,13 +116,17 @@ export const GalleryImage = memo(({ imageDTO }: Props) => {
       return;
     }
     return combine(
+      firefoxDndFix(element),
       draggable({
         element,
         getInitialData: () => {
           const { gallery } = store.getState();
           // When we have multiple images selected, and the dragged image is part of the selection, initiate a
           // multi-image drag.
-          if (gallery.selection.length > 1 && gallery.selection.includes(imageDTO)) {
+          if (
+            gallery.selection.length > 1 &&
+            gallery.selection.find(({ image_name }) => image_name === imageDTO.image_name) !== undefined
+          ) {
             return multipleImageDndSource.getData({
               imageDTOs: gallery.selection,
               boardId: gallery.selectedBoardId,
