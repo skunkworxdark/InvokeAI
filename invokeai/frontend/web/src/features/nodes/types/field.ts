@@ -54,7 +54,10 @@ const zFieldOutputTemplateBase = zFieldTemplateBase.extend({
   fieldKind: z.literal('output'),
 });
 
-const zCardinality = z.enum(['SINGLE', 'COLLECTION', 'SINGLE_OR_COLLECTION']);
+const SINGLE = 'SINGLE' as const;
+const COLLECTION = 'COLLECTION' as const;
+const SINGLE_OR_COLLECTION = 'SINGLE_OR_COLLECTION' as const;
+const zCardinality = z.enum([SINGLE, COLLECTION, SINGLE_OR_COLLECTION]);
 
 const zFieldTypeBase = z.object({
   cardinality: zCardinality,
@@ -95,6 +98,14 @@ const zImageFieldType = zFieldTypeBase.extend({
   name: z.literal('ImageField'),
   originalType: zStatelessFieldType.optional(),
 });
+const zImageCollectionFieldType = z.object({
+  name: z.literal('ImageField'),
+  cardinality: z.literal(COLLECTION),
+  originalType: zStatelessFieldType.optional(),
+});
+export const isImageCollectionFieldType = (
+  fieldType: FieldType
+): fieldType is z.infer<typeof zImageCollectionFieldType> => zImageCollectionFieldType.safeParse(fieldType).success;
 const zBoardFieldType = zFieldTypeBase.extend({
   name: z.literal('BoardField'),
   originalType: zStatelessFieldType.optional(),
@@ -278,13 +289,23 @@ export const zStringFieldValue = z.string();
 const zStringFieldInputInstance = zFieldInputInstanceBase.extend({
   value: zStringFieldValue,
 });
-const zStringFieldInputTemplate = zFieldInputTemplateBase.extend({
-  type: zStringFieldType,
-  originalType: zFieldType.optional(),
-  default: zStringFieldValue,
-  maxLength: z.number().int().optional(),
-  minLength: z.number().int().optional(),
-});
+const zStringFieldInputTemplate = zFieldInputTemplateBase
+  .extend({
+    type: zStringFieldType,
+    originalType: zFieldType.optional(),
+    default: zStringFieldValue,
+    maxLength: z.number().int().gte(0).optional(),
+    minLength: z.number().int().gte(0).optional(),
+  })
+  .refine(
+    (val) => {
+      if (val.maxLength !== undefined && val.minLength !== undefined) {
+        return val.maxLength >= val.minLength;
+      }
+      return true;
+    },
+    { message: 'maxLength must be greater than or equal to minLength' }
+  );
 const zStringFieldOutputTemplate = zFieldOutputTemplateBase.extend({
   type: zStringFieldType,
 });
@@ -347,7 +368,6 @@ export const isEnumFieldInputTemplate = (val: unknown): val is EnumFieldInputTem
 // #endregion
 
 // #region ImageField
-
 export const zImageFieldValue = zImageField.optional();
 const zImageFieldInputInstance = zFieldInputInstanceBase.extend({
   value: zImageFieldValue,
@@ -367,6 +387,41 @@ export const isImageFieldInputInstance = (val: unknown): val is ImageFieldInputI
   zImageFieldInputInstance.safeParse(val).success;
 export const isImageFieldInputTemplate = (val: unknown): val is ImageFieldInputTemplate =>
   zImageFieldInputTemplate.safeParse(val).success;
+// #endregion
+
+// #region ImageField Collection
+export const zImageFieldCollectionValue = z.array(zImageField).optional();
+const zImageFieldCollectionInputInstance = zFieldInputInstanceBase.extend({
+  value: zImageFieldCollectionValue,
+});
+const zImageFieldCollectionInputTemplate = zFieldInputTemplateBase
+  .extend({
+    type: zImageCollectionFieldType,
+    originalType: zFieldType.optional(),
+    default: zImageFieldCollectionValue,
+    maxItems: z.number().int().gte(0).optional(),
+    minItems: z.number().int().gte(0).optional(),
+  })
+  .refine(
+    (val) => {
+      if (val.maxItems !== undefined && val.minItems !== undefined) {
+        return val.maxItems >= val.minItems;
+      }
+      return true;
+    },
+    { message: 'maxLength must be greater than or equal to minLength' }
+  );
+
+const zImageFieldCollectionOutputTemplate = zFieldOutputTemplateBase.extend({
+  type: zImageCollectionFieldType,
+});
+export type ImageFieldCollectionValue = z.infer<typeof zImageFieldCollectionValue>;
+export type ImageFieldCollectionInputInstance = z.infer<typeof zImageFieldCollectionInputInstance>;
+export type ImageFieldCollectionInputTemplate = z.infer<typeof zImageFieldCollectionInputTemplate>;
+export const isImageFieldCollectionInputInstance = (val: unknown): val is ImageFieldCollectionInputInstance =>
+  zImageFieldCollectionInputInstance.safeParse(val).success;
+export const isImageFieldCollectionInputTemplate = (val: unknown): val is ImageFieldCollectionInputTemplate =>
+  zImageFieldCollectionInputTemplate.safeParse(val).success;
 // #endregion
 
 // #region BoardField
@@ -885,6 +940,7 @@ export const zStatefulFieldValue = z.union([
   zBooleanFieldValue,
   zEnumFieldValue,
   zImageFieldValue,
+  zImageFieldCollectionValue,
   zBoardFieldValue,
   zModelIdentifierFieldValue,
   zMainModelFieldValue,
@@ -920,6 +976,7 @@ const zStatefulFieldInputInstance = z.union([
   zBooleanFieldInputInstance,
   zEnumFieldInputInstance,
   zImageFieldInputInstance,
+  zImageFieldCollectionInputInstance,
   zBoardFieldInputInstance,
   zModelIdentifierFieldInputInstance,
   zMainModelFieldInputInstance,
@@ -954,6 +1011,7 @@ const zStatefulFieldInputTemplate = z.union([
   zBooleanFieldInputTemplate,
   zEnumFieldInputTemplate,
   zImageFieldInputTemplate,
+  zImageFieldCollectionInputTemplate,
   zBoardFieldInputTemplate,
   zModelIdentifierFieldInputTemplate,
   zMainModelFieldInputTemplate,
@@ -991,6 +1049,7 @@ const zStatefulFieldOutputTemplate = z.union([
   zBooleanFieldOutputTemplate,
   zEnumFieldOutputTemplate,
   zImageFieldOutputTemplate,
+  zImageFieldCollectionOutputTemplate,
   zBoardFieldOutputTemplate,
   zModelIdentifierFieldOutputTemplate,
   zMainModelFieldOutputTemplate,

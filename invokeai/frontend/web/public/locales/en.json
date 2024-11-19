@@ -263,7 +263,8 @@
         "iterations_one": "Iteration",
         "iterations_other": "Iterations",
         "generations_one": "Generation",
-        "generations_other": "Generations"
+        "generations_other": "Generations",
+        "batchSize": "Batch Size"
     },
     "invocationCache": {
         "invocationCache": "Invocation Cache",
@@ -977,6 +978,8 @@
         "zoomOutNodes": "Zoom Out",
         "betaDesc": "This invocation is in beta. Until it is stable, it may have breaking changes during app updates. We plan to support this invocation long-term.",
         "prototypeDesc": "This invocation is a prototype. It may have breaking changes during app updates and may be removed at any time.",
+        "internalDesc": "This invocation is used internally by Invoke. It may have breaking changes during app updates and may be removed at any time.",
+        "specialDesc": "This invocation some special handling in the app. For example, Batch nodes are used to queue multiple graphs from a single workflow.",
         "imageAccessError": "Unable to find image {{image_name}}, resetting to default",
         "boardAccessError": "Unable to find board {{board_id}}, resetting to default",
         "modelAccessError": "Unable to find model {{key}}, resetting to default",
@@ -1015,8 +1018,11 @@
             "addingImagesTo": "Adding images to",
             "invoke": "Invoke",
             "missingFieldTemplate": "Missing field template",
-            "missingInputForField": "{{nodeLabel}} -> {{fieldLabel}} missing input",
+            "missingInputForField": "{{nodeLabel}} -> {{fieldLabel}}: missing input",
             "missingNodeTemplate": "Missing node template",
+            "collectionEmpty": "{{nodeLabel}} -> {{fieldLabel}} empty collection",
+            "collectionTooFewItems": "{{nodeLabel}} -> {{fieldLabel}}: too few items, minimum {{minItems}}",
+            "collectionTooManyItems": "{{nodeLabel}} -> {{fieldLabel}}: too many items, maximum {{maxItems}}",
             "noModelSelected": "No model selected",
             "noT5EncoderModelSelected": "No T5 Encoder model selected for FLUX generation",
             "noFLUXVAEModelSelected": "No VAE model selected for FLUX generation",
@@ -1025,10 +1031,11 @@
             "fluxModelIncompatibleBboxHeight": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), bbox height is {{height}}",
             "fluxModelIncompatibleScaledBboxWidth": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), scaled bbox width is {{width}}",
             "fluxModelIncompatibleScaledBboxHeight": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), scaled bbox height is {{height}}",
-            "canvasIsFiltering": "Canvas is filtering",
-            "canvasIsTransforming": "Canvas is transforming",
-            "canvasIsRasterizing": "Canvas is rasterizing",
-            "canvasIsCompositing": "Canvas is compositing",
+            "canvasIsFiltering": "Canvas is busy (filtering)",
+            "canvasIsTransforming": "Canvas is busy (transforming)",
+            "canvasIsRasterizing": "Canvas is busy (rasterizing)",
+            "canvasIsCompositing": "Canvas is busy (compositing)",
+            "canvasIsSelectingObject": "Canvas is busy (selecting object)",
             "noPrompts": "No prompts generated",
             "noNodesInGraph": "No nodes in graph",
             "systemDisconnected": "System disconnected",
@@ -1659,7 +1666,6 @@
         "newControlLayerError": "Problem Creating Control Layer",
         "newRasterLayerOk": "Created Raster Layer",
         "newRasterLayerError": "Problem Creating Raster Layer",
-        "newFromImage": "New from Image",
         "pullBboxIntoLayerOk": "Bbox Pulled Into Layer",
         "pullBboxIntoLayerError": "Problem Pulling BBox Into Layer",
         "pullBboxIntoReferenceImageOk": "Bbox Pulled Into ReferenceImage",
@@ -1672,7 +1678,7 @@
         "mergingLayers": "Merging layers",
         "clearHistory": "Clear History",
         "bboxOverlay": "Show Bbox Overlay",
-        "resetCanvas": "Reset Canvas",
+        "newSession": "New Session",
         "clearCaches": "Clear Caches",
         "recalculateRects": "Recalculate Rects",
         "clipToBbox": "Clip Strokes to Bbox",
@@ -1704,8 +1710,10 @@
         "controlLayer": "Control Layer",
         "inpaintMask": "Inpaint Mask",
         "regionalGuidance": "Regional Guidance",
-        "canvasAsRasterLayer": "$t(controlLayers.canvas) as $t(controlLayers.rasterLayer)",
-        "canvasAsControlLayer": "$t(controlLayers.canvas) as $t(controlLayers.controlLayer)",
+        "asRasterLayer": "As $t(controlLayers.rasterLayer)",
+        "asRasterLayerResize": "As $t(controlLayers.rasterLayer) (Resize)",
+        "asControlLayer": "As $t(controlLayers.controlLayer)",
+        "asControlLayerResize": "As $t(controlLayers.controlLayer) (Resize)",
         "referenceImage": "Reference Image",
         "regionalReferenceImage": "Regional Reference Image",
         "globalReferenceImage": "Global Reference Image",
@@ -1781,6 +1789,8 @@
         "newGallerySessionDesc": "This will clear the canvas and all settings except for your model selection. Generations will be sent to the gallery.",
         "newCanvasSession": "New Canvas Session",
         "newCanvasSessionDesc": "This will clear the canvas and all settings except for your model selection. Generations will be staged on the canvas.",
+        "resetCanvasLayers": "Reset Canvas Layers",
+        "resetGenerationSettings": "Reset Generation Settings",
         "replaceCurrent": "Replace Current",
         "controlLayerEmptyState": "<UploadButton>Upload an image</UploadButton>, drag an image from the <GalleryButton>gallery</GalleryButton> onto this layer, or draw on the canvas to get started.",
         "controlMode": {
@@ -2110,11 +2120,73 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "<StrongComponent>SD 3.5</StrongComponent>: Support for SD 3.5 Medium and Large.",
-            "<StrongComponent>Canvas</StrongComponent>: Streamlined Control Layer processing and improved default Control settings."
+            "<StrongComponent>Workflows</StrongComponent>: Run a workflow for a collection of images using the new <StrongComponent>Image Batch</StrongComponent> node.",
+            "<StrongComponent>FLUX</StrongComponent>: Support for XLabs IP Adapter v2."
         ],
         "readReleaseNotes": "Read Release Notes",
         "watchRecentReleaseVideos": "Watch Recent Release Videos",
         "watchUiUpdatesOverview": "Watch UI Updates Overview"
+    },
+    "supportVideos": {
+        "supportVideos": "Support Videos",
+        "gettingStarted": "Getting Started",
+        "controlCanvas": "Control Canvas",
+        "watch": "Watch",
+        "studioSessionsDesc1": "Check out the <StudioSessionsPlaylistLink /> for Invoke deep dives.",
+        "studioSessionsDesc2": "Join our <DiscordLink /> to participate in the live sessions and ask questions. Sessions are uploaded to the playlist the following week.",
+        "videos": {
+            "creatingYourFirstImage": {
+                "title": "Creating Your First Image",
+                "description": "Introduction to creating an image from scratch using Invoke's tools."
+            },
+            "usingControlLayersAndReferenceGuides": {
+                "title": "Using Control Layers and Reference Guides",
+                "description": "Learn how to guide your image creation with control layers and reference images."
+            },
+            "understandingImageToImageAndDenoising": {
+                "title": "Understanding Image-to-Image and Denoising",
+                "description": "Overview of image-to-image transformations and denoising in Invoke."
+            },
+            "exploringAIModelsAndConceptAdapters": {
+                "title": "Exploring AI Models and Concept Adapters",
+                "description": "Dive into AI models and how to use concept adapters for creative control."
+            },
+            "creatingAndComposingOnInvokesControlCanvas": {
+                "title": "Creating and Composing on Invoke's Control Canvas",
+                "description": "Learn to compose images using Invoke's control canvas."
+            },
+            "upscaling": {
+                "title": "Upscaling",
+                "description": "How to upscale images with Invoke's tools to enhance resolution."
+            },
+            "howDoIGenerateAndSaveToTheGallery": {
+                "title": "How Do I Generate and Save to the Gallery?",
+                "description": "Steps to generate and save images to the gallery."
+            },
+            "howDoIEditOnTheCanvas": {
+                "title": "How Do I Edit on the Canvas?",
+                "description": "Guide to editing images directly on the canvas."
+            },
+            "howDoIDoImageToImageTransformation": {
+                "title": "How Do I Do Image-to-Image Transformation?",
+                "description": "Tutorial on performing image-to-image transformations in Invoke."
+            },
+            "howDoIUseControlNetsAndControlLayers": {
+                "title": "How Do I Use Control Nets and Control Layers?",
+                "description": "Learn to apply control layers and controlnets to your images."
+            },
+            "howDoIUseGlobalIPAdaptersAndReferenceImages": {
+                "title": "How Do I Use Global IP Adapters and Reference Images?",
+                "description": "Introduction to adding reference images and global IP adapters."
+            },
+            "howDoIUseInpaintMasks": {
+                "title": "How Do I Use Inpaint Masks?",
+                "description": "How to apply inpaint masks for image correction and variation."
+            },
+            "howDoIOutpaint": {
+                "title": "How Do I Outpaint?",
+                "description": "Guide to outpainting beyond the original image borders."
+            }
+        }
     }
 }

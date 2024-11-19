@@ -75,7 +75,6 @@ dependencies = [
   "Deprecated",
   "dnspython",
   "dynamicprompts",
-  "easing-functions",
   "einops",
   "facexlib",
   # Exclude 3.9.1 which has a problem on windows, see https://github.com/matplotlib/matplotlib/issues/28551
@@ -165,7 +164,7 @@ version = { attr = "invokeai.version.__version__" }
   "*.png",
 ]
 "invokeai.assets.fonts" = ["**/*.ttf"]
-"invokeai.backend" = ["**.png"]
+"invokeai.backend" = ["**.png", "**/*.icc"]
 "invokeai.configs" = ["*.example", "**/*.yaml", "*.txt"]
 "invokeai.frontend.web.dist" = ["**"]
 "invokeai.frontend.web.static" = ["**"]

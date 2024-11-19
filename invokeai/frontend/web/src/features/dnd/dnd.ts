@@ -9,6 +9,7 @@ import { selectComparisonImages } from 'features/gallery/components/ImageViewer/
 import type { BoardId } from 'features/gallery/store/types';
 import {
   addImagesToBoard,
+  addImagesToNodeImageFieldCollectionAction,
   createNewCanvasEntityFromImage,
   removeImagesFromBoard,
   replaceCanvasEntityObjectsWithImage,
@@ -220,7 +221,7 @@ const _setNodeImageFieldImage = buildTypeAndKey('set-node-image-field-image');
 export type SetNodeImageFieldImageDndTargetData = DndData<
   typeof _setNodeImageFieldImage.type,
   typeof _setNodeImageFieldImage.key,
-  { fieldIdentifer: FieldIdentifier }
+  { fieldIdentifier: FieldIdentifier }
 >;
 export const setNodeImageFieldImageDndTarget: DndTarget<SetNodeImageFieldImageDndTargetData, SingleImageDndSourceData> =
   {
@@ -235,10 +236,49 @@ export const setNodeImageFieldImageDndTarget: DndTarget<SetNodeImageFieldImageDn
     },
     handler: ({ sourceData, targetData, dispatch }) => {
       const { imageDTO } = sourceData.payload;
-      const { fieldIdentifer } = targetData.payload;
-      setNodeImageFieldImage({ fieldIdentifer, imageDTO, dispatch });
+      const { fieldIdentifier } = targetData.payload;
+      setNodeImageFieldImage({ fieldIdentifier, imageDTO, dispatch });
     },
   };
+//#endregion
+
+//#region Add Images to Image Collection Node Field
+const _addImagesToNodeImageFieldCollection = buildTypeAndKey('add-images-to-image-collection-node-field');
+export type AddImagesToNodeImageFieldCollection = DndData<
+  typeof _addImagesToNodeImageFieldCollection.type,
+  typeof _addImagesToNodeImageFieldCollection.key,
+  { fieldIdentifier: FieldIdentifier }
+>;
+export const addImagesToNodeImageFieldCollectionDndTarget: DndTarget<
+  AddImagesToNodeImageFieldCollection,
+  SingleImageDndSourceData | MultipleImageDndSourceData
+> = {
+  ..._addImagesToNodeImageFieldCollection,
+  typeGuard: buildTypeGuard(_addImagesToNodeImageFieldCollection.key),
+  getData: buildGetData(_addImagesToNodeImageFieldCollection.key, _addImagesToNodeImageFieldCollection.type),
+  isValid: ({ sourceData }) => {
+    if (singleImageDndSource.typeGuard(sourceData) || multipleImageDndSource.typeGuard(sourceData)) {
+      return true;
+    }
+    return false;
+  },
+  handler: ({ sourceData, targetData, dispatch, getState }) => {
+    if (!singleImageDndSource.typeGuard(sourceData) && !multipleImageDndSource.typeGuard(sourceData)) {
+      return;
+    }
+
+    const { fieldIdentifier } = targetData.payload;
+    const imageDTOs: ImageDTO[] = [];
+
+    if (singleImageDndSource.typeGuard(sourceData)) {
+      imageDTOs.push(sourceData.payload.imageDTO);
+    } else {
+      imageDTOs.push(...sourceData.payload.imageDTOs);
+    }
+
+    addImagesToNodeImageFieldCollectionAction({ fieldIdentifier, imageDTOs, dispatch, getState });
+  },
+};
 //#endregion
 
 //# Set Comparison Image
@@ -430,6 +470,7 @@ export const dndTargets = [
   // Single or Multiple Image
   addImageToBoardDndTarget,
   removeImageFromBoardDndTarget,
+  addImagesToNodeImageFieldCollectionDndTarget,
 ] as const;
 
 export type AnyDndTarget = (typeof dndTargets)[number];

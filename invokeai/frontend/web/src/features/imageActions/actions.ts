@@ -1,3 +1,4 @@
+import { logger } from 'app/logging/logger';
 import type { AppDispatch, RootState } from 'app/store/store';
 import { deepClone } from 'common/util/deepClone';
 import { selectDefaultIPAdapter } from 'features/controlLayers/hooks/addLayerHooks';
@@ -29,14 +30,18 @@ import { imageDTOToImageObject, imageDTOToImageWithDims, initialControlNet } fro
 import { calculateNewSize } from 'features/controlLayers/util/getScaledBoundingBoxDimensions';
 import { imageToCompareChanged, selectionChanged } from 'features/gallery/store/gallerySlice';
 import type { BoardId } from 'features/gallery/store/types';
-import { fieldImageValueChanged } from 'features/nodes/store/nodesSlice';
-import type { FieldIdentifier } from 'features/nodes/types/field';
+import { fieldImageCollectionValueChanged, fieldImageValueChanged } from 'features/nodes/store/nodesSlice';
+import { selectFieldInputInstance, selectNodesSlice } from 'features/nodes/store/selectors';
+import { type FieldIdentifier, isImageFieldCollectionInputInstance } from 'features/nodes/types/field';
 import { upscaleInitialImageChanged } from 'features/parameters/store/upscaleSlice';
 import { getOptimalDimension } from 'features/parameters/util/optimalDimension';
+import { uniqBy } from 'lodash-es';
 import { imagesApi } from 'services/api/endpoints/images';
 import type { ImageDTO } from 'services/api/types';
 import type { Equals } from 'tsafe';
 import { assert } from 'tsafe';
+
+const log = logger('system');
 
 export const setGlobalReferenceImage = (arg: {
   imageDTO: ImageDTO;
@@ -64,11 +69,59 @@ export const setUpscaleInitialImage = (arg: { imageDTO: ImageDTO; dispatch: AppD
 
 export const setNodeImageFieldImage = (arg: {
   imageDTO: ImageDTO;
-  fieldIdentifer: FieldIdentifier;
+  fieldIdentifier: FieldIdentifier;
   dispatch: AppDispatch;
 }) => {
-  const { imageDTO, fieldIdentifer, dispatch } = arg;
-  dispatch(fieldImageValueChanged({ ...fieldIdentifer, value: imageDTO }));
+  const { imageDTO, fieldIdentifier, dispatch } = arg;
+  dispatch(fieldImageValueChanged({ ...fieldIdentifier, value: imageDTO }));
+};
+
+export const addImagesToNodeImageFieldCollectionAction = (arg: {
+  imageDTOs: ImageDTO[];
+  fieldIdentifier: FieldIdentifier;
+  dispatch: AppDispatch;
+  getState: () => RootState;
+}) => {
+  const { imageDTOs, fieldIdentifier, dispatch, getState } = arg;
+  const fieldInputInstance = selectFieldInputInstance(
+    selectNodesSlice(getState()),
+    fieldIdentifier.nodeId,
+    fieldIdentifier.fieldName
+  );
+
+  if (!isImageFieldCollectionInputInstance(fieldInputInstance)) {
+    log.warn({ fieldIdentifier }, 'Attempted to add images to a non-image field collection');
+    return;
+  }
+
+  const images = fieldInputInstance.value ? [...fieldInputInstance.value] : [];
+  images.push(...imageDTOs.map(({ image_name }) => ({ image_name })));
+  const uniqueImages = uniqBy(images, 'image_name');
+  dispatch(fieldImageCollectionValueChanged({ ...fieldIdentifier, value: uniqueImages }));
+};
+
+export const removeImageFromNodeImageFieldCollectionAction = (arg: {
+  imageName: string;
+  fieldIdentifier: FieldIdentifier;
+  dispatch: AppDispatch;
+  getState: () => RootState;
+}) => {
+  const { imageName, fieldIdentifier, dispatch, getState } = arg;
+  const fieldInputInstance = selectFieldInputInstance(
+    selectNodesSlice(getState()),
+    fieldIdentifier.nodeId,
+    fieldIdentifier.fieldName
+  );
+
+  if (!isImageFieldCollectionInputInstance(fieldInputInstance)) {
+    log.warn({ fieldIdentifier }, 'Attempted to remove image from a non-image field collection');
+    return;
+  }
+
+  const images = fieldInputInstance.value ? [...fieldInputInstance.value] : [];
+  const imagesWithoutTheImageToRemove = images.filter((image) => image.image_name !== imageName);
+  const uniqueImages = uniqBy(imagesWithoutTheImageToRemove, 'image_name');
+  dispatch(fieldImageCollectionValueChanged({ ...fieldIdentifier, value: uniqueImages }));
 };
 
 export const setComparisonImage = (arg: { imageDTO: ImageDTO; dispatch: AppDispatch }) => {
@@ -129,21 +182,24 @@ export const createNewCanvasEntityFromImage = (arg: {
 };
 
 /**
- * Creates a new canvas with the given image as the initial image, replicating the img2img flow:
+ * Creates a new canvas with the given image as the only layer:
  * - Reset the canvas
  * - Resize the bbox to the image's aspect ratio at the optimal size for the selected model
- * - Add the image as a raster layer
- * - Resizes the layer to fit the bbox using the 'fill' strategy
+ * - Add the image as a layer of the given type
+ * - If `withResize`: Resizes the layer to fit the bbox using the 'fill' strategy
  *
  * This allows the user to immediately generate a new image from the given image without any additional steps.
+ *
+ * Using 'raster_layer' for the type and enabling `withResize` replicates the common img2img flow.
  */
 export const newCanvasFromImage = (arg: {
   imageDTO: ImageDTO;
   type: CanvasEntityType | 'regional_guidance_with_reference_image';
+  withResize: boolean;
   dispatch: AppDispatch;
   getState: () => RootState;
 }) => {
-  const { type, imageDTO, dispatch, getState } = arg;
+  const { type, imageDTO, withResize, dispatch, getState } = arg;
   const state = getState();
 
   const base = selectBboxModelBase(state);
@@ -176,7 +232,9 @@ export const newCanvasFromImage = (arg: {
         objects: [imageObject],
         position: { x, y },
       } satisfies Partial<CanvasRasterLayerState>;
-      addInitCallback(overrides.id);
+      if (withResize) {
+        addInitCallback(overrides.id);
+      }
       dispatch(canvasReset());
       // The `bboxChangedFromCanvas` reducer does no validation! Careful!
       dispatch(bboxChangedFromCanvas({ x: 0, y: 0, width, height }));
@@ -190,7 +248,9 @@ export const newCanvasFromImage = (arg: {
         position: { x, y },
         controlAdapter: deepClone(initialControlNet),
       } satisfies Partial<CanvasControlLayerState>;
-      addInitCallback(overrides.id);
+      if (withResize) {
+        addInitCallback(overrides.id);
+      }
       dispatch(canvasReset());
       // The `bboxChangedFromCanvas` reducer does no validation! Careful!
       dispatch(bboxChangedFromCanvas({ x: 0, y: 0, width, height }));
@@ -203,7 +263,9 @@ export const newCanvasFromImage = (arg: {
         objects: [imageObject],
         position: { x, y },
       } satisfies Partial<CanvasInpaintMaskState>;
-      addInitCallback(overrides.id);
+      if (withResize) {
+        addInitCallback(overrides.id);
+      }
       dispatch(canvasReset());
       // The `bboxChangedFromCanvas` reducer does no validation! Careful!
       dispatch(bboxChangedFromCanvas({ x: 0, y: 0, width, height }));
@@ -216,7 +278,9 @@ export const newCanvasFromImage = (arg: {
         objects: [imageObject],
         position: { x, y },
       } satisfies Partial<CanvasRegionalGuidanceState>;
-      addInitCallback(overrides.id);
+      if (withResize) {
+        addInitCallback(overrides.id);
+      }
       dispatch(canvasReset());
       // The `bboxChangedFromCanvas` reducer does no validation! Careful!
       dispatch(bboxChangedFromCanvas({ x: 0, y: 0, width, height }));
