@@ -2,27 +2,213 @@
 
 import json
 import random
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
 from invokeai.app.invocations.model import LoRAField
+from invokeai.app.invocations.primitives import (
+    BooleanCollectionInvocation,
+    BooleanCollectionOutput,
+    ConditioningCollectionInvocation,
+    ConditioningCollectionOutput,
+    FloatCollectionInvocation,
+    FloatCollectionOutput,
+    ImageCollectionInvocation,
+    ImageCollectionOutput,
+    IntegerCollectionInvocation,
+    IntegerCollectionOutput,
+    LatentsCollectionInvocation,
+    LatentsCollectionOutput,
+    StringCollectionInvocation,
+    StringCollectionOutput,
+)
 from invokeai.invocation_api import (
     BaseInvocation,
     BaseInvocationOutput,
     BooleanOutput,
+    ConditioningField,
+    FieldDescriptions,
     FloatOutput,
     ImageField,
     ImageOutput,
+    Input,
     InputField,
     IntegerOutput,
     InvocationContext,
+    LatentsField,
     OutputField,
     StringOutput,
+    UIComponent,
     UIType,
     invocation,
     invocation_output,
 )
+
+
+@invocation(
+    "boolean_collection_linked",
+    title="Boolean Collection Primitive Linked",
+    tags=["primitives", "boolean", "collection"],
+    category="primitives",
+    version="1.0..0",
+)
+class BooleanCollectionLinkedInvocation(BooleanCollectionInvocation):
+    """A collection of boolean primitive values"""
+
+    value: bool = InputField(default=False, description="The boolean value")
+
+    def invoke(self, context: InvocationContext) -> BooleanCollectionOutput:
+        if self.value:
+            self.collection.append(self.value)
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+        return BooleanCollectionOutput(collection=self.collection)
+
+
+@invocation(
+    "conditioning_collection_linked",
+    title="Conditioning Collection Primitive Linked",
+    tags=["primitives", "conditioning", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class ConditioningCollectionLinkedInvocation(ConditioningCollectionInvocation):
+    """A collection of conditioning tensor primitive values"""
+
+    conditioning: ConditioningField = InputField(description=FieldDescriptions.cond, input=Input.Connection)
+
+    def invoke(self, context: InvocationContext) -> ConditioningCollectionOutput:
+        if self.conditioning:
+            self.collection.append(self.conditioning)
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+        return ConditioningCollectionOutput(collection=self.collection)
+
+
+@invocation(
+    "float_collection_linked",
+    title="Float Collection Primitive linked",
+    tags=["primitives", "float", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class FloatCollectionLinkedInvocation(FloatCollectionInvocation):
+    """A collection of float primitive values"""
+
+    value: float = InputField(default=0.0, description="The float value")
+
+    def invoke(self, context: InvocationContext) -> FloatCollectionOutput:
+        if self.value:
+            self.collection.append(self.value)
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+        return FloatCollectionOutput(collection=self.collection)
+
+
+@invocation(
+    "image_collection_linked",
+    title="Image Collection Primitive linked",
+    tags=["primitives", "image", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class ImageCollectionLinkedInvocation(ImageCollectionInvocation):
+    """A collection of image primitive values"""
+
+    image: ImageField = InputField(description="The image to load")
+
+    def invoke(self, context: InvocationContext) -> ImageCollectionOutput:
+        if self.image:
+            self.collection.append(self.image)
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+
+        return ImageCollectionOutput(**params)
+
+
+@invocation(
+    "integer_collection_linked",
+    title="Integer Collection Primitive Linked",
+    tags=["primitives", "integer", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class IntegerCollectionLinkedInvocation(IntegerCollectionInvocation):
+    """A collection of integer primitive values"""
+
+    value: int = InputField(default=0, description="The integer value")
+
+    def invoke(self, context: InvocationContext) -> IntegerCollectionOutput:
+        if self.value:
+            self.collection.append(self.value)
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+
+        return IntegerCollectionOutput(**params)
+
+
+@invocation(
+    "latents_collection_linked",
+    title="Latents Collection Primitive Linked",
+    tags=["primitives", "latents", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class LatentsCollectionLinkedInvocation(LatentsCollectionInvocation):
+    """A collection of latents tensor primitive values"""
+
+    latents: Optional[LatentsField] = InputField(default=None, description="The latents tensor", input=Input.Connection)
+
+    def invoke(self, context: InvocationContext) -> LatentsCollectionOutput:
+        if self.latents:
+            self.collection.append(self.latents)
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+
+        return LatentsCollectionOutput(**params)
+
+
+@invocation(
+    "string_collection_linked",
+    title="String Collection Primitive Linked",
+    tags=["primitives", "string", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class StringCollectionLinkedInvocation(StringCollectionInvocation):
+    """Allows creation of collection and optionally add a collection"""
+
+    value: Optional[str] = InputField(default=None, description="The string value", ui_component=UIComponent.Textarea)
+
+    def invoke(self, context: InvocationContext) -> StringCollectionOutput:
+        if self.value:
+            self.collection.append(self.value)
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+
+        return StringCollectionOutput(**params)
 
 
 @invocation_output("lora_collection_output")
