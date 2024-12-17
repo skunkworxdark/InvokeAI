@@ -109,6 +109,44 @@ export const addT2IAdapters = async ({
   return result;
 };
 
+type AddControlLoRAArg = {
+  manager: CanvasManager;
+  entities: CanvasControlLayerState[];
+  g: Graph;
+  rect: Rect;
+  model: ParameterModel;
+  denoise: Invocation<'flux_denoise'>;
+};
+
+export const addControlLoRA = async ({ manager, entities, g, rect, model, denoise }: AddControlLoRAArg) => {
+  const validControlLayers = entities
+    .filter((entity) => entity.isEnabled)
+    .filter((entity) => entity.controlAdapter.type === 'control_lora')
+    .filter((entity) => getControlLayerWarnings(entity, model).length === 0);
+
+  const validControlLayer = validControlLayers[0];
+  if (validControlLayer === undefined) {
+    // No valid control LoRA found
+    return;
+  }
+  if (validControlLayers.length > 1) {
+    throw new Error('Cannot add more than one FLUX control LoRA.');
+  }
+
+  const getImageDTOResult = await withResultAsync(() => {
+    const adapter = manager.adapters.controlLayers.get(validControlLayer.id);
+    assert(adapter, 'Adapter not found');
+    return adapter.renderer.rasterize({ rect, attrs: { opacity: 1, filters: [] }, bg: 'black' });
+  });
+  if (getImageDTOResult.isErr()) {
+    log.warn({ error: serializeError(getImageDTOResult.error) }, 'Error rasterizing control layer');
+    return;
+  }
+
+  const imageDTO = getImageDTOResult.value;
+  addControlLoRAToGraph(g, validControlLayer, imageDTO, denoise);
+};
+
 const addControlNetToGraph = (
   g: Graph,
   layer: CanvasControlLayerState,
@@ -159,4 +197,27 @@ const addT2IAdapterToGraph = (
   });
 
   g.addEdge(t2iAdapter, 't2i_adapter', collector, 'item');
+};
+
+const addControlLoRAToGraph = (
+  g: Graph,
+  layer: CanvasControlLayerState,
+  imageDTO: ImageDTO,
+  denoise: Invocation<'flux_denoise'>
+) => {
+  const { id, controlAdapter } = layer;
+  assert(controlAdapter.type === 'control_lora');
+  const { model, weight } = controlAdapter;
+  assert(model !== null);
+  const { image_name } = imageDTO;
+
+  const controlLoRA = g.addNode({
+    id: `control_lora_${id}`,
+    type: 'flux_control_lora_loader',
+    lora: model,
+    image: { image_name },
+    weight: weight,
+  });
+
+  g.addEdge(controlLoRA, 'control_lora', denoise, 'control_lora');
 };

@@ -69,6 +69,7 @@ const zModelType = z.enum([
   'main',
   'vae',
   'lora',
+  'control_lora',
   'controlnet',
   't2i_adapter',
   'ip_adapter',

@@ -15,10 +15,6 @@ from invokeai.backend.flux.controlnet.state_dict_utils import (
     is_state_dict_xlabs_controlnet,
 )
 from invokeai.backend.flux.ip_adapter.state_dict_utils import is_state_dict_xlabs_ip_adapter
-from invokeai.backend.lora.conversions.flux_diffusers_lora_conversion_utils import (
-    is_state_dict_likely_in_flux_diffusers_format,
-)
-from invokeai.backend.lora.conversions.flux_kohya_lora_conversion_utils import is_state_dict_likely_in_flux_kohya_format
 from invokeai.backend.model_hash.model_hash import HASHING_ALGORITHMS, ModelHash
 from invokeai.backend.model_manager.config import (
     AnyModelConfig,
@@ -42,6 +38,13 @@ from invokeai.backend.model_manager.util.model_util import (
     get_clip_variant_type,
     lora_token_vector_length,
     read_checkpoint_meta,
+)
+from invokeai.backend.patches.lora_conversions.flux_control_lora_utils import is_state_dict_likely_flux_control
+from invokeai.backend.patches.lora_conversions.flux_diffusers_lora_conversion_utils import (
+    is_state_dict_likely_in_flux_diffusers_format,
+)
+from invokeai.backend.patches.lora_conversions.flux_kohya_lora_conversion_utils import (
+    is_state_dict_likely_in_flux_kohya_format,
 )
 from invokeai.backend.quantization.gguf.ggml_tensor import GGMLTensor
 from invokeai.backend.quantization.gguf.loaders import gguf_sd_loader
@@ -199,8 +202,8 @@ class ModelProbe(object):
         fields["default_settings"] = fields.get("default_settings")
 
         if not fields["default_settings"]:
-            if fields["type"] in {ModelType.ControlNet, ModelType.T2IAdapter}:
-                fields["default_settings"] = get_default_settings_controlnet_t2i_adapter(fields["name"])
+            if fields["type"] in {ModelType.ControlNet, ModelType.T2IAdapter, ModelType.ControlLoRa}:
+                fields["default_settings"] = get_default_settings_control_adapters(fields["name"])
             elif fields["type"] is ModelType.Main:
                 fields["default_settings"] = get_default_settings_main(fields["base"])
 
@@ -257,6 +260,9 @@ class ModelProbe(object):
 
         ckpt = checkpoint if checkpoint else read_checkpoint_meta(model_path, scan=True)
         ckpt = ckpt.get("state_dict", ckpt)
+
+        if isinstance(ckpt, dict) and is_state_dict_likely_flux_control(ckpt):
+            return ModelType.ControlLoRa
 
         for key in [str(k) for k in ckpt.keys()]:
             if key.startswith(
@@ -497,7 +503,7 @@ MODEL_NAME_TO_PREPROCESSOR = {
 }
 
 
-def get_default_settings_controlnet_t2i_adapter(model_name: str) -> Optional[ControlAdapterDefaultSettings]:
+def get_default_settings_control_adapters(model_name: str) -> Optional[ControlAdapterDefaultSettings]:
     for k, v in MODEL_NAME_TO_PREPROCESSOR.items():
         model_name_lower = model_name.lower()
         if k in model_name_lower:
@@ -624,8 +630,10 @@ class LoRACheckpointProbe(CheckpointProbeBase):
         return ModelFormat.LyCORIS
 
     def get_base_type(self) -> BaseModelType:
-        if is_state_dict_likely_in_flux_kohya_format(self.checkpoint) or is_state_dict_likely_in_flux_diffusers_format(
-            self.checkpoint
+        if (
+            is_state_dict_likely_in_flux_kohya_format(self.checkpoint)
+            or is_state_dict_likely_in_flux_diffusers_format(self.checkpoint)
+            or is_state_dict_likely_flux_control(self.checkpoint)
         ):
             return BaseModelType.Flux
 
@@ -1046,6 +1054,7 @@ ModelProbe.register_probe("diffusers", ModelType.SpandrelImageToImage, SpandrelI
 ModelProbe.register_probe("checkpoint", ModelType.Main, PipelineCheckpointProbe)
 ModelProbe.register_probe("checkpoint", ModelType.VAE, VaeCheckpointProbe)
 ModelProbe.register_probe("checkpoint", ModelType.LoRA, LoRACheckpointProbe)
+ModelProbe.register_probe("checkpoint", ModelType.ControlLoRa, LoRACheckpointProbe)
 ModelProbe.register_probe("checkpoint", ModelType.TextualInversion, TextualInversionCheckpointProbe)
 ModelProbe.register_probe("checkpoint", ModelType.ControlNet, ControlNetCheckpointProbe)
 ModelProbe.register_probe("checkpoint", ModelType.IPAdapter, IPAdapterCheckpointProbe)

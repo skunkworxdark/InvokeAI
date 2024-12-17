@@ -11,6 +11,7 @@ import type {
   CLIPGEmbedModelFieldValue,
   CLIPLEmbedModelFieldValue,
   ColorFieldValue,
+  ControlLoRAModelFieldValue,
   ControlNetModelFieldValue,
   EnumFieldValue,
   FieldValue,
@@ -39,6 +40,7 @@ import {
   zCLIPGEmbedModelFieldValue,
   zCLIPLEmbedModelFieldValue,
   zColorFieldValue,
+  zControlLoRAModelFieldValue,
   zControlNetModelFieldValue,
   zEnumFieldValue,
   zFloatFieldValue,
@@ -369,6 +371,9 @@ export const nodesSlice = createSlice({
     fieldCLIPGEmbedValueChanged: (state, action: FieldValueAction<CLIPGEmbedModelFieldValue>) => {
       fieldValueReducer(state, action, zCLIPGEmbedModelFieldValue);
     },
+    fieldControlLoRAModelValueChanged: (state, action: FieldValueAction<ControlLoRAModelFieldValue>) => {
+      fieldValueReducer(state, action, zControlLoRAModelFieldValue);
+    },
     fieldFluxVAEModelValueChanged: (state, action: FieldValueAction<FluxVAEModelFieldValue>) => {
       fieldValueReducer(state, action, zFluxVAEModelFieldValue);
     },
@@ -438,6 +443,7 @@ export const {
   fieldCLIPEmbedValueChanged,
   fieldCLIPLEmbedValueChanged,
   fieldCLIPGEmbedValueChanged,
+  fieldControlLoRAModelValueChanged,
   fieldFluxVAEModelValueChanged,
   nodeEditorReset,
   nodeIsIntermediateChanged,

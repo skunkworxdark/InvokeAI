@@ -27,6 +27,7 @@ import { zControlField, zIPAdapterField, zModelIdentifierField, zT2IAdapterField
 import type {
   ParameterCFGRescaleMultiplier,
   ParameterCFGScale,
+  ParameterControlLoRAModel,
   ParameterGuidance,
   ParameterHeight,
   ParameterHRFEnabled,
@@ -75,6 +76,7 @@ import {
 import { get, isArray, isString } from 'lodash-es';
 import { getImageDTOSafe } from 'services/api/endpoints/images';
 import {
+  isControlLoRAModelConfig,
   isControlNetModelConfig,
   isIPAdapterModelConfig,
   isLoRAModelConfig,
@@ -223,6 +225,14 @@ const parseVAEModel: MetadataParseFunc<ParameterVAEModel> = async (metadata) => 
   const key = await getModelKey(vae, 'vae');
   const vaeModelConfig = await fetchModelConfigWithTypeGuard(key, isVAEModelConfig);
   const modelIdentifier = zModelIdentifierField.parse(vaeModelConfig);
+  return modelIdentifier;
+};
+
+const parseControlLoRAModel: MetadataParseFunc<ParameterControlLoRAModel> = async (metadata) => {
+  const slora = await getProperty(metadata, 'control_lora', undefined);
+  const key = await getModelKey(slora, 'control_lora');
+  const sloraModelConfig = await fetchModelConfigWithTypeGuard(key, isControlLoRAModelConfig);
+  const modelIdentifier = zModelIdentifierField.parse(sloraModelConfig);
   return modelIdentifier;
 };
 
@@ -671,6 +681,7 @@ export const parsers = {
   mainModel: parseMainModel,
   refinerModel: parseRefinerModel,
   vaeModel: parseVAEModel,
+  controlLora: parseControlLoRAModel,
   lora: parseLoRA,
   loras: parseAllLoRAs,
   controlNet: parseControlNet,

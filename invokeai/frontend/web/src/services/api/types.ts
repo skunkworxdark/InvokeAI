@@ -44,6 +44,7 @@ export type BaseModelType = S['BaseModelType'];
 
 // Model Configs
 
+export type ControlLoRAModelConfig = S['ControlLoRALyCORISConfig'];
 // TODO(MM2): Can we make key required in the pydantic model?
 export type LoRAModelConfig = S['LoRADiffusersConfig'] | S['LoRALyCORISConfig'];
 // TODO(MM2): Can we rename this from Vae -> VAE
@@ -63,6 +64,7 @@ export type CheckpointModelConfig = S['MainCheckpointConfig'];
 type CLIPVisionDiffusersConfig = S['CLIPVisionDiffusersConfig'];
 export type MainModelConfig = DiffusersModelConfig | CheckpointModelConfig;
 export type AnyModelConfig =
+  | ControlLoRAModelConfig
   | LoRAModelConfig
   | VAEModelConfig
   | ControlNetModelConfig
@@ -114,6 +116,10 @@ export const isLoRAModelConfig = (config: AnyModelConfig): config is LoRAModelCo
   return config.type === 'lora';
 };
 
+export const isControlLoRAModelConfig = (config: AnyModelConfig): config is ControlLoRAModelConfig => {
+  return config.type === 'control_lora';
+};
+
 export const isVAEModelConfig = (config: AnyModelConfig, excludeSubmodels?: boolean): config is VAEModelConfig => {
   return config.type === 'vae' || (!excludeSubmodels && config.type === 'main' && checkSubmodels(['vae'], config));
 };
@@ -137,6 +143,12 @@ export const isFluxVAEModelConfig = (config: AnyModelConfig, excludeSubmodels?: 
 
 export const isControlNetModelConfig = (config: AnyModelConfig): config is ControlNetModelConfig => {
   return config.type === 'controlnet';
+};
+
+export const isControlLayerModelConfig = (
+  config: AnyModelConfig
+): config is ControlNetModelConfig | T2IAdapterModelConfig | ControlLoRAModelConfig => {
+  return config.type === 'controlnet' || config.type === 't2i_adapter' || config.type === 'control_lora';
 };
 
 export const isIPAdapterModelConfig = (config: AnyModelConfig): config is IPAdapterModelConfig => {
@@ -195,12 +207,6 @@ export const isSpandrelImageToImageModelConfig = (
   config: AnyModelConfig
 ): config is SpandrelImageToImageModelConfig => {
   return config.type === 'spandrel_image_to_image';
-};
-
-export const isControlNetOrT2IAdapterModelConfig = (
-  config: AnyModelConfig
-): config is ControlNetModelConfig | T2IAdapterModelConfig => {
-  return isControlNetModelConfig(config) || isT2IAdapterModelConfig(config);
 };
 
 export const isNonRefinerMainModelConfig = (config: AnyModelConfig): config is MainModelConfig => {

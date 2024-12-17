@@ -1,4 +1,4 @@
-import { withResultAsync } from 'common/util/result';
+import { withResult, withResultAsync } from 'common/util/result';
 import { CanvasCacheModule } from 'features/controlLayers/konva/CanvasCacheModule';
 import type { CanvasEntityAdapter, CanvasEntityAdapterFromType } from 'features/controlLayers/konva/CanvasEntity/types';
 import type { CanvasManager } from 'features/controlLayers/konva/CanvasManager';
@@ -277,13 +277,19 @@ export class CanvasCompositorModule extends CanvasModuleBase {
       this.log.warn({ rect, imageName: cachedImageName }, 'Cached image name not found, recompositing');
     }
 
-    const canvas = this.getCompositeCanvas(adapters, rect, compositingOptions);
+    const getCompositeCanvasResult = withResult(() => this.getCompositeCanvas(adapters, rect, compositingOptions));
+
+    if (getCompositeCanvasResult.isErr()) {
+      this.log.error({ error: serializeError(getCompositeCanvasResult.error) }, 'Failed to get composite canvas');
+      throw getCompositeCanvasResult.error;
+    }
 
     this.$isProcessing.set(true);
-    const blobResult = await withResultAsync(() => canvasToBlob(canvas));
+    const blobResult = await withResultAsync(() => canvasToBlob(getCompositeCanvasResult.value));
     this.$isProcessing.set(false);
 
     if (blobResult.isErr()) {
+      this.log.error({ error: serializeError(blobResult.error) }, 'Failed to convert composite canvas to blob');
       throw blobResult.error;
     }
     const blob = blobResult.value;
@@ -489,37 +495,45 @@ export class CanvasCompositorModule extends CanvasModuleBase {
     this.log.debug({ rect }, 'Calculating generation mode');
 
     this.$isProcessing.set(true);
-    const compositeRasterLayerTransparency = await this.getTransparency(
-      rasterLayerAdapters,
-      rect,
-      compositeRasterLayerHash
-    );
+    const generationModeResult = await withResultAsync(async () => {
+      const compositeRasterLayerTransparency = await this.getTransparency(
+        rasterLayerAdapters,
+        rect,
+        compositeRasterLayerHash
+      );
 
-    const compositeInpaintMaskTransparency = await this.getTransparency(
-      inpaintMaskAdapters,
-      rect,
-      compositeInpaintMaskHash
-    );
+      const compositeInpaintMaskTransparency = await this.getTransparency(
+        inpaintMaskAdapters,
+        rect,
+        compositeInpaintMaskHash
+      );
+
+      let generationMode: GenerationMode;
+      if (compositeRasterLayerTransparency === 'FULLY_TRANSPARENT') {
+        // When the initial image is fully transparent, we are always doing txt2img
+        generationMode = 'txt2img';
+      } else if (compositeRasterLayerTransparency === 'PARTIALLY_TRANSPARENT') {
+        // When the initial image is partially transparent, we are always outpainting
+        generationMode = 'outpaint';
+      } else if (compositeInpaintMaskTransparency === 'FULLY_TRANSPARENT') {
+        // compositeLayerTransparency === 'OPAQUE'
+        // When the inpaint mask is fully transparent, we are doing img2img
+        generationMode = 'img2img';
+      } else {
+        // Else at least some of the inpaint mask is opaque, so we are inpainting
+        generationMode = 'inpaint';
+      }
+
+      this.manager.cache.generationModeCache.set(hash, generationMode);
+      return generationMode;
+    });
+
     this.$isProcessing.set(false);
-
-    let generationMode: GenerationMode;
-    if (compositeRasterLayerTransparency === 'FULLY_TRANSPARENT') {
-      // When the initial image is fully transparent, we are always doing txt2img
-      generationMode = 'txt2img';
-    } else if (compositeRasterLayerTransparency === 'PARTIALLY_TRANSPARENT') {
-      // When the initial image is partially transparent, we are always outpainting
-      generationMode = 'outpaint';
-    } else if (compositeInpaintMaskTransparency === 'FULLY_TRANSPARENT') {
-      // compositeLayerTransparency === 'OPAQUE'
-      // When the inpaint mask is fully transparent, we are doing img2img
-      generationMode = 'img2img';
-    } else {
-      // Else at least some of the inpaint mask is opaque, so we are inpainting
-      generationMode = 'inpaint';
+    if (generationModeResult.isErr()) {
+      this.log.error({ error: serializeError(generationModeResult.error) }, 'Failed to calculate generation mode');
+      throw generationModeResult.error;
     }
-
-    this.manager.cache.generationModeCache.set(hash, generationMode);
-    return generationMode;
+    return generationModeResult.value;
   };
 
   repr = () => {

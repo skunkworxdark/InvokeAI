@@ -1,10 +1,12 @@
 from contextlib import ExitStack
-from typing import Callable, Iterator, Optional, Tuple
+from typing import Callable, Iterator, Optional, Tuple, Union
 
+import einops
 import numpy as np
 import numpy.typing as npt
 import torch
 import torchvision.transforms as tv_transforms
+from PIL import Image
 from torchvision.transforms.functional import resize as tv_resize
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
@@ -21,8 +23,9 @@ from invokeai.app.invocations.fields import (
     WithMetadata,
 )
 from invokeai.app.invocations.flux_controlnet import FluxControlNetField
+from invokeai.app.invocations.flux_vae_encode import FluxVaeEncodeInvocation
 from invokeai.app.invocations.ip_adapter import IPAdapterField
-from invokeai.app.invocations.model import TransformerField, VAEField
+from invokeai.app.invocations.model import ControlLoRAField, LoRAField, TransformerField, VAEField
 from invokeai.app.invocations.primitives import LatentsOutput
 from invokeai.app.services.shared.invocation_context import InvocationContext
 from invokeai.backend.flux.controlnet.instantx_controlnet_flux import InstantXControlNetFlux
@@ -44,10 +47,10 @@ from invokeai.backend.flux.sampling_utils import (
     unpack,
 )
 from invokeai.backend.flux.text_conditioning import FluxTextConditioning
-from invokeai.backend.lora.conversions.flux_lora_constants import FLUX_LORA_TRANSFORMER_PREFIX
-from invokeai.backend.lora.lora_model_raw import LoRAModelRaw
-from invokeai.backend.lora.lora_patcher import LoRAPatcher
 from invokeai.backend.model_manager.config import ModelFormat
+from invokeai.backend.patches.lora_conversions.flux_lora_constants import FLUX_LORA_TRANSFORMER_PREFIX
+from invokeai.backend.patches.model_patch_raw import ModelPatchRaw
+from invokeai.backend.patches.model_patcher import LayerPatcher
 from invokeai.backend.stable_diffusion.diffusers_pipeline import PipelineIntermediateState
 from invokeai.backend.stable_diffusion.diffusion.conditioning_data import FLUXConditioningInfo
 from invokeai.backend.util.devices import TorchDevice
@@ -88,6 +91,9 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
         description=FieldDescriptions.flux_model,
         input=Input.Connection,
         title="Transformer",
+    )
+    control_lora: Optional[ControlLoRAField] = InputField(
+        description=FieldDescriptions.control_lora_model, input=Input.Connection, title="Control LoRA", default=None
     )
     positive_text_conditioning: FluxConditioningField | list[FluxConditioningField] = InputField(
         description=FieldDescriptions.positive_cond, input=Input.Connection
@@ -194,7 +200,7 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
         )
 
         transformer_info = context.models.load(self.transformer.transformer)
-        is_schnell = "schnell" in transformer_info.config.config_path
+        is_schnell = "schnell" in getattr(transformer_info.config, "config_path", "")
 
         # Calculate the timestep schedule.
         timesteps = get_schedule(
@@ -234,6 +240,9 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
         if len(timesteps) <= 1:
             return x
 
+        # Prepare the extra image conditioning tensor if a FLUX structural control image is provided.
+        img_cond = self._prep_structural_control_img_cond(context)
+
         inpaint_mask = self._prep_inpaint_mask(context, x)
 
         img_ids = generate_img_ids(h=latent_h, w=latent_w, batch_size=b, device=x.device, dtype=x.dtype)
@@ -241,6 +250,7 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
         # Pack all latent tensors.
         init_latents = pack(init_latents) if init_latents is not None else None
         inpaint_mask = pack(inpaint_mask) if inpaint_mask is not None else None
+        img_cond = pack(img_cond) if img_cond is not None else None
         noise = pack(noise)
         x = pack(x)
 
@@ -296,7 +306,7 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
             if config.format in [ModelFormat.Checkpoint]:
                 # The model is non-quantized, so we can apply the LoRA weights directly into the model.
                 exit_stack.enter_context(
-                    LoRAPatcher.apply_lora_patches(
+                    LayerPatcher.apply_model_patches(
                         model=transformer,
                         patches=self._lora_iterator(context),
                         prefix=FLUX_LORA_TRANSFORMER_PREFIX,
@@ -311,7 +321,7 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
                 # The model is quantized, so apply the LoRA weights as sidecar layers. This results in slower inference,
                 # than directly patching the weights, but is agnostic to the quantization format.
                 exit_stack.enter_context(
-                    LoRAPatcher.apply_lora_sidecar_patches(
+                    LayerPatcher.apply_model_sidecar_patches(
                         model=transformer,
                         patches=self._lora_iterator(context),
                         prefix=FLUX_LORA_TRANSFORMER_PREFIX,
@@ -345,6 +355,7 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
                 controlnet_extensions=controlnet_extensions,
                 pos_ip_adapter_extensions=pos_ip_adapter_extensions,
                 neg_ip_adapter_extensions=neg_ip_adapter_extensions,
+                img_cond=img_cond,
             )
 
         x = unpack(x.float(), self.height, self.width)
@@ -575,6 +586,29 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
 
         return controlnet_extensions
 
+    def _prep_structural_control_img_cond(self, context: InvocationContext) -> torch.Tensor | None:
+        if self.control_lora is None:
+            return None
+
+        if not self.controlnet_vae:
+            raise ValueError("controlnet_vae must be set when using a FLUX Control LoRA.")
+
+        # Load the conditioning image and resize it to the target image size.
+        cond_img = context.images.get_pil(self.control_lora.img.image_name)
+        cond_img = cond_img.convert("RGB")
+        cond_img = cond_img.resize((self.width, self.height), Image.Resampling.BICUBIC)
+        cond_img = np.array(cond_img)
+
+        # Normalize the conditioning image to the range [-1, 1].
+        # This normalization is based on the original implementations here:
+        # https://github.com/black-forest-labs/flux/blob/805da8571a0b49b6d4043950bd266a65328c243b/src/flux/modules/image_embedders.py#L34
+        # https://github.com/black-forest-labs/flux/blob/805da8571a0b49b6d4043950bd266a65328c243b/src/flux/modules/image_embedders.py#L60
+        img_cond = torch.from_numpy(cond_img).float() / 127.5 - 1.0
+        img_cond = einops.rearrange(img_cond, "h w c -> 1 c h w")
+
+        vae_info = context.models.load(self.controlnet_vae.vae)
+        return FluxVaeEncodeInvocation.vae_encode(vae_info=vae_info, image_tensor=img_cond)
+
     def _normalize_ip_adapter_fields(self) -> list[IPAdapterField]:
         if self.ip_adapter is None:
             return []
@@ -681,10 +715,15 @@ class FluxDenoiseInvocation(BaseInvocation, WithMetadata, WithBoard):
 
         return pos_ip_adapter_extensions, neg_ip_adapter_extensions
 
-    def _lora_iterator(self, context: InvocationContext) -> Iterator[Tuple[LoRAModelRaw, float]]:
-        for lora in self.transformer.loras:
+    def _lora_iterator(self, context: InvocationContext) -> Iterator[Tuple[ModelPatchRaw, float]]:
+        loras: list[Union[LoRAField, ControlLoRAField]] = [*self.transformer.loras]
+        if self.control_lora:
+            # Note: Since FLUX structural control LoRAs modify the shape of some weights, it is important that they are
+            # applied last.
+            loras.append(self.control_lora)
+        for lora in loras:
             lora_info = context.models.load(lora.lora)
-            assert isinstance(lora_info.model, LoRAModelRaw)
+            assert isinstance(lora_info.model, ModelPatchRaw)
             yield (lora_info.model, lora.weight)
             del lora_info
 

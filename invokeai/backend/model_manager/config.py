@@ -67,6 +67,7 @@ class ModelType(str, Enum):
     Main = "main"
     VAE = "vae"
     LoRA = "lora"
+    ControlLoRa = "control_lora"
     ControlNet = "controlnet"  # used by model_probe
     TextualInversion = "embedding"
     IPAdapter = "ip_adapter"
@@ -273,6 +274,24 @@ class LoRALyCORISConfig(LoRAConfigBase):
         return Tag(f"{ModelType.LoRA.value}.{ModelFormat.LyCORIS.value}")
 
 
+class ControlAdapterConfigBase(BaseModel):
+    default_settings: Optional[ControlAdapterDefaultSettings] = Field(
+        description="Default settings for this model", default=None
+    )
+
+
+class ControlLoRALyCORISConfig(ModelConfigBase, ControlAdapterConfigBase):
+    """Model config for Control LoRA models."""
+
+    type: Literal[ModelType.ControlLoRa] = ModelType.ControlLoRa
+    trigger_phrases: Optional[set[str]] = Field(description="Set of trigger phrases for this model", default=None)
+    format: Literal[ModelFormat.LyCORIS] = ModelFormat.LyCORIS
+
+    @staticmethod
+    def get_tag() -> Tag:
+        return Tag(f"{ModelType.ControlLoRa.value}.{ModelFormat.LyCORIS.value}")
+
+
 class LoRADiffusersConfig(LoRAConfigBase):
     """Model config for LoRA/Diffusers models."""
 
@@ -302,12 +321,6 @@ class VAEDiffusersConfig(ModelConfigBase):
     @staticmethod
     def get_tag() -> Tag:
         return Tag(f"{ModelType.VAE.value}.{ModelFormat.Diffusers.value}")
-
-
-class ControlAdapterConfigBase(BaseModel):
-    default_settings: Optional[ControlAdapterDefaultSettings] = Field(
-        description="Default settings for this model", default=None
-    )
 
 
 class ControlNetDiffusersConfig(DiffusersConfigBase, ControlAdapterConfigBase):
@@ -535,6 +548,7 @@ AnyModelConfig = Annotated[
         Annotated[ControlNetDiffusersConfig, ControlNetDiffusersConfig.get_tag()],
         Annotated[ControlNetCheckpointConfig, ControlNetCheckpointConfig.get_tag()],
         Annotated[LoRALyCORISConfig, LoRALyCORISConfig.get_tag()],
+        Annotated[ControlLoRALyCORISConfig, ControlLoRALyCORISConfig.get_tag()],
         Annotated[LoRADiffusersConfig, LoRADiffusersConfig.get_tag()],
         Annotated[T5EncoderConfig, T5EncoderConfig.get_tag()],
         Annotated[T5EncoderBnbQuantizedLlmInt8bConfig, T5EncoderBnbQuantizedLlmInt8bConfig.get_tag()],

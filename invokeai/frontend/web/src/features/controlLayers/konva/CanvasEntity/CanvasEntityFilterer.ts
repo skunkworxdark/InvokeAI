@@ -11,13 +11,14 @@ import type { FilterConfig } from 'features/controlLayers/store/filters';
 import { getFilterForModel, IMAGE_FILTERS } from 'features/controlLayers/store/filters';
 import type { CanvasImageState, CanvasRenderableEntityType } from 'features/controlLayers/store/types';
 import { imageDTOToImageObject } from 'features/controlLayers/store/util';
+import { toast } from 'features/toast/toast';
 import Konva from 'konva';
 import { debounce } from 'lodash-es';
 import { atom, computed } from 'nanostores';
 import type { Logger } from 'roarr';
 import { serializeError } from 'serialize-error';
 import { buildSelectModelConfig } from 'services/api/hooks/modelsByType';
-import { isControlNetOrT2IAdapterModelConfig } from 'services/api/types';
+import { isControlLayerModelConfig } from 'services/api/types';
 import stableHash from 'stable-hash';
 import type { Equals } from 'tsafe';
 import { assert } from 'tsafe';
@@ -203,7 +204,7 @@ export class CanvasEntityFilterer extends CanvasModuleBase {
       // If the parent is a control layer adapter, we should check if the model has a default filter and set it if so
       const selectModelConfig = buildSelectModelConfig(
         this.parent.state.controlAdapter.model.key,
-        isControlNetOrT2IAdapterModelConfig
+        isControlLayerModelConfig
       );
       const modelConfig = this.manager.stateApi.runSelector(selectModelConfig);
       // This always returns a filter
@@ -246,6 +247,7 @@ export class CanvasEntityFilterer extends CanvasModuleBase {
       this.parent.renderer.rasterize({ rect, attrs: { filters: [], opacity: 1 } })
     );
     if (rasterizeResult.isErr()) {
+      toast({ status: 'error', title: 'Failed to process filter' });
       this.log.error({ error: serializeError(rasterizeResult.error) }, 'Error rasterizing entity');
       this.$isProcessing.set(false);
       return;

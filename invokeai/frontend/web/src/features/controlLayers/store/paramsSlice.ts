@@ -11,6 +11,7 @@ import type {
   ParameterCLIPEmbedModel,
   ParameterCLIPGEmbedModel,
   ParameterCLIPLEmbedModel,
+  ParameterControlLoRAModel,
   ParameterGuidance,
   ParameterMaskBlurMethod,
   ParameterModel,
@@ -75,6 +76,7 @@ export type ParamsState = {
   clipEmbedModel: ParameterCLIPEmbedModel | null;
   clipLEmbedModel: ParameterCLIPLEmbedModel | null;
   clipGEmbedModel: ParameterCLIPGEmbedModel | null;
+  controlLora: ParameterControlLoRAModel | null;
 };
 
 const initialState: ParamsState = {
@@ -121,6 +123,7 @@ const initialState: ParamsState = {
   clipEmbedModel: null,
   clipLEmbedModel: null,
   clipGEmbedModel: null,
+  controlLora: null,
 };
 
 export const paramsSlice = createSlice({
@@ -194,6 +197,9 @@ export const paramsSlice = createSlice({
     },
     t5EncoderModelSelected: (state, action: PayloadAction<ParameterT5EncoderModel | null>) => {
       state.t5EncoderModel = action.payload;
+    },
+    controlLoRAModelSelected: (state, action: PayloadAction<ParameterControlLoRAModel | null>) => {
+      state.controlLora = action.payload;
     },
     clipEmbedModelSelected: (state, action: PayloadAction<ParameterCLIPEmbedModel | null>) => {
       state.clipEmbedModel = action.payload;

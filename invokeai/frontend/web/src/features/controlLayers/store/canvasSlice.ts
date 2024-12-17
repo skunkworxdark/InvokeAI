@@ -18,6 +18,7 @@ import type {
   CanvasEntityType,
   CanvasInpaintMaskState,
   CanvasMetadata,
+  ControlLoRAConfig,
   EntityMovedByPayload,
   FillStyle,
   RegionalGuidanceReferenceImageState,
@@ -34,7 +35,13 @@ import { getGridSize, getIsSizeOptimal, getOptimalDimension } from 'features/par
 import type { IRect } from 'konva/lib/types';
 import { merge } from 'lodash-es';
 import type { UndoableOptions } from 'redux-undo';
-import type { ControlNetModelConfig, ImageDTO, IPAdapterModelConfig, T2IAdapterModelConfig } from 'services/api/types';
+import type {
+  ControlLoRAModelConfig,
+  ControlNetModelConfig,
+  ImageDTO,
+  IPAdapterModelConfig,
+  T2IAdapterModelConfig,
+} from 'services/api/types';
 import { assert } from 'tsafe';
 
 import type {
@@ -67,7 +74,10 @@ import {
   getReferenceImageState,
   getRegionalGuidanceState,
   imageDTOToImageWithDims,
+  initialControlLoRA,
+  initialControlNet,
   initialIPAdapter,
+  initialT2IAdapter,
 } from './util';
 
 const getInitialState = (): CanvasState => {
@@ -436,7 +446,7 @@ export const canvasSlice = createSlice({
       action: PayloadAction<
         EntityIdentifierPayload<
           {
-            modelConfig: ControlNetModelConfig | T2IAdapterModelConfig | null;
+            modelConfig: ControlNetModelConfig | T2IAdapterModelConfig | ControlLoRAModelConfig | null;
           },
           'control_layer'
         >
@@ -453,20 +463,69 @@ export const canvasSlice = createSlice({
       }
       layer.controlAdapter.model = zModelIdentifierField.parse(modelConfig);
 
-      // We may need to convert the CA to match the model
-      if (layer.controlAdapter.type === 't2i_adapter' && layer.controlAdapter.model.type === 'controlnet') {
-        // Converting from T2I Adapter to ControlNet - add `controlMode`
-        const controlNetConfig: ControlNetConfig = {
-          ...layer.controlAdapter,
-          type: 'controlnet',
-          controlMode: 'balanced',
-        };
-        layer.controlAdapter = controlNetConfig;
-      } else if (layer.controlAdapter.type === 'controlnet' && layer.controlAdapter.model.type === 't2i_adapter') {
-        // Converting from ControlNet to T2I Adapter - remove `controlMode`
-        const { controlMode: _, ...rest } = layer.controlAdapter;
-        const t2iAdapterConfig: T2IAdapterConfig = { ...rest, type: 't2i_adapter' };
-        layer.controlAdapter = t2iAdapterConfig;
+      // When converting between control layer types, we may need to add or remove properties. For example, ControlNet
+      // has a control mode, while T2I Adapter does not - otherwise they are the same.
+
+      switch (layer.controlAdapter.model.type) {
+        // Converting to T2I adapter from...
+        case 't2i_adapter': {
+          if (layer.controlAdapter.type === 'controlnet') {
+            // T2I Adapters have all the ControlNet properties, minus control mode - strip it
+            const { controlMode: _, ...rest } = layer.controlAdapter;
+            const t2iAdapterConfig: T2IAdapterConfig = { ...initialT2IAdapter, ...rest, type: 't2i_adapter' };
+            layer.controlAdapter = t2iAdapterConfig;
+          } else if (layer.controlAdapter.type === 'control_lora') {
+            // Control LoRAs have only model and weight
+            const t2iAdapterConfig: T2IAdapterConfig = {
+              ...initialT2IAdapter,
+              ...layer.controlAdapter,
+              type: 't2i_adapter',
+            };
+            layer.controlAdapter = t2iAdapterConfig;
+          }
+          break;
+        }
+
+        // Converting to ControlNet from...
+        case 'controlnet': {
+          if (layer.controlAdapter.type === 't2i_adapter') {
+            // ControlNets have all the T2I Adapter properties, plus control mode
+            const controlNetConfig: ControlNetConfig = {
+              ...initialControlNet,
+              ...layer.controlAdapter,
+              type: 'controlnet',
+            };
+            layer.controlAdapter = controlNetConfig;
+          } else if (layer.controlAdapter.type === 'control_lora') {
+            // ControlNets have all the Control LoRA properties, plus control mode and begin/end step pct
+            const controlNetConfig: ControlNetConfig = {
+              ...initialControlNet,
+              ...layer.controlAdapter,
+              type: 'controlnet',
+            };
+            layer.controlAdapter = controlNetConfig;
+          }
+          break;
+        }
+
+        // Converting to ControlLoRA from...
+        case 'control_lora': {
+          if (layer.controlAdapter.type === 'controlnet') {
+            // We only need the model and weight for Control LoRA
+            const { model, weight } = layer.controlAdapter;
+            const controlNetConfig: ControlLoRAConfig = { ...initialControlLoRA, model, weight };
+            layer.controlAdapter = controlNetConfig;
+          } else if (layer.controlAdapter.type === 't2i_adapter') {
+            // We only need the model and weight for Control LoRA
+            const { model, weight } = layer.controlAdapter;
+            const t2iAdapterConfig: ControlLoRAConfig = { ...initialControlLoRA, model, weight };
+            layer.controlAdapter = t2iAdapterConfig;
+          }
+          break;
+        }
+
+        default:
+          break;
       }
     },
     controlLayerControlModeChanged: (
@@ -497,7 +556,7 @@ export const canvasSlice = createSlice({
     ) => {
       const { entityIdentifier, beginEndStepPct } = action.payload;
       const layer = selectEntity(state, entityIdentifier);
-      if (!layer || !layer.controlAdapter) {
+      if (!layer || !layer.controlAdapter || layer.controlAdapter.type === 'control_lora') {
         return;
       }
       layer.controlAdapter.beginEndStepPct = beginEndStepPct;

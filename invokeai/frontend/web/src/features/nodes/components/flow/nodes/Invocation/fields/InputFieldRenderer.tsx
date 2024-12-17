@@ -15,6 +15,8 @@ import {
   isCLIPLEmbedModelFieldInputTemplate,
   isColorFieldInputInstance,
   isColorFieldInputTemplate,
+  isControlLoRAModelFieldInputInstance,
+  isControlLoRAModelFieldInputTemplate,
   isControlNetModelFieldInputInstance,
   isControlNetModelFieldInputTemplate,
   isEnumFieldInputInstance,
@@ -66,6 +68,7 @@ import CLIPEmbedModelFieldInputComponent from './inputs/CLIPEmbedModelFieldInput
 import CLIPGEmbedModelFieldInputComponent from './inputs/CLIPGEmbedModelFieldInputComponent';
 import CLIPLEmbedModelFieldInputComponent from './inputs/CLIPLEmbedModelFieldInputComponent';
 import ColorFieldInputComponent from './inputs/ColorFieldInputComponent';
+import ControlLoRAModelFieldInputComponent from './inputs/ControlLoraModelFieldInputComponent';
 import ControlNetModelFieldInputComponent from './inputs/ControlNetModelFieldInputComponent';
 import EnumFieldInputComponent from './inputs/EnumFieldInputComponent';
 import FluxMainModelFieldInputComponent from './inputs/FluxMainModelFieldInputComponent';
@@ -154,6 +157,10 @@ const InputFieldRenderer = ({ nodeId, fieldName }: InputFieldProps) => {
 
   if (isCLIPGEmbedModelFieldInputInstance(fieldInstance) && isCLIPGEmbedModelFieldInputTemplate(fieldTemplate)) {
     return <CLIPGEmbedModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
+  }
+
+  if (isControlLoRAModelFieldInputInstance(fieldInstance) && isControlLoRAModelFieldInputTemplate(fieldTemplate)) {
+    return <ControlLoRAModelFieldInputComponent nodeId={nodeId} field={fieldInstance} fieldTemplate={fieldTemplate} />;
   }
 
   if (isFluxVAEModelFieldInputInstance(fieldInstance) && isFluxVAEModelFieldInputTemplate(fieldTemplate)) {

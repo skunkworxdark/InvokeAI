@@ -11,8 +11,9 @@ import type { AnyModelConfig } from 'services/api/types';
 import {
   isCLIPEmbedModelConfig,
   isCLIPVisionModelConfig,
+  isControlLayerModelConfig,
+  isControlLoRAModelConfig,
   isControlNetModelConfig,
-  isControlNetOrT2IAdapterModelConfig,
   isFluxMainModelModelConfig,
   isFluxVAEModelConfig,
   isIPAdapterModelConfig,
@@ -58,7 +59,8 @@ export const useFluxModels = buildModelsHook(isFluxMainModelModelConfig);
 export const useSD3Models = buildModelsHook(isSD3MainModelModelConfig);
 export const useSDXLModels = buildModelsHook(isSDXLMainModelModelConfig);
 export const useLoRAModels = buildModelsHook(isLoRAModelConfig);
-export const useControlNetAndT2IAdapterModels = buildModelsHook(isControlNetOrT2IAdapterModelConfig);
+export const useControlLoRAModel = buildModelsHook(isControlLoRAModelConfig);
+export const useControlLayerModels = buildModelsHook(isControlLayerModelConfig);
 export const useControlNetModels = buildModelsHook(isControlNetModelConfig);
 export const useT2IAdapterModels = buildModelsHook(isT2IAdapterModelConfig);
 export const useT5EncoderModels = (args?: ModelHookArgs) =>

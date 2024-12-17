@@ -809,6 +809,7 @@
         "starterBundleHelpText": "Easily install all models needed to get started with a base model, including a main model, controlnets, IP adapters, and more. Selecting a bundle will skip any models that you already have installed.",
         "starterModels": "Starter Models",
         "starterModelsInModelManager": "Starter Models can be found in Model Manager",
+        "controlLora": "Control LoRA",
         "syncModels": "Sync Models",
         "textualInversions": "Textual Inversions",
         "triggerPhrases": "Trigger Phrases",
@@ -1032,6 +1033,7 @@
             "fluxModelIncompatibleBboxHeight": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), bbox height is {{height}}",
             "fluxModelIncompatibleScaledBboxWidth": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), scaled bbox width is {{width}}",
             "fluxModelIncompatibleScaledBboxHeight": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), scaled bbox height is {{height}}",
+            "fluxModelMultipleControlLoRAs": "Can only use 1 Control LoRA at a time",
             "canvasIsFiltering": "Canvas is busy (filtering)",
             "canvasIsTransforming": "Canvas is busy (transforming)",
             "canvasIsRasterizing": "Canvas is busy (rasterizing)",
@@ -2110,6 +2112,7 @@
         },
         "logNamespaces": {
             "logNamespaces": "Log Namespaces",
+            "dnd": "Drag and Drop",
             "gallery": "Gallery",
             "models": "Models",
             "config": "Config",

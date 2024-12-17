@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import {
   useCLIPEmbedModels,
   useCLIPVisionModels,
+  useControlLoRAModel,
   useControlNetModels,
   useEmbeddingModels,
   useIPAdapterModels,
@@ -92,6 +93,12 @@ const ModelList = () => {
     [t5EncoderModels, searchTerm, filteredModelType]
   );
 
+  const [controlLoRAModels, { isLoading: isLoadingControlLoRAModels }] = useControlLoRAModel();
+  const filteredControlLoRAModels = useMemo(
+    () => modelsFilter(controlLoRAModels, searchTerm, filteredModelType),
+    [controlLoRAModels, searchTerm, filteredModelType]
+  );
+
   const [clipEmbedModels, { isLoading: isLoadingClipEmbedModels }] = useCLIPEmbedModels({ excludeSubmodels: true });
   const filteredClipEmbedModels = useMemo(
     () => modelsFilter(clipEmbedModels, searchTerm, filteredModelType),
@@ -118,7 +125,8 @@ const ModelList = () => {
       filteredVAEModels.length +
       filteredSpandrelImageToImageModels.length +
       t5EncoderModels.length +
-      clipEmbedModels.length
+      clipEmbedModels.length +
+      controlLoRAModels.length
     );
   }, [
     filteredControlNetModels.length,
@@ -133,6 +141,7 @@ const ModelList = () => {
     filteredSpandrelImageToImageModels.length,
     t5EncoderModels.length,
     clipEmbedModels.length,
+    controlLoRAModels.length,
   ]);
 
   return (
@@ -194,6 +203,15 @@ const ModelList = () => {
         {isLoadingT5EncoderModels && <FetchingModelsLoader loadingMessage="Loading T5 Encoder Models..." />}
         {!isLoadingT5EncoderModels && filteredT5EncoderModels.length > 0 && (
           <ModelListWrapper title={t('modelManager.t5Encoder')} modelList={filteredT5EncoderModels} key="t5-encoder" />
+        )}
+        {/* Control Lora List */}
+        {isLoadingControlLoRAModels && <FetchingModelsLoader loadingMessage="Loading Control Loras..." />}
+        {!isLoadingControlLoRAModels && filteredControlLoRAModels.length > 0 && (
+          <ModelListWrapper
+            title={t('modelManager.controlLora')}
+            modelList={filteredControlLoRAModels}
+            key="control-lora"
+          />
         )}
         {/* Clip Embed List */}
         {isLoadingClipEmbedModels && <FetchingModelsLoader loadingMessage="Loading Clip Embed Models..." />}

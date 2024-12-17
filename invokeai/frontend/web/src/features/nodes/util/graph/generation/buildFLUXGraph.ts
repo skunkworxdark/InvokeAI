@@ -26,7 +26,7 @@ import { isNonRefinerMainModelConfig } from 'services/api/types';
 import type { Equals } from 'tsafe';
 import { assert } from 'tsafe';
 
-import { addControlNets } from './addControlAdapters';
+import { addControlLoRA, addControlNets } from './addControlAdapters';
 import { addIPAdapters } from './addIPAdapters';
 
 const log = logger('system');
@@ -212,6 +212,15 @@ export const buildFLUXGraph = async (
   } else {
     g.deleteNode(controlNetCollector.id);
   }
+
+  await addControlLoRA({
+    manager,
+    entities: canvas.controlLayers.entities,
+    g,
+    rect: canvas.bbox.rect,
+    denoise,
+    model: modelConfig,
+  });
 
   const ipAdapterCollect = g.addNode({
     type: 'collect',

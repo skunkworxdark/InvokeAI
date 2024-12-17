@@ -10,7 +10,7 @@ from invokeai.app.invocations.baseinvocation import (
     invocation,
     invocation_output,
 )
-from invokeai.app.invocations.fields import FieldDescriptions, Input, InputField, OutputField, UIType
+from invokeai.app.invocations.fields import FieldDescriptions, ImageField, Input, InputField, OutputField, UIType
 from invokeai.app.services.shared.invocation_context import InvocationContext
 from invokeai.app.shared.models import FreeUConfig
 from invokeai.backend.model_manager.config import (
@@ -65,11 +65,6 @@ class CLIPField(BaseModel):
     loras: List[LoRAField] = Field(description="LoRAs to apply on model loading")
 
 
-class TransformerField(BaseModel):
-    transformer: ModelIdentifierField = Field(description="Info to load Transformer submodel")
-    loras: List[LoRAField] = Field(description="LoRAs to apply on model loading")
-
-
 class T5EncoderField(BaseModel):
     tokenizer: ModelIdentifierField = Field(description="Info to load tokenizer submodel")
     text_encoder: ModelIdentifierField = Field(description="Info to load text_encoder submodel")
@@ -78,6 +73,15 @@ class T5EncoderField(BaseModel):
 class VAEField(BaseModel):
     vae: ModelIdentifierField = Field(description="Info to load vae submodel")
     seamless_axes: List[str] = Field(default_factory=list, description='Axes("x" and "y") to which apply seamless')
+
+
+class ControlLoRAField(LoRAField):
+    img: ImageField = Field(description="Image to use in structural conditioning")
+
+
+class TransformerField(BaseModel):
+    transformer: ModelIdentifierField = Field(description="Info to load Transformer submodel")
+    loras: List[LoRAField] = Field(description="LoRAs to apply on model loading")
 
 
 @invocation_output("unet_output")
