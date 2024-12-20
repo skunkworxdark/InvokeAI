@@ -51,7 +51,7 @@ from invokeai.invocation_api import (
     title="Boolean Collection Primitive Linked",
     tags=["primitives", "boolean", "collection"],
     category="primitives",
-    version="1.0..0",
+    version="1.0.0",
 )
 class BooleanCollectionLinkedInvocation(BooleanCollectionInvocation):
     """A collection of boolean primitive values"""
