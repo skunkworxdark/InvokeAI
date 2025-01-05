@@ -7,15 +7,15 @@ import {
   FormHelperText,
   FormLabel,
   Input,
-  useToast,
 } from '@invoke-ai/ui-library';
 import { skipToken } from '@reduxjs/toolkit/query';
-import { $isHFLoginToastOpen } from 'features/modelManagerV2/hooks/useHFLoginToast';
 import { useFeatureStatus } from 'features/system/hooks/useFeatureStatus';
+import { toast } from 'features/toast/toast';
 import type { ChangeEvent } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGetHFTokenStatusQuery, useSetHFTokenMutation } from 'services/api/endpoints/models';
+import { UNAUTHORIZED_TOAST_ID } from 'services/events/onModelInstallError';
 
 export const HFToken = () => {
   const { t } = useTranslation();
@@ -23,7 +23,6 @@ export const HFToken = () => {
   const [token, setToken] = useState('');
   const { currentData } = useGetHFTokenStatusQuery(isHFTokenEnabled ? undefined : skipToken);
   const [trigger, { isLoading, isUninitialized }] = useSetHFTokenMutation();
-  const toast = useToast();
   const onChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setToken(e.target.value);
   }, []);
@@ -34,14 +33,14 @@ export const HFToken = () => {
         if (res === 'valid') {
           setToken('');
           toast({
+            id: UNAUTHORIZED_TOAST_ID,
             title: t('modelManager.hfTokenSaved'),
             status: 'success',
             duration: 3000,
           });
-          $isHFLoginToastOpen.set(false);
         }
       });
-  }, [t, toast, token, trigger]);
+  }, [t, token, trigger]);
 
   const error = useMemo(() => {
     if (!currentData || isUninitialized || isLoading) {
