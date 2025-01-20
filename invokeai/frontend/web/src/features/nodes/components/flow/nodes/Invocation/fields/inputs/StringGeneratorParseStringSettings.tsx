@@ -1,16 +1,16 @@
 import { Flex, FormControl, FormLabel, Input } from '@invoke-ai/ui-library';
 import { GeneratorTextareaWithFileUpload } from 'features/nodes/components/flow/nodes/Invocation/fields/inputs/GeneratorTextareaWithFileUpload';
-import type { IntegerGeneratorParseString } from 'features/nodes/types/field';
+import type { StringGeneratorParseString } from 'features/nodes/types/field';
 import type { ChangeEvent } from 'react';
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-type IntegerGeneratorParseStringSettingsProps = {
-  state: IntegerGeneratorParseString;
-  onChange: (state: IntegerGeneratorParseString) => void;
+type StringGeneratorParseStringSettingsProps = {
+  state: StringGeneratorParseString;
+  onChange: (state: StringGeneratorParseString) => void;
 };
-export const IntegerGeneratorParseStringSettings = memo(
-  ({ state, onChange }: IntegerGeneratorParseStringSettingsProps) => {
+export const StringGeneratorParseStringSettings = memo(
+  ({ state, onChange }: StringGeneratorParseStringSettingsProps) => {
     const { t } = useTranslation();
 
     const onChangeSplitOn = useCallback(
@@ -38,4 +38,4 @@ export const IntegerGeneratorParseStringSettings = memo(
     );
   }
 );
-IntegerGeneratorParseStringSettings.displayName = 'IntegerGeneratorParseStringSettings';
+StringGeneratorParseStringSettings.displayName = 'StringGeneratorParseStringSettings';

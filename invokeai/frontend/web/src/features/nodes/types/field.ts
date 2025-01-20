@@ -222,6 +222,10 @@ const zIntegerGeneratorFieldType = zFieldTypeBase.extend({
   name: z.literal('IntegerGeneratorField'),
   originalType: zStatelessFieldType.optional(),
 });
+const zStringGeneratorFieldType = zFieldTypeBase.extend({
+  name: z.literal('StringGeneratorField'),
+  originalType: zStatelessFieldType.optional(),
+});
 const zStatefulFieldType = z.union([
   zIntegerFieldType,
   zFloatFieldType,
@@ -252,6 +256,7 @@ const zStatefulFieldType = z.union([
   zSchedulerFieldType,
   zFloatGeneratorFieldType,
   zIntegerGeneratorFieldType,
+  zStringGeneratorFieldType,
 ]);
 export type StatefulFieldType = z.infer<typeof zStatefulFieldType>;
 const statefulFieldTypeNames = zStatefulFieldType.options.map((o) => o.shape.name.value);
@@ -1088,12 +1093,26 @@ export type FloatGeneratorParseString = z.infer<typeof zFloatGeneratorParseStrin
 const getFloatGeneratorParseStringDefaults = () => zFloatGeneratorParseString.parse({});
 const getFloatGeneratorParseStringValues = (generator: FloatGeneratorParseString) => {
   const { input, splitOn } = generator;
-  const values = input
-    .split(splitOn)
+
+  let splitValues: string[] = [];
+  if (splitOn === '') {
+    // special case for empty splitOn
+    splitValues = [input];
+  } else {
+    // try to parse splitOn as a JSON string, this allows for special characters like \n
+    try {
+      splitValues = input.split(JSON.parse(`"${splitOn}"`));
+    } catch {
+      // if JSON parsing fails, just split on the string
+      splitValues = input.split(splitOn);
+    }
+  }
+  const values = splitValues
     .map(trim)
     .filter((s) => s.length > 0)
     .map((s) => parseFloat(s))
     .filter((n) => !isNaN(n));
+
   return values;
 };
 
@@ -1224,12 +1243,27 @@ export type IntegerGeneratorParseString = z.infer<typeof zIntegerGeneratorParseS
 const getIntegerGeneratorParseStringDefaults = () => zIntegerGeneratorParseString.parse({});
 const getIntegerGeneratorParseStringValues = (generator: IntegerGeneratorParseString) => {
   const { input, splitOn } = generator;
-  const values = input
-    .split(splitOn)
+
+  let splitValues: string[] = [];
+  if (splitOn === '') {
+    // special case for empty splitOn
+    splitValues = [input];
+  } else {
+    // try to parse splitOn as a JSON string, this allows for special characters like \n
+    try {
+      splitValues = input.split(JSON.parse(`"${splitOn}"`));
+    } catch {
+      // if JSON parsing fails, just split on the string
+      splitValues = input.split(splitOn);
+    }
+  }
+
+  const values = splitValues
     .map(trim)
     .filter((s) => s.length > 0)
     .map((s) => parseInt(s, 10))
     .filter((n) => !isNaN(n));
+
   return values;
 };
 
@@ -1287,6 +1321,117 @@ export const getIntegerGeneratorDefaults = (type: IntegerGeneratorFieldValue['ty
     return getIntegerGeneratorParseStringDefaults();
   }
   assert(false, 'Invalid integer generator type');
+};
+// #endregion
+
+// #region StringGeneratorField
+export const StringGeneratorParseStringType = 'string_generator_parse_string';
+const zStringGeneratorParseString = z.object({
+  type: z.literal(StringGeneratorParseStringType).default(StringGeneratorParseStringType),
+  input: z.string().default('foo,bar,baz,qux'),
+  splitOn: z.string().default(','),
+  values: z.array(z.string()).nullish(),
+});
+export type StringGeneratorParseString = z.infer<typeof zStringGeneratorParseString>;
+export const getStringGeneratorParseStringDefaults = () => zStringGeneratorParseString.parse({});
+const getStringGeneratorParseStringValues = (generator: StringGeneratorParseString) => {
+  const { input, splitOn } = generator;
+  let splitValues: string[] = [];
+  if (splitOn === '') {
+    // special case for empty splitOn
+    splitValues = [input];
+  } else {
+    // try to parse splitOn as a JSON string, this allows for special characters like \n
+    try {
+      splitValues = input.split(JSON.parse(`"${splitOn}"`));
+    } catch {
+      // if JSON parsing fails, just split on the string
+      splitValues = input.split(splitOn);
+    }
+  }
+  const values = splitValues.filter((s) => s.length > 0);
+  return values;
+};
+
+export const StringGeneratorDynamicPromptsCombinatorialType = 'string_generator_dynamic_prompts_combinatorial';
+const zStringGeneratorDynamicPromptsCombinatorial = z.object({
+  type: z
+    .literal(StringGeneratorDynamicPromptsCombinatorialType)
+    .default(StringGeneratorDynamicPromptsCombinatorialType),
+  input: z.string().default('a super {cute|ferocious} {dog|cat}'),
+  maxPrompts: z.number().int().gte(1).default(10),
+  values: z.array(z.string()).nullish(),
+});
+export type StringGeneratorDynamicPromptsCombinatorial = z.infer<typeof zStringGeneratorDynamicPromptsCombinatorial>;
+const getStringGeneratorDynamicPromptsCombinatorialDefaults = () =>
+  zStringGeneratorDynamicPromptsCombinatorial.parse({});
+const getStringGeneratorDynamicPromptsCombinatorialValues = (generator: StringGeneratorDynamicPromptsCombinatorial) => {
+  const { values } = generator;
+  return values ?? [];
+};
+
+export const StringGeneratorDynamicPromptsRandomType = 'string_generator_dynamic_prompts_random';
+const zStringGeneratorDynamicPromptsRandom = z.object({
+  type: z.literal(StringGeneratorDynamicPromptsRandomType).default(StringGeneratorDynamicPromptsRandomType),
+  input: z.string().default('a super {cute|ferocious} {dog|cat}'),
+  count: z.number().int().gte(1).default(10),
+  seed: z.number().int().nullish(),
+  values: z.array(z.string()).nullish(),
+});
+export type StringGeneratorDynamicPromptsRandom = z.infer<typeof zStringGeneratorDynamicPromptsRandom>;
+const getStringGeneratorDynamicPromptsRandomDefaults = () => zStringGeneratorDynamicPromptsRandom.parse({});
+const getStringGeneratorDynamicPromptsRandomValues = (generator: StringGeneratorDynamicPromptsRandom) => {
+  const { values } = generator;
+  return values ?? [];
+};
+
+export const zStringGeneratorFieldValue = z.union([
+  zStringGeneratorParseString,
+  zStringGeneratorDynamicPromptsCombinatorial,
+  zStringGeneratorDynamicPromptsRandom,
+]);
+const zStringGeneratorFieldInputInstance = zFieldInputInstanceBase.extend({
+  value: zStringGeneratorFieldValue,
+});
+const zStringGeneratorFieldInputTemplate = zFieldInputTemplateBase.extend({
+  type: zStringGeneratorFieldType,
+  originalType: zFieldType.optional(),
+  default: zStringGeneratorFieldValue,
+});
+const zStringGeneratorFieldOutputTemplate = zFieldOutputTemplateBase.extend({
+  type: zStringGeneratorFieldType,
+});
+export type StringGeneratorFieldValue = z.infer<typeof zStringGeneratorFieldValue>;
+export type StringGeneratorFieldInputInstance = z.infer<typeof zStringGeneratorFieldInputInstance>;
+export type StringGeneratorFieldInputTemplate = z.infer<typeof zStringGeneratorFieldInputTemplate>;
+export const isStringGeneratorFieldInputInstance = buildTypeGuard(zStringGeneratorFieldInputInstance);
+export const isStringGeneratorFieldInputTemplate = buildTypeGuard(zStringGeneratorFieldInputTemplate);
+export const resolveStringGeneratorField = ({ value }: StringGeneratorFieldInputInstance) => {
+  if (value.values) {
+    return value.values;
+  }
+  if (value.type === StringGeneratorParseStringType) {
+    return getStringGeneratorParseStringValues(value);
+  }
+  if (value.type === StringGeneratorDynamicPromptsRandomType) {
+    return getStringGeneratorDynamicPromptsRandomValues(value);
+  }
+  if (value.type === StringGeneratorDynamicPromptsCombinatorialType) {
+    return getStringGeneratorDynamicPromptsCombinatorialValues(value);
+  }
+  assert(false, 'Invalid string generator type');
+};
+export const getStringGeneratorDefaults = (type: StringGeneratorFieldValue['type']) => {
+  if (type === StringGeneratorParseStringType) {
+    return getStringGeneratorParseStringDefaults();
+  }
+  if (type === StringGeneratorDynamicPromptsRandomType) {
+    return getStringGeneratorDynamicPromptsRandomDefaults();
+  }
+  if (type === StringGeneratorDynamicPromptsCombinatorialType) {
+    return getStringGeneratorDynamicPromptsCombinatorialDefaults();
+  }
+  assert(false, 'Invalid string generator type');
 };
 // #endregion
 
@@ -1370,6 +1515,7 @@ export const zStatefulFieldValue = z.union([
   zSchedulerFieldValue,
   zFloatGeneratorFieldValue,
   zIntegerGeneratorFieldValue,
+  zStringGeneratorFieldValue,
 ]);
 export type StatefulFieldValue = z.infer<typeof zStatefulFieldValue>;
 
@@ -1409,6 +1555,7 @@ const zStatefulFieldInputInstance = z.union([
   zSchedulerFieldInputInstance,
   zFloatGeneratorFieldInputInstance,
   zIntegerGeneratorFieldInputInstance,
+  zStringGeneratorFieldInputInstance,
 ]);
 
 export const zFieldInputInstance = z.union([zStatefulFieldInputInstance, zStatelessFieldInputInstance]);
@@ -1452,6 +1599,7 @@ const zStatefulFieldInputTemplate = z.union([
   zStatelessFieldInputTemplate,
   zFloatGeneratorFieldInputTemplate,
   zIntegerGeneratorFieldInputTemplate,
+  zStringGeneratorFieldInputTemplate,
 ]);
 
 export const zFieldInputTemplate = z.union([zStatefulFieldInputTemplate, zStatelessFieldInputTemplate]);
@@ -1488,6 +1636,7 @@ const zStatefulFieldOutputTemplate = z.union([
   zSchedulerFieldOutputTemplate,
   zFloatGeneratorFieldOutputTemplate,
   zIntegerGeneratorFieldOutputTemplate,
+  zStringGeneratorFieldOutputTemplate,
 ]);
 
 export const zFieldOutputTemplate = z.union([zStatefulFieldOutputTemplate, zStatelessFieldOutputTemplate]);
