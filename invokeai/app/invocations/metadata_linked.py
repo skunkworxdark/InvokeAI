@@ -65,6 +65,9 @@ CORE_LABELS = Literal[
     "vae",
     "seamless_x",
     "seamless_y",
+    "guidance",
+    "cfg_scale_start_step",
+    "cfg_scale_end_step",
 ]
 
 CORE_LABELS_STRING = Literal[
@@ -82,12 +85,15 @@ CORE_LABELS_INTEGER = Literal[
     "seed",
     "steps",
     "clip_skip",
+    "cfg_scale_start_step",
+    "cfg_scale_end_step",
 ]
 
 CORE_LABELS_FLOAT = Literal[
     f"{CUSTOM_LABEL}",
     "cfg_scale",
     "cfg_rescale_multiplier",
+    "guidance",
 ]
 
 CORE_LABELS_BOOL = Literal[
@@ -699,6 +705,9 @@ class FluxDenoiseLatentsMetaInvocation(FluxDenoiseInvocation, WithMetadata):
         md.update({"denoising_end": self.denoising_end})
         md.update({"model": self.transformer.transformer})
         md.update({"seed": self.seed})
+        md.update({"cfg_scale": self.cfg_scale})
+        md.update({"cfg_scale_start_step": self.cfg_scale_start_step})
+        md.update({"cfg_scale_end_step": self.cfg_scale_end_step})
         if len(self.transformer.loras) > 0:
             md.update({"loras": _loras_to_json(self.transformer.loras)})
 
@@ -744,6 +753,69 @@ class MetadataToVAEInvocation(BaseInvocation, WithMetadata):
         model.submodel_type = SubModelType.VAE
 
         return VAEOutput(vae=VAEField(vae=model))
+
+
+@invocation_output("metadata_to_lora_collection_output")
+class MetadataToLorasCollectionOutput(BaseInvocationOutput):
+    """Model loader output"""
+
+    lora: list[LoRAField] = OutputField(description="Collection of LoRA model and weights", title="LoRAs")
+
+
+@invocation(
+    "metadata_to_lora_collection",
+    title="Metadata To LoRA Collection",
+    tags=["metadata"],
+    category="metadata",
+    version="1.1.0",
+    classification=Classification.Beta,
+)
+class MetadataToLorasCollectionInvocation(BaseInvocation, WithMetadata):
+    """Extracts Lora(s) from metadata into a collection"""
+
+    custom_label: str = InputField(
+        default="loras",
+        description=FieldDescriptions.metadata_item_label,
+        input=Input.Direct,
+    )
+    loras: Optional[LoRAField | list[LoRAField]] = InputField(
+        default=[], description="LoRA models and weights. May be a single LoRA or collection.", title="LoRAs"
+    )
+
+    def invoke(self, context: InvocationContext) -> MetadataToLorasCollectionOutput:
+        metadata = {} if self.metadata is None else self.metadata.root
+        key: str = self.custom_label.strip()
+        if not key:
+            key = "loras"
+
+        if key in metadata:
+            loras = metadata[key]
+        else:
+            loras = []
+
+        input_loras = self.loras if isinstance(self.loras, list) else [self.loras]
+        output = MetadataToLorasCollectionOutput(lora=[])
+        added_loras: list[str] = []
+
+        for lora in input_loras:
+            assert lora is LoRAField
+            if lora.lora.key in added_loras:
+                continue
+            output.lora.append(lora)
+            added_loras.append(lora.lora.key)
+
+        for lora in loras:
+            model_key = extract_model_key(lora, "model", "", ModelType.LoRA, context)
+            if not model_key:
+                model_key = extract_model_key(lora, "lora", "", ModelType.LoRA, context)
+            if model_key:
+                model = get_model(model_key, context)
+                weight = float(lora["weight"])
+                if model.key in added_loras:
+                    continue
+                output.lora.append(LoRAField(lora=model, weight=weight))
+
+        return output
 
 
 @invocation(

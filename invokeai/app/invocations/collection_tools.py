@@ -37,6 +37,7 @@ from invokeai.invocation_api import (
     IntegerOutput,
     InvocationContext,
     LatentsField,
+    ModelIdentifierField,
     OutputField,
     StringOutput,
     UIComponent,
@@ -213,7 +214,7 @@ class StringCollectionLinkedInvocation(StringCollectionInvocation):
 
 @invocation_output("lora_collection_output")
 class LoRACollectionOutput(BaseInvocationOutput):
-    collection: list[LoRAField] = OutputField(description="The collection of input items", title="Collection")
+    collection: list[LoRAField] = OutputField(description="The collection of input items", title="LoRAs")
 
 
 @invocation(
@@ -226,16 +227,50 @@ class LoRACollectionOutput(BaseInvocationOutput):
 class LoRACollectionInvocation(BaseInvocation):
     """A collection of LoRA primitive values"""
 
-    collection: list[LoRAField] = InputField(default=[], description="The collection of LoRA values")
+    collection: list[LoRAField] = InputField(default=[], description="The collection of LoRA values", title="LoRAs")
 
     def invoke(self, context: InvocationContext) -> LoRACollectionOutput:
         return LoRACollectionOutput(collection=self.collection)
 
 
+@invocation(
+    "lora_collection_linked",
+    title="LoRA Collection Primitive Linked",
+    tags=["primitives", "lora", "collection"],
+    category="primitives",
+    version="1.0.0",
+)
+class LoRACollectionLinkedInvocation(LoRACollectionInvocation):
+    """Selects a LoRA model and weight."""
+
+    lora: ModelIdentifierField = InputField(
+        description=FieldDescriptions.lora_model, title="LoRA", ui_type=UIType.LoRAModel
+    )
+    weight: float = InputField(default=0.75, description=FieldDescriptions.lora_weight)
+
+    def invoke(self, context: InvocationContext) -> LoRACollectionOutput:
+        added_loras: list[str] = []
+        for lora in self.collection:
+            # assert lora is LoRAField
+            if lora.lora.key in added_loras:
+                continue
+            added_loras.append(lora.lora.key)
+
+        if self.lora.key not in added_loras:
+            self.collection.append(LoRAField(lora=self.lora, weight=self.weight))
+
+        obj = super().invoke(context)
+
+        params = obj.__dict__.copy()
+        del params["type"]
+
+        return LoRACollectionOutput(**params)
+
+
 @invocation_output("collection_sort_output")
 class CollectionSortOutput(BaseInvocationOutput):
     collection: list[Any] = OutputField(
-        description="The collection of input items", title="Collection", ui_type=UIType._Collection
+        description="The collection of output items", title="Collection", ui_type=UIType._Collection
     )
 
 
@@ -275,6 +310,39 @@ class CollectionSortInvocation(BaseInvocation):
 
     def invoke(self, context: InvocationContext) -> CollectionSortOutput:
         return CollectionSortOutput(collection=self.sort_list(self.collection, self.reverse))
+
+
+@invocation_output("collection_join_output")
+class CollectionJoinOutput(BaseInvocationOutput):
+    collection: list[Any] = OutputField(
+        description="The collection of output items", title="Collection", ui_type=UIType._Collection
+    )
+
+
+@invocation(
+    "collection_join",
+    title="Collection Join",
+    tags=["collection", "join"],
+    category="util",
+    version="1.0.0",
+    use_cache=False,
+)
+class CollectionJoinInvocation(BaseInvocation):
+    """CollectionJoin Joins two collections into a single collection"""
+
+    collection_a: list[Any] = InputField(
+        description="collection",
+        default=[],
+        ui_type=UIType._Collection,
+    )
+    collection_b: list[Any] = InputField(
+        description="collection",
+        default=[],
+        ui_type=UIType._Collection,
+    )
+
+    def invoke(self, context: InvocationContext) -> CollectionJoinOutput:
+        return CollectionJoinOutput(collection=self.collection_a + self.collection_b)
 
 
 @invocation_output("collection_index_output")
