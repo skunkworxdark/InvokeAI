@@ -19,12 +19,14 @@ type NodeWrapperProps = PropsWithChildren & {
   width?: ChakraProps['w'];
 };
 
+// Animations are disabled as a performance optimization - they can cause massive slowdowns in large workflows - even
+// when the animations are GPU-accelerated CSS.
+
 const containerSx: SystemStyleObject = {
   h: 'full',
   position: 'relative',
   borderRadius: 'base',
-  transitionProperty: 'common',
-  transitionDuration: '0.1s',
+  transitionProperty: 'none',
   cursor: 'grab',
 };
 
@@ -48,8 +50,7 @@ const inProgressSx: SystemStyleObject = {
   insetInlineStart: 0,
   borderRadius: 'md',
   pointerEvents: 'none',
-  transitionProperty: 'common',
-  transitionDuration: '0.1s',
+  transitionProperty: 'none',
   opacity: 0.7,
   zIndex: -1,
   visibility: 'hidden',
@@ -66,8 +67,7 @@ const selectionOverlaySx: SystemStyleObject = {
   bottom: 0,
   insetInlineStart: 0,
   borderRadius: 'base',
-  transitionProperty: 'common',
-  transitionDuration: '0.1s',
+  transitionProperty: 'none',
   pointerEvents: 'none',
   visibility: 'hidden',
   opacity: 0.5,

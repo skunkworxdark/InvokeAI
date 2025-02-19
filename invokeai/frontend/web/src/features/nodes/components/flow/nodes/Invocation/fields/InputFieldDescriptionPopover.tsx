@@ -21,18 +21,10 @@ type Props = {
 };
 
 export const InputFieldDescriptionPopover = memo(({ nodeId, fieldName }: Props) => {
-  const dispatch = useAppDispatch();
   const { t } = useTranslation();
-  const description = useInputFieldDescription(nodeId, fieldName);
-  const onChange = useCallback(
-    (e: ChangeEvent<HTMLTextAreaElement>) => {
-      dispatch(fieldDescriptionChanged({ nodeId, fieldName, val: e.target.value }));
-    },
-    [dispatch, fieldName, nodeId]
-  );
 
   return (
-    <Popover>
+    <Popover isLazy lazyBehavior="unmount">
       <PopoverTrigger>
         <IconButton
           variant="ghost"
@@ -44,21 +36,38 @@ export const InputFieldDescriptionPopover = memo(({ nodeId, fieldName }: Props) 
         />
       </PopoverTrigger>
       <PopoverContent p={2} w={256}>
-        <FormControl orientation="vertical">
-          <FormLabel>{t('nodes.description')}</FormLabel>
-          <Textarea
-            className="nodrag nopan nowheel"
-            fontSize="sm"
-            value={description ?? ''}
-            onChange={onChange}
-            p={2}
-            resize="none"
-            rows={5}
-          />
-        </FormControl>
+        <Content nodeId={nodeId} fieldName={fieldName} />
       </PopoverContent>
     </Popover>
   );
 });
 
 InputFieldDescriptionPopover.displayName = 'InputFieldDescriptionPopover';
+
+const Content = memo(({ nodeId, fieldName }: Props) => {
+  const dispatch = useAppDispatch();
+  const { t } = useTranslation();
+  const description = useInputFieldDescription(nodeId, fieldName);
+  const onChange = useCallback(
+    (e: ChangeEvent<HTMLTextAreaElement>) => {
+      dispatch(fieldDescriptionChanged({ nodeId, fieldName, val: e.target.value }));
+    },
+    [dispatch, fieldName, nodeId]
+  );
+
+  return (
+    <FormControl orientation="vertical">
+      <FormLabel>{t('nodes.description')}</FormLabel>
+      <Textarea
+        className="nodrag nopan nowheel"
+        fontSize="sm"
+        value={description ?? ''}
+        onChange={onChange}
+        p={2}
+        resize="none"
+        rows={5}
+      />
+    </FormControl>
+  );
+});
+Content.displayName = 'Content';

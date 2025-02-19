@@ -3,7 +3,6 @@ import { createSlice, isAnyOf } from '@reduxjs/toolkit';
 import type { EdgeChange, NodeChange, Viewport, XYPosition } from '@xyflow/react';
 import { applyEdgeChanges, applyNodeChanges, getConnectedEdges, getIncomers, getOutgoers } from '@xyflow/react';
 import type { PersistConfig } from 'app/store/store';
-import { buildUseBoolean } from 'common/hooks/useBoolean';
 import { workflowLoaded } from 'features/nodes/store/actions';
 import { SHARED_NODE_PROPERTIES } from 'features/nodes/types/constants';
 import type {
@@ -535,12 +534,13 @@ export const $copiedNodes = atom<AnyNode[]>([]);
 export const $copiedEdges = atom<AnyEdge[]>([]);
 export const $edgesToCopiedNodes = atom<AnyEdge[]>([]);
 export const $pendingConnection = atom<PendingConnection | null>(null);
+export const $isConnectionInProgress = computed($pendingConnection, (pendingConnection) => pendingConnection !== null);
 export const $edgePendingUpdate = atom<AnyEdge | null>(null);
 export const $didUpdateEdge = atom(false);
 export const $lastEdgeUpdateMouseEvent = atom<MouseEvent | null>(null);
 
 export const $viewport = atom<Viewport>({ x: 0, y: 0, zoom: 1 });
-export const [useAddNodeCmdk, $addNodeCmdk] = buildUseBoolean(false);
+export const $addNodeCmdk = atom(false);
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 const migrateNodesState = (state: any): any => {

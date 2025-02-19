@@ -27,11 +27,6 @@ export const selectInvocationNodeSafe = (nodesSlice: NodesState, nodeId: string)
   return node;
 };
 
-export const selectInvocationNodeType = (nodesSlice: NodesState, nodeId: string): string => {
-  const node = selectInvocationNode(nodesSlice, nodeId);
-  return node.data.type;
-};
-
 export const selectNodeData = (nodesSlice: NodesState, nodeId: string): InvocationNodeData => {
   const node = selectInvocationNode(nodesSlice, nodeId);
   return node.data;
@@ -55,6 +50,14 @@ export const selectLastSelectedNode = (nodesSlice: NodesState) => {
 };
 
 export const selectNodesSlice = (state: RootState) => state.nodes.present;
+
+export const selectLastSelectedNodeId = createSelector(selectNodesSlice, ({ nodes }) => {
+  const selectedNodes = nodes.filter(isInvocationNode).filter((n) => n.selected);
+  if (selectedNodes.length === 1) {
+    return selectedNodes[0]?.id;
+  }
+  return null;
+});
 
 const createNodesSelector = <T>(selector: Selector<NodesState, T>) => createSelector(selectNodesSlice, selector);
 export const selectNodes = createNodesSelector((nodes) => nodes.nodes);
