@@ -12,7 +12,8 @@ import { useInputFieldIsConnected } from 'features/nodes/hooks/useInputFieldIsCo
 import { useInputFieldLabel } from 'features/nodes/hooks/useInputFieldLabel';
 import { useInputFieldTemplateTitle } from 'features/nodes/hooks/useInputFieldTemplateTitle';
 import { fieldLabelChanged } from 'features/nodes/store/nodesSlice';
-import { HANDLE_TOOLTIP_OPEN_DELAY } from 'features/nodes/types/constants';
+import { HANDLE_TOOLTIP_OPEN_DELAY, NO_FIT_ON_DOUBLE_CLICK_CLASS } from 'features/nodes/types/constants';
+import type { MouseEvent } from 'react';
 import { memo, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -36,10 +37,11 @@ interface Props {
   nodeId: string;
   fieldName: string;
   isInvalid?: boolean;
+  isDragging?: boolean;
 }
 
 export const InputFieldTitle = memo((props: Props) => {
-  const { nodeId, fieldName, isInvalid } = props;
+  const { nodeId, fieldName, isInvalid, isDragging } = props;
   const inputRef = useRef<HTMLInputElement>(null);
   const label = useInputFieldLabel(nodeId, fieldName);
   const fieldTemplateTitle = useInputFieldTemplateTitle(nodeId, fieldName);
@@ -64,21 +66,34 @@ export const InputFieldTitle = memo((props: Props) => {
     inputRef,
   });
 
+  const isDisabled = useMemo(
+    () => (isConnectionInProgress && connectionError !== null && !isConnectionStartField) || isConnected,
+    [isConnectionInProgress, connectionError, isConnectionStartField, isConnected]
+  );
+
+  const onDoubleClick = useCallback(
+    (e: MouseEvent<HTMLParagraphElement>) => {
+      e.stopPropagation();
+      editable.startEditing();
+    },
+    [editable]
+  );
+
   if (!editable.isEditing) {
     return (
       <Tooltip
         label={<InputFieldTooltipContent nodeId={nodeId} fieldName={fieldName} />}
         openDelay={HANDLE_TOOLTIP_OPEN_DELAY}
         placement="top"
+        isDisabled={isDragging}
       >
         <Text
+          className={NO_FIT_ON_DOUBLE_CLICK_CLASS}
           sx={labelSx}
           noOfLines={1}
           data-is-invalid={isInvalid}
-          data-is-disabled={
-            (isConnectionInProgress && connectionError !== null && !isConnectionStartField) || isConnected
-          }
-          onDoubleClick={editable.startEditing}
+          data-is-disabled={isDisabled}
+          onDoubleClick={onDoubleClick}
         >
           {editable.value}
         </Text>
@@ -86,7 +101,14 @@ export const InputFieldTitle = memo((props: Props) => {
     );
   }
 
-  return <Input ref={inputRef} variant="outline" {...editable.inputProps} />;
+  return (
+    <Input
+      ref={inputRef}
+      variant="outline"
+      {...editable.inputProps}
+      _focusVisible={{ borderRadius: 'base', h: 'unset', px: 2 }}
+    />
+  );
 });
 
 InputFieldTitle.displayName = 'InputFieldTitle';

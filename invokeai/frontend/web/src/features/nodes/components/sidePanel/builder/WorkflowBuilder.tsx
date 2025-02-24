@@ -1,100 +1,81 @@
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import { draggable } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
-import { Alert, AlertDescription, AlertIcon, Button, ButtonGroup, Flex, Spacer, Text } from '@invoke-ai/ui-library';
-import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
+import type { SystemStyleObject } from '@invoke-ai/ui-library';
+import { Button, Flex, Spacer } from '@invoke-ai/ui-library';
+import { useStore } from '@nanostores/react';
+import { useAppSelector } from 'app/store/storeHooks';
+import { IAINoContentFallback } from 'common/components/IAIImageFallback';
 import ScrollableContent from 'common/components/OverlayScrollbars/ScrollableContent';
 import { firefoxDndFix } from 'features/dnd/util';
 import { FormElementComponent } from 'features/nodes/components/sidePanel/builder/ContainerElementComponent';
-import {
-  buildFormElementDndData,
-  useBuilderDndMonitor,
-  useRootDnd,
-} from 'features/nodes/components/sidePanel/builder/dnd';
-import { getEditModeWrapperId } from 'features/nodes/components/sidePanel/builder/shared';
-import { formReset, selectFormIsEmpty, selectFormLayout } from 'features/nodes/store/workflowSlice';
+import { buildFormElementDndData, useBuilderDndMonitor } from 'features/nodes/components/sidePanel/builder/dnd-hooks';
+import { WorkflowBuilderEditMenu } from 'features/nodes/components/sidePanel/builder/WorkflowBuilderMenu';
+import { $hasTemplates } from 'features/nodes/store/nodesSlice';
+import { selectFormRootElementId, selectIsFormEmpty } from 'features/nodes/store/workflowSlice';
 import type { FormElement } from 'features/nodes/types/workflow';
 import { buildContainer, buildDivider, buildHeading, buildText } from 'features/nodes/types/workflow';
 import { startCase } from 'lodash-es';
 import type { RefObject } from 'react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PiArrowCounterClockwiseBold } from 'react-icons/pi';
+import { useGetOpenAPISchemaQuery } from 'services/api/endpoints/appInfo';
 import { assert } from 'tsafe';
+
+const sx: SystemStyleObject = {
+  pt: 3,
+  '&[data-is-empty="true"]': {
+    w: 'full',
+    h: 'full',
+    pt: 0,
+  },
+};
 
 export const WorkflowBuilder = memo(() => {
   const { t } = useTranslation();
-  const dispatch = useAppDispatch();
-  const isEmpty = useAppSelector(selectFormIsEmpty);
+
   useBuilderDndMonitor();
 
-  const resetForm = useCallback(() => {
-    dispatch(formReset());
-  }, [dispatch]);
-
   return (
-    <ScrollableContent>
-      <Flex justifyContent="center" w="full" h="full">
-        <Flex flexDir="column" w="full" h="full" maxW="768px" gap={4}>
-          <Alert status="warning" variant="subtle" borderRadius="base" flexShrink={0}>
-            <AlertIcon />
-            <AlertDescription fontSize="sm">{t('workflows.builder.workflowBuilderAlphaWarning')}</AlertDescription>
-          </Alert>
-          <ButtonGroup isAttached={false} justifyContent="center">
-            <AddFormElementDndButton type="container" />
-            <AddFormElementDndButton type="divider" />
-            <AddFormElementDndButton type="heading" />
-            <AddFormElementDndButton type="text" />
-            <Spacer />
-            <Button onClick={resetForm} variant="ghost" leftIcon={<PiArrowCounterClockwiseBold />}>
-              {t('common.reset')}
-            </Button>
-          </ButtonGroup>
-          {!isEmpty && <FormLayout />}
-          {isEmpty && <EmptyStateEditMode />}
+    <Flex justifyContent="center" w="full" h="full">
+      <Flex flexDir="column" w="full" maxW="768px" gap={2}>
+        <Flex w="full" alignItems="center" gap={2} pt={3}>
+          <AddFormElementDndButton type="container" />
+          <AddFormElementDndButton type="divider" />
+          <AddFormElementDndButton type="heading" />
+          <AddFormElementDndButton type="text" />
+          <Button size="sm" variant="ghost" tooltip={t('workflows.builder.nodeFieldTooltip')}>
+            {t('workflows.builder.nodeField')}
+          </Button>
+          <Spacer />
+          <WorkflowBuilderEditMenu />
         </Flex>
+        <ScrollableContent>
+          <WorkflowBuilderContent />
+        </ScrollableContent>
       </Flex>
-    </ScrollableContent>
+    </Flex>
   );
 });
 WorkflowBuilder.displayName = 'WorkflowBuilder';
 
-export const FormLayout = memo(() => {
-  const layout = useAppSelector(selectFormLayout);
-
-  return (
-    <Flex flexDir="column" gap={4} w="full" borderRadius="base">
-      {layout.map((id) => (
-        <FormElementComponent key={id} id={id} />
-      ))}
-    </Flex>
-  );
-});
-FormLayout.displayName = 'FormLayout';
-
-const EmptyStateEditMode = memo(() => {
+const WorkflowBuilderContent = memo(() => {
   const { t } = useTranslation();
-  const ref = useRef<HTMLDivElement>(null);
-  const isDragging = useRootDnd(ref);
+  const rootElementId = useAppSelector(selectFormRootElementId);
+  const isFormEmpty = useAppSelector(selectIsFormEmpty);
+  const openApiSchemaQuery = useGetOpenAPISchemaQuery();
+  const loadedTemplates = useStore($hasTemplates);
+
+  if (openApiSchemaQuery.isLoading || !loadedTemplates) {
+    return <IAINoContentFallback label={t('nodes.loadingNodes')} icon={null} />;
+  }
 
   return (
-    <Flex
-      id={getEditModeWrapperId('root')}
-      ref={ref}
-      w="full"
-      h="full"
-      bg={isDragging ? 'base.800' : undefined}
-      p={4}
-      borderRadius="base"
-      alignItems="center"
-      justifyContent="center"
-    >
-      <Text variant="subtext" fontSize="md">
-        {t('workflows.builder.emptyRootPlaceholderEditMode')}
-      </Text>
+    <Flex sx={sx} data-is-empty={isFormEmpty}>
+      <FormElementComponent id={rootElementId} />
     </Flex>
   );
 });
-EmptyStateEditMode.displayName = 'EmptyStateEditMode';
+WorkflowBuilderContent.displayName = 'WorkflowBuilderContent';
 
 const useAddFormElementDnd = (
   type: Exclude<FormElement['type'], 'node-field'>,
@@ -148,19 +129,17 @@ const AddFormElementDndButton = ({ type }: { type: Parameters<typeof useAddFormE
   const isDragging = useAddFormElementDnd(type, draggableRef);
 
   return (
+    // Must be as div for draggable to work correctly
     <Button
       as="div"
       ref={draggableRef}
-      pointerEvents="all"
-      variant="unstyled"
-      borderWidth={2}
-      borderStyle="dashed"
-      borderRadius="base"
-      px={4}
-      py={1}
+      variant="outline"
       cursor="grab"
-      _hover={{ bg: 'base.800' }}
+      borderStyle="dashed"
       isDisabled={isDragging}
+      size="sm"
+      _active={{ borderStyle: 'dashed' }}
+      _disabled={{ borderStyle: 'dashed', opacity: 0.5 }}
     >
       {startCase(type)}
     </Button>

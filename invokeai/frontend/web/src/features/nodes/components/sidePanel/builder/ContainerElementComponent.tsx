@@ -7,6 +7,7 @@ import {
   useDepthContext,
 } from 'features/nodes/components/sidePanel/builder/contexts';
 import { DividerElementComponent } from 'features/nodes/components/sidePanel/builder/DividerElementComponent';
+import { useIsRootElement } from 'features/nodes/components/sidePanel/builder/dnd-hooks';
 import { FormElementEditModeWrapper } from 'features/nodes/components/sidePanel/builder/FormElementEditModeWrapper';
 import { HeadingElementComponent } from 'features/nodes/components/sidePanel/builder/HeadingElementComponent';
 import { NodeFieldElementComponent } from 'features/nodes/components/sidePanel/builder/NodeFieldElementComponent';
@@ -29,6 +30,9 @@ import { assert } from 'tsafe';
 const sx: SystemStyleObject = {
   gap: 4,
   flex: '1 1 0',
+  '&[data-depth="0"]': {
+    flex: 1,
+  },
   '&[data-container-layout="column"]': {
     flexDir: 'column',
   },
@@ -63,12 +67,12 @@ const ContainerElementComponentViewMode = memo(({ el }: { el: ContainerElement }
   return (
     <DepthContextProvider depth={depth + 1}>
       <ContainerContextProvider id={id} layout={layout}>
-        <Flex id={id} className={CONTAINER_CLASS_NAME} sx={sx} data-container-layout={layout}>
+        <Flex id={id} className={CONTAINER_CLASS_NAME} sx={sx} data-container-layout={layout} data-depth={depth}>
           {children.map((childId) => (
             <FormElementComponent key={childId} id={childId} />
           ))}
           {children.length === 0 && (
-            <Flex p={4} w="full" h="full" alignItems="center" justifyContent="center">
+            <Flex p={8} w="full" h="full" alignItems="center" justifyContent="center">
               <Text variant="subtext">{t('workflows.builder.containerPlaceholder')}</Text>
             </Flex>
           )}
@@ -80,24 +84,21 @@ const ContainerElementComponentViewMode = memo(({ el }: { el: ContainerElement }
 ContainerElementComponentViewMode.displayName = 'ContainerElementComponentViewMode';
 
 const ContainerElementComponentEditMode = memo(({ el }: { el: ContainerElement }) => {
-  const { t } = useTranslation();
   const depth = useDepthContext();
   const { id, data } = el;
   const { children, layout } = data;
+  const isRootElement = useIsRootElement(id);
 
   return (
     <FormElementEditModeWrapper element={el}>
       <DepthContextProvider depth={depth + 1}>
         <ContainerContextProvider id={id} layout={layout}>
-          <Flex id={id} className={CONTAINER_CLASS_NAME} sx={sx} data-container-layout={layout}>
+          <Flex id={id} className={CONTAINER_CLASS_NAME} sx={sx} data-container-layout={layout} data-depth={depth}>
             {children.map((childId) => (
               <FormElementComponent key={childId} id={childId} />
             ))}
-            {children.length === 0 && (
-              <Flex p={4} w="full" h="full" alignItems="center" justifyContent="center">
-                <Text variant="subtext">{t('workflows.builder.containerPlaceholderDesc')}</Text>
-              </Flex>
-            )}
+            {children.length === 0 && isRootElement && <RootPlaceholder />}
+            {children.length === 0 && !isRootElement && <NonRootPlaceholder />}
           </Flex>
         </ContainerContextProvider>
       </DepthContextProvider>
@@ -105,6 +106,26 @@ const ContainerElementComponentEditMode = memo(({ el }: { el: ContainerElement }
   );
 });
 ContainerElementComponentEditMode.displayName = 'ContainerElementComponentEditMode';
+
+const RootPlaceholder = memo(() => {
+  const { t } = useTranslation();
+  return (
+    <Flex p={8} w="full" h="full" alignItems="center" justifyContent="center">
+      <Text variant="subtext">{t('workflows.builder.emptyRootPlaceholderEditMode')}</Text>
+    </Flex>
+  );
+});
+RootPlaceholder.displayName = 'RootPlaceholder';
+
+const NonRootPlaceholder = memo(() => {
+  const { t } = useTranslation();
+  return (
+    <Flex p={8} w="full" h="full" alignItems="center" justifyContent="center">
+      <Text variant="subtext">{t('workflows.builder.containerPlaceholder')}</Text>
+    </Flex>
+  );
+});
+NonRootPlaceholder.displayName = 'NonRootPlaceholder';
 
 // TODO(psyche): Can we move this into a separate file and avoid circular dependencies between it and ContainerElementComponent?
 export const FormElementComponent = memo(({ id }: { id: string }) => {

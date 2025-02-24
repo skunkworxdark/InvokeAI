@@ -53,9 +53,11 @@ const HeadingElementComponentEditMode = memo(({ el }: { el: HeadingElement }) =>
   );
 });
 
+const FONT_SIZE = '2xl';
+
 const headingSx: SystemStyleObject = {
   fontWeight: 'bold',
-  fontSize: '4xl',
+  fontSize: FONT_SIZE,
   '&[data-is-empty="true"]': {
     opacity: 0.3,
   },
@@ -109,9 +111,11 @@ const EditableHeading = memo(({ el }: { el: HeadingElement }) => {
       minRows={1}
       maxRows={10}
       resize="none"
-      p={2}
+      p={1}
+      px={2}
       fontWeight="bold"
-      fontSize="4xl"
+      fontSize={FONT_SIZE}
+      _focusVisible={{ borderRadius: 'base', h: 'unset' }}
     />
   );
 });

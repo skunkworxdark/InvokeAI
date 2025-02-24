@@ -1,14 +1,11 @@
 import type { ChakraProps, SystemStyleObject } from '@invoke-ai/ui-library';
 import { Box, useGlobalMenuClose } from '@invoke-ai/ui-library';
-import type { NodeChange } from '@xyflow/react';
-import { useAppDispatch, useAppSelector, useAppStore } from 'app/store/storeHooks';
+import { useAppSelector } from 'app/store/storeHooks';
 import { useMouseOverNode } from 'features/nodes/hooks/useMouseOverNode';
 import { useNodeExecutionState } from 'features/nodes/hooks/useNodeExecutionState';
-import { nodesChanged } from 'features/nodes/store/nodesSlice';
-import { selectNodes } from 'features/nodes/store/selectors';
+import { useZoomToNode } from 'features/nodes/hooks/useZoomToNode';
 import { selectNodeOpacity } from 'features/nodes/store/workflowSettingsSlice';
-import { DRAG_HANDLE_CLASSNAME, NODE_WIDTH } from 'features/nodes/types/constants';
-import type { AnyNode } from 'features/nodes/types/invocation';
+import { DRAG_HANDLE_CLASSNAME, NO_FIT_ON_DOUBLE_CLICK_CLASS, NODE_WIDTH } from 'features/nodes/types/constants';
 import { zNodeStatus } from 'features/nodes/types/invocation';
 import type { MouseEvent, PropsWithChildren } from 'react';
 import { memo, useCallback } from 'react';
@@ -82,39 +79,44 @@ const selectionOverlaySx: SystemStyleObject = {
 
 const NodeWrapper = (props: NodeWrapperProps) => {
   const { nodeId, width, children, selected } = props;
-  const store = useAppStore();
   const { isMouseOverNode, handleMouseOut, handleMouseOver } = useMouseOverNode(nodeId);
+  const zoomToNode = useZoomToNode();
 
   const executionState = useNodeExecutionState(nodeId);
   const isInProgress = executionState?.status === zNodeStatus.enum.IN_PROGRESS;
 
-  const dispatch = useAppDispatch();
-
   const opacity = useAppSelector(selectNodeOpacity);
-  const { onCloseGlobal } = useGlobalMenuClose();
+  const globalMenu = useGlobalMenuClose();
 
-  const handleClick = useCallback(
-    (e: MouseEvent<HTMLDivElement>) => {
-      if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
-        const nodes = selectNodes(store.getState());
-        const nodeChanges: NodeChange<AnyNode>[] = [];
-        nodes.forEach(({ id, selected }) => {
-          if (selected !== (id === nodeId)) {
-            nodeChanges.push({ type: 'select', id, selected: id === nodeId });
-          }
-        });
-        if (nodeChanges.length > 0) {
-          dispatch(nodesChanged(nodeChanges));
-        }
+  const onDoubleClick = useCallback(
+    (e: MouseEvent) => {
+      if (!(e.target instanceof HTMLElement)) {
+        // We have to manually narrow the type here thanks to a TS quirk
+        return;
       }
-      onCloseGlobal();
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement ||
+        e.target instanceof HTMLButtonElement ||
+        e.target instanceof HTMLAnchorElement
+      ) {
+        // Don't fit the view if the user is editing a text field, select, button, or link
+        return;
+      }
+      if (e.target.closest(`.${NO_FIT_ON_DOUBLE_CLICK_CLASS}`) !== null) {
+        // This target is marked as not fitting the view on double click
+        return;
+      }
+      zoomToNode(nodeId);
     },
-    [onCloseGlobal, store, dispatch, nodeId]
+    [nodeId, zoomToNode]
   );
 
   return (
     <Box
-      onClick={handleClick}
+      onClick={globalMenu.onCloseGlobal}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={handleMouseOver}
       onMouseLeave={handleMouseOut}
       className={DRAG_HANDLE_CLASSNAME}
