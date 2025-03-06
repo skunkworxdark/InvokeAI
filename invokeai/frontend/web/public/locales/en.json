@@ -149,6 +149,7 @@
         "safetensors": "Safetensors",
         "save": "Save",
         "saveAs": "Save As",
+        "saveChanges": "Save Changes",
         "settingsLabel": "Settings",
         "simple": "Simple",
         "somethingWentWrong": "Something went wrong",
@@ -761,6 +762,7 @@
         "deleteMsg2": "This WILL delete the model from disk if it is in the InvokeAI root folder. If you are using a custom location, then the model WILL NOT be deleted from disk.",
         "description": "Description",
         "edit": "Edit",
+        "fluxRedux": "FLUX Redux",
         "height": "Height",
         "huggingFace": "HuggingFace",
         "huggingFacePlaceholder": "owner/model-name",
@@ -835,6 +837,7 @@
         "settings": "Settings",
         "simpleModelPlaceholder": "URL or path to a local file or diffusers folder",
         "source": "Source",
+        "sigLip": "SigLIP",
         "spandrelImageToImage": "Image to Image (Spandrel)",
         "starterBundles": "Starter Bundles",
         "starterBundleHelpText": "Easily install all models needed to get started with a base model, including a main model, controlnets, IP adapters, and more. Selecting a bundle will skip any models that you already have installed.",
@@ -1719,6 +1722,8 @@
         "copyShareLinkForWorkflow": "Copy Share Link for Workflow",
         "delete": "Delete",
         "openLibrary": "Open Library",
+        "workflowThumbnail": "Workflow Thumbnail",
+        "saveChanges": "Save Changes",
         "builder": {
             "deleteAllElements": "Delete All Form Elements",
             "resetAllNodeFields": "Reset All Node Fields",
@@ -1911,7 +1916,7 @@
         "resetGenerationSettings": "Reset Generation Settings",
         "replaceCurrent": "Replace Current",
         "controlLayerEmptyState": "<UploadButton>Upload an image</UploadButton>, drag an image from the <GalleryButton>gallery</GalleryButton> onto this layer, or draw on the canvas to get started.",
-        "referenceImageEmptyState": "<UploadButton>Upload an image</UploadButton> or drag an image from the <GalleryButton>gallery</GalleryButton> onto this layer to get started.",
+        "referenceImageEmptyState": "<UploadButton>Upload an image</UploadButton>, drag an image from the <GalleryButton>gallery</GalleryButton> onto this layer, or <PullBboxButton>pull the bounding box into this layer</PullBboxButton> to get started.",
         "warnings": {
             "problemsFound": "Problems found",
             "unsupportedModel": "layer not supported for selected base model",
@@ -2306,8 +2311,8 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "Workflow Editor: New drag-and-drop form builder for easier workflow creation.",
-            "Other improvements: Faster batch queuing, better upscaling, improved color picker, and metadata nodes."
+            "Memory Management: New setting for users with Nvidia GPUs to reduce VRAM usage.",
+            "Performance: Continued improvements to overall application performance and responsiveness."
         ],
         "readReleaseNotes": "Read Release Notes",
         "watchRecentReleaseVideos": "Watch Recent Release Videos",
