@@ -19,6 +19,8 @@ from invokeai.app.services.workflow_records.workflow_records_common import (
 )
 from invokeai.app.util.misc import uuid_string
 
+SQL_TIME_FORMAT = "%Y-%m-%d %H:%M:%f"
+
 
 class SqliteWorkflowRecordsStorage(WorkflowRecordsStorageBase):
     def __init__(self, db: SqliteDatabase) -> None:
@@ -32,15 +34,6 @@ class SqliteWorkflowRecordsStorage(WorkflowRecordsStorageBase):
     def get(self, workflow_id: str) -> WorkflowRecordDTO:
         """Gets a workflow by ID. Updates the opened_at column."""
         cursor = self._conn.cursor()
-        cursor.execute(
-            """--sql
-            UPDATE workflow_library
-            SET opened_at = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
-            WHERE workflow_id = ?;
-            """,
-            (workflow_id,),
-        )
-        self._conn.commit()
         cursor.execute(
             """--sql
             SELECT workflow_id, workflow, name, created_at, updated_at, opened_at
@@ -120,44 +113,101 @@ class SqliteWorkflowRecordsStorage(WorkflowRecordsStorageBase):
         self,
         order_by: WorkflowRecordOrderBy,
         direction: SQLiteDirection,
-        category: WorkflowCategory,
+        categories: Optional[list[WorkflowCategory]],
         page: int = 0,
         per_page: Optional[int] = None,
         query: Optional[str] = None,
+        tags: Optional[list[str]] = None,
     ) -> PaginatedResults[WorkflowRecordListItemDTO]:
         # sanitize!
         assert order_by in WorkflowRecordOrderBy
         assert direction in SQLiteDirection
-        assert category in WorkflowCategory
-        count_query = "SELECT COUNT(*) FROM workflow_library WHERE category = ?"
-        main_query = """
-            SELECT
-                workflow_id,
-                category,
-                name,
-                description,
-                created_at,
-                updated_at,
-                opened_at
-            FROM workflow_library
-            WHERE category = ?
-            """
-        main_params: list[int | str] = [category.value]
-        count_params: list[int | str] = [category.value]
 
+        # We will construct the query dynamically based on the query params
+
+        # The main query to get the workflows / counts
+        main_query = """
+                SELECT
+                    workflow_id,
+                    category,
+                    name,
+                    description,
+                    created_at,
+                    updated_at,
+                    opened_at,
+                    tags
+                FROM workflow_library
+                """
+        count_query = "SELECT COUNT(*) FROM workflow_library"
+
+        # Start with an empty list of conditions and params
+        conditions: list[str] = []
+        params: list[str | int] = []
+
+        if categories:
+            # Categories is a list of WorkflowCategory enum values, and a single string in the DB
+
+            # Ensure all categories are valid (is this necessary?)
+            assert all(c in WorkflowCategory for c in categories)
+
+            # Construct a placeholder string for the number of categories
+            placeholders = ", ".join("?" for _ in categories)
+
+            # Construct the condition string & params
+            category_condition = f"category IN ({placeholders})"
+            category_params = [category.value for category in categories]
+
+            conditions.append(category_condition)
+            params.extend(category_params)
+
+        if tags:
+            # Tags is a list of strings, and a single string in the DB
+            # The string in the DB has no guaranteed format
+
+            # Construct a list of conditions for each tag
+            tags_conditions = ["tags LIKE ?" for _ in tags]
+            tags_conditions_joined = " OR ".join(tags_conditions)
+            tags_condition = f"({tags_conditions_joined})"
+
+            # And the params for the tags, case-insensitive
+            tags_params = [f"%{t.strip()}%" for t in tags]
+
+            conditions.append(tags_condition)
+            params.extend(tags_params)
+
+        # Ignore whitespace in the query
         stripped_query = query.strip() if query else None
         if stripped_query:
+            # Construct a wildcard query for the name, description, and tags
             wildcard_query = "%" + stripped_query + "%"
-            main_query += " AND name LIKE ? OR description LIKE ? "
-            count_query += " AND name LIKE ? OR description LIKE ?;"
-            main_params.extend([wildcard_query, wildcard_query])
-            count_params.extend([wildcard_query, wildcard_query])
+            query_condition = "(name LIKE ? OR description LIKE ? OR tags LIKE ?)"
 
+            conditions.append(query_condition)
+            params.extend([wildcard_query, wildcard_query, wildcard_query])
+
+        if conditions:
+            # If there are conditions, add a WHERE clause and then join the conditions
+            main_query += " WHERE "
+            count_query += " WHERE "
+
+            all_conditions = " AND ".join(conditions)
+            main_query += all_conditions
+            count_query += all_conditions
+
+        # After this point, the query and params differ for the main query and the count query
+        main_params = params.copy()
+        count_params = params.copy()
+
+        # Main query also gets ORDER BY and LIMIT/OFFSET
         main_query += f" ORDER BY {order_by.value} {direction.value}"
 
         if per_page:
             main_query += " LIMIT ? OFFSET ?"
             main_params.extend([per_page, page * per_page])
+
+        # Put a ring on it
+        main_query += ";"
+        count_query += ";"
 
         cursor = self._conn.cursor()
         cursor.execute(main_query, main_params)
@@ -179,6 +229,71 @@ class SqliteWorkflowRecordsStorage(WorkflowRecordsStorageBase):
             pages=pages,
             total=total,
         )
+
+    def get_counts(
+        self,
+        tags: Optional[list[str]],
+        categories: Optional[list[WorkflowCategory]],
+    ) -> int:
+        cursor = self._conn.cursor()
+
+        # Start with an empty list of conditions and params
+        conditions: list[str] = []
+        params: list[str | int] = []
+
+        if tags:
+            # Construct a list of conditions for each tag
+            tags_conditions = ["tags LIKE ?" for _ in tags]
+            tags_conditions_joined = " OR ".join(tags_conditions)
+            tags_condition = f"({tags_conditions_joined})"
+
+            # And the params for the tags, case-insensitive
+            tags_params = [f"%{t.strip()}%" for t in tags]
+
+            conditions.append(tags_condition)
+            params.extend(tags_params)
+
+        if categories:
+            # Ensure all categories are valid (is this necessary?)
+            assert all(c in WorkflowCategory for c in categories)
+
+            # Construct a placeholder string for the number of categories
+            placeholders = ", ".join("?" for _ in categories)
+
+            # Construct the condition string & params
+            conditions.append(f"category IN ({placeholders})")
+            params.extend([category.value for category in categories])
+
+        stmt = """--sql
+            SELECT COUNT(*)
+            FROM workflow_library
+            """
+
+        if conditions:
+            # If there are conditions, add a WHERE clause and then join the conditions
+            stmt += " WHERE "
+
+            all_conditions = " AND ".join(conditions)
+            stmt += all_conditions
+
+        cursor.execute(stmt, tuple(params))
+        return cursor.fetchone()[0]
+
+    def update_opened_at(self, workflow_id: str) -> None:
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute(
+                f"""--sql
+                UPDATE workflow_library
+                SET opened_at = STRFTIME('{SQL_TIME_FORMAT}', 'NOW')
+                WHERE workflow_id = ?;
+                """,
+                (workflow_id,),
+            )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
     def _sync_default_workflows(self) -> None:
         """Syncs default workflows to the database. Internal use only."""
@@ -232,7 +347,7 @@ class SqliteWorkflowRecordsStorage(WorkflowRecordsStorageBase):
             library_workflows_from_db = self.get_many(
                 order_by=WorkflowRecordOrderBy.Name,
                 direction=SQLiteDirection.Ascending,
-                category=WorkflowCategory.Default,
+                categories=[WorkflowCategory.Default],
             ).items
 
             workflows_from_file_ids = [w.id for w in workflows_from_file]

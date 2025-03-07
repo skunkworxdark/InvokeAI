@@ -102,13 +102,20 @@ async def list_workflows(
         default=WorkflowRecordOrderBy.Name, description="The attribute to order by"
     ),
     direction: SQLiteDirection = Query(default=SQLiteDirection.Ascending, description="The direction to order by"),
-    category: WorkflowCategory = Query(default=WorkflowCategory.User, description="The category of workflow to get"),
+    categories: Optional[list[WorkflowCategory]] = Query(default=None, description="The categories of workflow to get"),
+    tags: Optional[list[str]] = Query(default=None, description="The tags of workflow to get"),
     query: Optional[str] = Query(default=None, description="The text to query by (matches name and description)"),
 ) -> PaginatedResults[WorkflowRecordListItemWithThumbnailDTO]:
     """Gets a page of workflows"""
     workflows_with_thumbnails: list[WorkflowRecordListItemWithThumbnailDTO] = []
     workflows = ApiDependencies.invoker.services.workflow_records.get_many(
-        order_by=order_by, direction=direction, page=page, per_page=per_page, query=query, category=category
+        order_by=order_by,
+        direction=direction,
+        page=page,
+        per_page=per_page,
+        query=query,
+        categories=categories,
+        tags=tags,
     )
     for workflow in workflows.items:
         workflows_with_thumbnails.append(
@@ -212,3 +219,24 @@ async def get_workflow_thumbnail(
         return response
     except Exception:
         raise HTTPException(status_code=404)
+
+
+@workflows_router.get("/counts", operation_id="get_counts")
+async def get_counts(
+    tags: Optional[list[str]] = Query(default=None, description="The tags to include"),
+    categories: Optional[list[WorkflowCategory]] = Query(default=None, description="The categories to include"),
+) -> int:
+    """Gets a the count of workflows that include the specified tags and categories"""
+
+    return ApiDependencies.invoker.services.workflow_records.get_counts(tags=tags, categories=categories)
+
+
+@workflows_router.put(
+    "/i/{workflow_id}/opened_at",
+    operation_id="update_opened_at",
+)
+async def update_opened_at(
+    workflow_id: str = Path(description="The workflow to update"),
+) -> None:
+    """Updates the opened_at field of a workflow"""
+    ApiDependencies.invoker.services.workflow_records.update_opened_at(workflow_id)

@@ -1,3 +1,4 @@
+import queryString from 'query-string';
 import type { paths } from 'services/api/schema';
 
 import { api, buildV1Url, LIST_TAG } from '..';
@@ -73,10 +74,47 @@ export const workflowsApi = api.injectEndpoints({
       NonNullable<paths['/api/v1/workflows/']['get']['parameters']['query']>
     >({
       query: (params) => ({
-        url: buildWorkflowsUrl(),
-        params,
+        url: `${buildWorkflowsUrl()}?${queryString.stringify(params, { arrayFormat: 'none' })}`,
       }),
       providesTags: ['FetchOnReconnect', { type: 'Workflow', id: LIST_TAG }],
+    }),
+    getCounts: build.query<
+      paths['/api/v1/workflows/counts']['get']['responses']['200']['content']['application/json'],
+      NonNullable<paths['/api/v1/workflows/counts']['get']['parameters']['query']>
+    >({
+      query: (params) => ({
+        url: `${buildWorkflowsUrl('counts')}?${queryString.stringify(params, { arrayFormat: 'none' })}`,
+      }),
+    }),
+    listWorkflowsInfinite: build.infiniteQuery<
+      paths['/api/v1/workflows/']['get']['responses']['200']['content']['application/json'],
+      NonNullable<paths['/api/v1/workflows/']['get']['parameters']['query']>,
+      number
+    >({
+      query: ({ queryArg, pageParam }) => ({
+        url: `${buildWorkflowsUrl()}?${queryString.stringify({ ...queryArg, page: pageParam }, { arrayFormat: 'none' })}`,
+      }),
+      infiniteQueryOptions: {
+        initialPageParam: 0,
+        getNextPageParam: (_lastPage, _allPages, lastPageParam, _allPageParams) => {
+          const finalPage = _lastPage.pages - 1;
+          const remainingPages = finalPage - lastPageParam;
+          if (remainingPages > 0) {
+            return lastPageParam + 1;
+          }
+          return undefined;
+        },
+        getPreviousPageParam: (_firstPage, _allPages, firstPageParam, _allPageParams) => {
+          return firstPageParam > -1 ? firstPageParam - 1 : undefined;
+        },
+      },
+    }),
+    updateOpenedAt: build.mutation<void, { workflow_id: string }>({
+      query: ({ workflow_id }) => ({
+        url: buildWorkflowsUrl(`i/${workflow_id}/opened_at`),
+        method: 'PUT',
+      }),
+      invalidatesTags: (result, error, { workflow_id }) => [{ type: 'Workflow', id: workflow_id }],
     }),
     setWorkflowThumbnail: build.mutation<void, { workflow_id: string; image: File }>({
       query: ({ workflow_id, image }) => {
@@ -107,12 +145,15 @@ export const workflowsApi = api.injectEndpoints({
 });
 
 export const {
+  useUpdateOpenedAtMutation,
+  useGetCountsQuery,
   useLazyGetWorkflowQuery,
   useGetWorkflowQuery,
   useCreateWorkflowMutation,
   useDeleteWorkflowMutation,
   useUpdateWorkflowMutation,
   useListWorkflowsQuery,
+  useListWorkflowsInfiniteInfiniteQuery,
   useSetWorkflowThumbnailMutation,
   useDeleteWorkflowThumbnailMutation,
 } = workflowsApi;

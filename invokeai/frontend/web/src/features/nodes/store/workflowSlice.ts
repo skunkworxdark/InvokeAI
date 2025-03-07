@@ -11,7 +11,12 @@ import {
 } from 'features/nodes/components/sidePanel/builder/form-manipulation';
 import { workflowLoaded } from 'features/nodes/store/actions';
 import { isAnyNodeOrEdgeMutation, nodeEditorReset, nodesChanged } from 'features/nodes/store/nodesSlice';
-import type { NodesState, WorkflowMode, WorkflowsState as WorkflowState } from 'features/nodes/store/types';
+import type {
+  NodesState,
+  WorkflowMode,
+  WorkflowsState as WorkflowState,
+  WorkflowTag,
+} from 'features/nodes/store/types';
 import type { FieldIdentifier, StatefulFieldValue } from 'features/nodes/types/field';
 import { isInvocationNode } from 'features/nodes/types/invocation';
 import type {
@@ -79,9 +84,10 @@ const initialWorkflowState: WorkflowState = {
   mode: 'view',
   formFieldInitialValues: {},
   searchTerm: '',
-  orderBy: undefined, // initial value is decided in component
+  orderBy: 'opened_at', // initial value is decided in component
   orderDirection: 'DESC',
-  categorySections: {},
+  selectedTags: [],
+  selectedCategories: ['user'],
   ...getBlankWorkflow(),
 };
 
@@ -101,9 +107,9 @@ export const workflowSlice = createSlice({
     workflowOrderDirectionChanged: (state, action: PayloadAction<SQLiteDirection>) => {
       state.orderDirection = action.payload;
     },
-    categorySectionsChanged: (state, action: PayloadAction<{ id: string; isOpen: boolean }>) => {
-      const { id, isOpen } = action.payload;
-      state.categorySections[id] = isOpen;
+    workflowSelectedCategoriesChanged: (state, action: PayloadAction<WorkflowCategory[]>) => {
+      state.selectedCategories = action.payload;
+      state.searchTerm = '';
     },
     workflowNameChanged: (state, action: PayloadAction<string>) => {
       state.name = action.payload;
@@ -143,6 +149,18 @@ export const workflowSlice = createSlice({
     },
     workflowSaved: (state) => {
       state.isTouched = false;
+    },
+    workflowSelectedTagToggled: (state, action: PayloadAction<WorkflowTag>) => {
+      const tag = action.payload;
+      const tags = state.selectedTags;
+      if (tags.includes(tag)) {
+        state.selectedTags = tags.filter((t) => t !== tag);
+      } else {
+        state.selectedTags = [...tags, tag];
+      }
+    },
+    workflowSelectedTagsRese: (state) => {
+      state.selectedTags = [];
     },
     formReset: (state) => {
       const rootElement = buildContainer('column', []);
@@ -299,7 +317,9 @@ export const {
   workflowSearchTermChanged,
   workflowOrderByChanged,
   workflowOrderDirectionChanged,
-  categorySectionsChanged,
+  workflowSelectedCategoriesChanged,
+  workflowSelectedTagToggled,
+  workflowSelectedTagsRese,
   formReset,
   formElementAdded,
   formElementRemoved,
@@ -365,7 +385,9 @@ export const selectWorkflowIsTouched = createWorkflowSelector((workflow) => work
 export const selectWorkflowSearchTerm = createWorkflowSelector((workflow) => workflow.searchTerm);
 export const selectWorkflowOrderBy = createWorkflowSelector((workflow) => workflow.orderBy);
 export const selectWorkflowOrderDirection = createWorkflowSelector((workflow) => workflow.orderDirection);
+export const selectWorkflowSelectedCategories = createWorkflowSelector((workflow) => workflow.selectedCategories);
 export const selectWorkflowDescription = createWorkflowSelector((workflow) => workflow.description);
+export const selectWorkflowLibrarySelectedTags = createWorkflowSelector((workflow) => workflow.selectedTags);
 export const selectWorkflowForm = createWorkflowSelector((workflow) => workflow.form);
 
 export const selectCleanEditor = createSelector([selectNodesSlice, selectWorkflowSlice], (nodes, workflow) => {

@@ -30,8 +30,8 @@ dependencies:
     specifier: ^0.7.3
     version: 0.7.3(nanostores@0.11.3)(react@18.3.1)
   '@reduxjs/toolkit':
-    specifier: 2.5.1
-    version: 2.5.1(react-redux@9.1.2)(react@18.3.1)
+    specifier: 2.6.0
+    version: 2.6.0(react-redux@9.1.2)(react@18.3.1)
   '@roarr/browser-log-writer':
     specifier: ^1.3.0
     version: 1.3.0
@@ -50,9 +50,6 @@ dependencies:
   compare-versions:
     specifier: ^6.1.1
     version: 6.1.1
-  dateformat:
-    specifier: ^5.0.3
-    version: 5.0.3
   fracturedjsonjs:
     specifier: ^4.0.2
     version: 4.0.2
@@ -153,8 +150,8 @@ dependencies:
     specifier: ^17.5.1
     version: 17.5.1(react-dom@18.3.1)(react@18.3.1)
   react-virtuoso:
-    specifier: ^4.10.4
-    version: 4.10.4(react-dom@18.3.1)(react@18.3.1)
+    specifier: ^4.12.5
+    version: 4.12.5(react-dom@18.3.1)(react@18.3.1)
   redux-dynamic-middlewares:
     specifier: ^2.2.0
     version: 2.2.0
@@ -226,9 +223,6 @@ devDependencies:
   '@storybook/theming':
     specifier: ^8.3.4
     version: 8.3.4(storybook@8.3.4)
-  '@types/dateformat':
-    specifier: ^5.0.2
-    version: 5.0.2
   '@types/lodash-es':
     specifier: ^4.17.12
     version: 4.17.12
@@ -2317,8 +2311,8 @@ packages:
       - supports-color
     dev: true
 
-  /@reduxjs/toolkit@2.5.1(react-redux@9.1.2)(react@18.3.1):
-    resolution: {integrity: sha512-UHhy3p0oUpdhnSxyDjaRDYaw8Xra75UiLbCiRozVPHjfDwNYkh0TsVm/1OmTW8Md+iDAJmYPWUKMvsMc2GtpNg==}
+  /@reduxjs/toolkit@2.6.0(react-redux@9.1.2)(react@18.3.1):
+    resolution: {integrity: sha512-mWJCYpewLRyTuuzRSEC/IwIBBkYg2dKtQas8mty5MaV2iXzcmicS3gW554FDeOvLnY3x13NIk8MB1e8wHO7rqQ==}
     peerDependencies:
       react: ^16.9.0 || ^17.0.0 || ^18 || ^19
       react-redux: ^7.2.1 || ^8.1.3 || ^9.0.0
@@ -3355,10 +3349,6 @@ packages:
       '@types/d3-selection': 3.0.10
     dev: false
 
-  /@types/dateformat@5.0.2:
-    resolution: {integrity: sha512-M95hNBMa/hnwErH+a+VOD/sYgTmo15OTYTM2Hr52/e0OdOuY+Crag+kd3/ioZrhg0WGbl9Sm3hR7UU+MH6rfOw==}
-    dev: true
-
   /@types/diff-match-patch@1.0.36:
     resolution: {integrity: sha512-xFdR6tkm0MWvBfO8xXCSsinYxHcqkQUlcHeSpMC2ukzOb6lwQAfDmW+Qt0AvlGd8HpsS28qKsB+oPeJn9I39jg==}
     dev: false
@@ -3435,7 +3425,7 @@ packages:
   /@types/lodash.mergewith@4.6.7:
     resolution: {integrity: sha512-3m+lkO5CLRRYU0fhGRp7zbsGi6+BZj0uTVSwvcKU+nSlhjA9/QRNfuSGnD2mX6hQA7ZbmcCkzk5h4ZYGOtk14A==}
     dependencies:
-      '@types/lodash': 4.17.15
+      '@types/lodash': 4.17.16
     dev: false
 
   /@types/lodash.mergewith@4.6.9:
@@ -3447,8 +3437,8 @@ packages:
   /@types/lodash@4.17.10:
     resolution: {integrity: sha512-YpS0zzoduEhuOWjAotS6A5AVCva7X4lVlYLF0FYHAY9sdraBfnatttHItlWeZdGhuEkf+OzMNg2ZYAx8t+52uQ==}
 
-  /@types/lodash@4.17.15:
-    resolution: {integrity: sha512-w/P33JFeySuhN6JLkysYUK2gEmy9kHHFN7E8ro0tkfmlDOgxBDzWEZ/J8cWA+fHqFevpswDTFZnDx+R9lbL6xw==}
+  /@types/lodash@4.17.16:
+    resolution: {integrity: sha512-HX7Em5NYQAXKW+1T+FiuG27NGwzJfCX3s1GjOa7ujxZa52kjJLOr4FUxT+giF6Tgxv1e+/czV/iTtBw27WTU9g==}
     dev: false
 
   /@types/mdx@2.0.13:
@@ -4855,11 +4845,6 @@ packages:
     dependencies:
       '@babel/runtime': 7.25.7
     dev: true
-
-  /dateformat@5.0.3:
-    resolution: {integrity: sha512-Kvr6HmPXUMerlLcLF+Pwq3K7apHpYmGDVqrxcDasBg86UcKeTSNWbEzU8bwdXnxnR44FtMhJAxI4Bov6Y/KUfA==}
-    engines: {node: '>=12.20'}
-    dev: false
 
   /de-indent@1.0.2:
     resolution: {integrity: sha512-e/1zu3xH5MQryN2zdVaF0OrdNLUbvWxzMbi+iNA6Bky7l1RoP8a2fIbRocyHclXt/arDrrR6lL3TqFD9pMQTsg==}
@@ -7913,12 +7898,11 @@ packages:
       tslib: 2.7.0
     dev: false
 
-  /react-virtuoso@4.10.4(react-dom@18.3.1)(react@18.3.1):
-    resolution: {integrity: sha512-G/gprhTbK+lzMxoo/iStcZxVEGph/cIhc3WANEpt92RuMw+LiCZOmBfKoeoZOHlm/iyftTrDJhGaTCpxyucnkQ==}
-    engines: {node: '>=10'}
+  /react-virtuoso@4.12.5(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-YeCbRRsC9CLf0buD0Rct7WsDbzf+yBU1wGbo05/XjbcN2nJuhgh040m3y3+6HVogTZxEqVm45ac9Fpae4/MxRQ==}
     peerDependencies:
-      react: '>=16 || >=17 || >= 18'
-      react-dom: '>=16 || >=17 || >= 18'
+      react: '>=16 || >=17 || >= 18 || >= 19'
+      react-dom: '>=16 || >=17 || >= 18 || >=19'
     dependencies:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)

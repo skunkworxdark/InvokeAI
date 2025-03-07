@@ -1438,6 +1438,46 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workflows/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Counts
+         * @description Gets a the count of workflows that include the specified tags and categories
+         */
+        get: operations["get_counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflows/i/{workflow_id}/opened_at": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Opened At
+         * @description Updates the opened_at field of a workflow
+         */
+        put: operations["update_opened_at"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/style_presets/i/{style_preset_id}": {
         parameters: {
             query?: never;
@@ -2415,8 +2455,11 @@ export type components = {
              * Format: binary
              */
             file: Blob;
-            /** @description The metadata to associate with the image */
-            metadata?: components["schemas"]["JsonValue"] | null;
+            /**
+             * Metadata
+             * @description The metadata to associate with the image, must be a stringified JSON dict
+             */
+            metadata?: string | null;
         };
         /**
          * Boolean Collection Primitive
@@ -21159,6 +21202,11 @@ export type components = {
             /** @description The description of the workflow. */
             category: components["schemas"]["WorkflowCategory"];
             /**
+             * Tags
+             * @description The tags of the workflow.
+             */
+            tags: string;
+            /**
              * Thumbnail Url
              * @description The URL of the workflow thumbnail.
              */
@@ -24252,8 +24300,10 @@ export interface operations {
                 order_by?: components["schemas"]["WorkflowRecordOrderBy"];
                 /** @description The direction to order by */
                 direction?: components["schemas"]["SQLiteDirection"];
-                /** @description The category of workflow to get */
-                category?: components["schemas"]["WorkflowCategory"];
+                /** @description The categories of workflow to get */
+                categories?: components["schemas"]["WorkflowCategory"][] | null;
+                /** @description The tags of workflow to get */
+                tags?: string[] | null;
                 /** @description The text to query by (matches name and description) */
                 query?: string | null;
             };
@@ -24417,6 +24467,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowRecordDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_counts: {
+        parameters: {
+            query?: {
+                /** @description The tags to include */
+                tags?: string[] | null;
+                /** @description The categories to include */
+                categories?: components["schemas"]["WorkflowCategory"][] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_opened_at: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The workflow to update */
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
