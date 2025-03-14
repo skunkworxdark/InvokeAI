@@ -1,13 +1,15 @@
 import { Flex, FormControl, FormLabel, Select } from '@invoke-ai/ui-library';
+import { useStore } from '@nanostores/react';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import {
-  selectWorkflowOrderBy,
-  selectWorkflowOrderDirection,
-  workflowOrderByChanged,
-  workflowOrderDirectionChanged,
-} from 'features/nodes/store/workflowSlice';
+  $workflowLibrarySortOptions,
+  selectWorkflowLibraryDirection,
+  selectWorkflowLibraryOrderBy,
+  workflowLibraryDirectionChanged,
+  workflowLibraryOrderByChanged,
+} from 'features/nodes/store/workflowLibrarySlice';
 import type { ChangeEvent } from 'react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 
@@ -22,8 +24,9 @@ const isDirection = (v: unknown): v is Direction => zDirection.safeParse(v).succ
 export const WorkflowSortControl = () => {
   const { t } = useTranslation();
 
-  const orderBy = useAppSelector(selectWorkflowOrderBy);
-  const direction = useAppSelector(selectWorkflowOrderDirection);
+  const orderBy = useAppSelector(selectWorkflowLibraryOrderBy);
+  const direction = useAppSelector(selectWorkflowLibraryDirection);
+  const sortOptions = useStore($workflowLibrarySortOptions);
 
   const ORDER_BY_LABELS = useMemo(
     () => ({
@@ -50,7 +53,7 @@ export const WorkflowSortControl = () => {
       if (!isOrderBy(e.target.value)) {
         return;
       }
-      dispatch(workflowOrderByChanged(e.target.value));
+      dispatch(workflowLibraryOrderByChanged(e.target.value));
     },
     [dispatch]
   );
@@ -60,20 +63,28 @@ export const WorkflowSortControl = () => {
       if (!isDirection(e.target.value)) {
         return;
       }
-      dispatch(workflowOrderDirectionChanged(e.target.value));
+      dispatch(workflowLibraryDirectionChanged(e.target.value));
     },
     [dispatch]
   );
+
+  useEffect(() => {
+    if (!sortOptions.includes('opened_at')) {
+      dispatch(workflowLibraryOrderByChanged('name'));
+      dispatch(workflowLibraryDirectionChanged('ASC'));
+    }
+  }, [sortOptions, dispatch]);
 
   return (
     <Flex flexDir="row" gap={6}>
       <FormControl orientation="horizontal" gap={0} w="auto">
         <FormLabel>{t('common.orderBy')}</FormLabel>
-        <Select value={orderBy ?? 'opened_at'} onChange={onChangeOrderBy} size="sm">
-          <option value="opened_at">{ORDER_BY_LABELS['opened_at']}</option>
-          <option value="created_at">{ORDER_BY_LABELS['created_at']}</option>
-          <option value="updated_at">{ORDER_BY_LABELS['updated_at']}</option>
-          <option value="name">{ORDER_BY_LABELS['name']}</option>
+        <Select value={orderBy ?? sortOptions[0]} onChange={onChangeOrderBy} size="sm">
+          {sortOptions.map((option) => (
+            <option key={option} value={option}>
+              {ORDER_BY_LABELS[option]}
+            </option>
+          ))}
         </Select>
       </FormControl>
       <FormControl orientation="horizontal" gap={0} w="auto">
