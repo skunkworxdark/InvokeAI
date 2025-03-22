@@ -1,7 +1,20 @@
 import type { ButtonProps, CheckboxProps } from '@invoke-ai/ui-library';
-import { Button, Checkbox, Collapse, Flex, Spacer, Text } from '@invoke-ai/ui-library';
+import {
+  Box,
+  Button,
+  ButtonGroup,
+  Checkbox,
+  Collapse,
+  Flex,
+  Icon,
+  IconButton,
+  Spacer,
+  Text,
+  Tooltip,
+} from '@invoke-ai/ui-library';
 import { useStore } from '@nanostores/react';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
+import { getOverlayScrollbarsParams, overlayScrollbarsStyles } from 'common/components/OverlayScrollbars/constants';
 import type { WorkflowLibraryView, WorkflowTagCategory } from 'features/nodes/store/workflowLibrarySlice';
 import {
   $workflowLibraryCategoriesOptions,
@@ -15,9 +28,10 @@ import {
 } from 'features/nodes/store/workflowLibrarySlice';
 import { NewWorkflowButton } from 'features/workflowLibrary/components/NewWorkflowButton';
 import { UploadWorkflowButton } from 'features/workflowLibrary/components/UploadWorkflowButton';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PiArrowCounterClockwiseBold, PiUsersBold } from 'react-icons/pi';
+import { PiArrowCounterClockwiseBold, PiStarFill, PiUsersBold } from 'react-icons/pi';
 import { useDispatch } from 'react-redux';
 import { useGetCountsByTagQuery } from 'services/api/endpoints/workflows';
 
@@ -27,7 +41,7 @@ export const WorkflowLibrarySideNav = () => {
   const view = useAppSelector(selectWorkflowLibraryView);
 
   return (
-    <Flex h="full" minH={0} overflow="hidden" flexDir="column" w={64} gap={1}>
+    <Flex h="full" minH={0} overflow="hidden" flexDir="column" w={64} gap={0}>
       <Flex flexDir="column" w="full" pb={2}>
         <WorkflowLibraryViewButton view="recent">{t('workflows.recentlyOpened')}</WorkflowLibraryViewButton>
       </Flex>
@@ -48,7 +62,7 @@ export const WorkflowLibrarySideNav = () => {
         )}
       </Flex>
       <Flex h="full" minH={0} overflow="hidden" flexDir="column">
-        <WorkflowLibraryViewButton view="defaults">{t('workflows.browseWorkflows')}</WorkflowLibraryViewButton>
+        <BrowseWorkflowsButton />
         <DefaultsViewCheckboxesCollapsible />
       </Flex>
       <Spacer />
@@ -58,39 +72,56 @@ export const WorkflowLibrarySideNav = () => {
   );
 };
 
-const DefaultsViewCheckboxesCollapsible = memo(() => {
+const BrowseWorkflowsButton = memo(() => {
   const { t } = useTranslation();
-  const dispatch = useDispatch();
-  const tags = useAppSelector(selectWorkflowLibrarySelectedTags);
-  const tagCategoryOptions = useStore($workflowLibraryTagCategoriesOptions);
   const view = useAppSelector(selectWorkflowLibraryView);
-
+  const dispatch = useAppDispatch();
+  const selectedTags = useAppSelector(selectWorkflowLibrarySelectedTags);
   const resetTags = useCallback(() => {
     dispatch(workflowLibraryTagsReset());
   }, [dispatch]);
 
+  if (view === 'defaults' && selectedTags.length > 0) {
+    return (
+      <ButtonGroup>
+        <WorkflowLibraryViewButton view="defaults" w="auto">
+          {t('workflows.browseWorkflows')}
+        </WorkflowLibraryViewButton>
+        <Tooltip label={t('workflows.deselectAll')}>
+          <IconButton
+            onClick={resetTags}
+            size="md"
+            aria-label={t('workflows.deselectAll')}
+            icon={<PiArrowCounterClockwiseBold size={12} />}
+            variant="ghost"
+            bg="base.700"
+            color="base.50"
+          />
+        </Tooltip>
+      </ButtonGroup>
+    );
+  }
+
+  return <WorkflowLibraryViewButton view="defaults">{t('workflows.browseWorkflows')}</WorkflowLibraryViewButton>;
+});
+BrowseWorkflowsButton.displayName = 'BrowseWorkflowsButton';
+
+const overlayscrollbarsOptions = getOverlayScrollbarsParams({ visibility: 'visible' }).options;
+
+const DefaultsViewCheckboxesCollapsible = memo(() => {
+  const tagCategoryOptions = useStore($workflowLibraryTagCategoriesOptions);
+  const view = useAppSelector(selectWorkflowLibraryView);
+
   return (
     <Collapse in={view === 'defaults'}>
       <Flex flexDir="column" gap={2} pl={4} py={2} overflow="hidden" h="100%" minH={0}>
-        <Button
-          isDisabled={tags.length === 0}
-          onClick={resetTags}
-          size="sm"
-          variant="link"
-          fontWeight="bold"
-          justifyContent="flex-start"
-          flexGrow={0}
-          flexShrink={0}
-          leftIcon={<PiArrowCounterClockwiseBold />}
-          h={8}
-        >
-          {t('workflows.deselectAll')}
-        </Button>
-        <Flex flexDir="column" gap={2} overflow="auto">
-          {tagCategoryOptions.map((tagCategory) => (
-            <TagCategory key={tagCategory.categoryTKey} tagCategory={tagCategory} />
-          ))}
-        </Flex>
+        <OverlayScrollbarsComponent style={overlayScrollbarsStyles} options={overlayscrollbarsOptions}>
+          <Flex flexDir="column" gap={2} overflow="auto">
+            {tagCategoryOptions.map((tagCategory) => (
+              <TagCategory key={tagCategory.categoryTKey} tagCategory={tagCategory} />
+            ))}
+          </Flex>
+        </OverlayScrollbarsComponent>
       </Flex>
     </Collapse>
   );
@@ -102,7 +133,7 @@ const useCountForIndividualTag = (tag: string) => {
   const queryArg = useMemo(
     () =>
       ({
-        tags: allTags,
+        tags: allTags.map((tag) => tag.label),
         categories: ['default'],
       }) satisfies Parameters<typeof useGetCountsByTagQuery>[0],
     [allTags]
@@ -127,7 +158,7 @@ const useCountForTagCategory = (tagCategory: WorkflowTagCategory) => {
   const queryArg = useMemo(
     () =>
       ({
-        tags: allTags,
+        tags: allTags.map((tag) => tag.label),
         categories: ['default'], // We only allow filtering by tag for default workflows
       }) satisfies Parameters<typeof useGetCountsByTagQuery>[0],
     [allTags]
@@ -140,7 +171,7 @@ const useCountForTagCategory = (tagCategory: WorkflowTagCategory) => {
             return { count: 0 };
           }
           return {
-            count: tagCategory.tags.reduce((acc, tag) => acc + (data[tag] ?? 0), 0),
+            count: tagCategory.tags.reduce((acc, tag) => acc + (data[tag.label] ?? 0), 0),
           };
         },
       }) satisfies Parameters<typeof useGetCountsByTagQuery>[1],
@@ -190,7 +221,7 @@ const TagCategory = memo(({ tagCategory }: { tagCategory: WorkflowTagCategory })
       </Text>
       <Flex flexDir="column" gap={2} pl={4}>
         {tagCategory.tags.map((tag) => (
-          <TagCheckbox key={tag} tag={tag} />
+          <TagCheckbox key={tag.label} tag={tag} />
         ))}
       </Flex>
     </Flex>
@@ -198,14 +229,15 @@ const TagCategory = memo(({ tagCategory }: { tagCategory: WorkflowTagCategory })
 });
 TagCategory.displayName = 'TagCategory';
 
-const TagCheckbox = memo(({ tag, ...rest }: CheckboxProps & { tag: string }) => {
+const TagCheckbox = memo(({ tag, ...rest }: CheckboxProps & { tag: { label: string; recommended?: boolean } }) => {
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const selectedTags = useAppSelector(selectWorkflowLibrarySelectedTags);
-  const isChecked = selectedTags.includes(tag);
-  const count = useCountForIndividualTag(tag);
+  const isChecked = selectedTags.includes(tag.label);
+  const count = useCountForIndividualTag(tag.label);
 
   const onChange = useCallback(() => {
-    dispatch(workflowLibraryTagToggled(tag));
+    dispatch(workflowLibraryTagToggled(tag.label));
   }, [dispatch, tag]);
 
   if (count === 0) {
@@ -213,9 +245,17 @@ const TagCheckbox = memo(({ tag, ...rest }: CheckboxProps & { tag: string }) => 
   }
 
   return (
-    <Checkbox isChecked={isChecked} onChange={onChange} {...rest} flexShrink={0}>
-      <Text>{`${tag} (${count})`}</Text>
-    </Checkbox>
+    <Flex alignItems="center" gap={2}>
+      <Checkbox isChecked={isChecked} onChange={onChange} {...rest} flexShrink={0} />
+      <Text>{`${tag.label} (${count})`}</Text>
+      {tag.recommended && (
+        <Tooltip label={t('workflows.recommended')}>
+          <Box as="span" lineHeight={0}>
+            <Icon as={PiStarFill} boxSize={4} fill="invokeYellow.500" />
+          </Box>
+        </Tooltip>
+      )}
+    </Flex>
   );
 });
 TagCheckbox.displayName = 'TagCheckbox';
