@@ -1,6 +1,7 @@
 import logging
 import mimetypes
 import socket
+from pathlib import Path
 
 import torch
 
@@ -33,7 +34,16 @@ def check_cudnn(logger: logging.Logger) -> None:
             )
 
 
-def enable_dev_reload() -> None:
+def invokeai_source_dir() -> Path:
+    # `invokeai.__file__` doesn't always work for editable installs
+    this_module_path = Path(__file__).resolve()
+    # https://youtrack.jetbrains.com/issue/PY-38382/Unresolved-reference-spec-but-this-is-standard-builtin
+    # noinspection PyUnresolvedReferences
+    depth = len(__spec__.parent.split("."))
+    return this_module_path.parents[depth - 1]
+
+
+def enable_dev_reload(custom_nodes_path=None) -> None:
     """Enable hot reloading on python file changes during development."""
     from invokeai.backend.util.logging import InvokeAILogger
 
@@ -44,7 +54,10 @@ def enable_dev_reload() -> None:
             'Can\'t start `--dev_reload` because jurigged is not found; `pip install -e ".[dev]"` to include development dependencies.'
         ) from e
     else:
-        jurigged.watch(logger=InvokeAILogger.get_logger(name="jurigged").info)
+        paths = [str(invokeai_source_dir() / "*.py")]
+        if custom_nodes_path:
+            paths.append(str(custom_nodes_path / "*.py"))
+        jurigged.watch(pattern=paths, logger=InvokeAILogger.get_logger(name="jurigged").info)
 
 
 def apply_monkeypatches() -> None:

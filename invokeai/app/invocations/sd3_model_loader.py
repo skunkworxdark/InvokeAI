@@ -3,7 +3,6 @@ from typing import Optional
 from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
     BaseInvocationOutput,
-    Classification,
     invocation,
     invocation_output,
 )
@@ -14,7 +13,7 @@ from invokeai.app.util.t5_model_identifier import (
     preprocess_t5_encoder_model_identifier,
     preprocess_t5_tokenizer_model_identifier,
 )
-from invokeai.backend.model_manager.config import SubModelType
+from invokeai.backend.model_manager.taxonomy import SubModelType
 
 
 @invocation_output("sd3_model_loader_output")
@@ -34,7 +33,6 @@ class Sd3ModelLoaderOutput(BaseInvocationOutput):
     tags=["model", "sd3"],
     category="model",
     version="1.0.1",
-    classification=Classification.Prototype,
 )
 class Sd3ModelLoaderInvocation(BaseInvocation):
     """Loads a SD3 base model, outputting its submodels."""

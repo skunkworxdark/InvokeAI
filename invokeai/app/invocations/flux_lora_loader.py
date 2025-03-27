@@ -3,14 +3,13 @@ from typing import Optional
 from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
     BaseInvocationOutput,
-    Classification,
     invocation,
     invocation_output,
 )
 from invokeai.app.invocations.fields import FieldDescriptions, Input, InputField, OutputField, UIType
 from invokeai.app.invocations.model import CLIPField, LoRAField, ModelIdentifierField, T5EncoderField, TransformerField
 from invokeai.app.services.shared.invocation_context import InvocationContext
-from invokeai.backend.model_manager.config import BaseModelType
+from invokeai.backend.model_manager.taxonomy import BaseModelType
 
 
 @invocation_output("flux_lora_loader_output")
@@ -32,7 +31,6 @@ class FluxLoRALoaderOutput(BaseInvocationOutput):
     tags=["lora", "model", "flux"],
     category="model",
     version="1.2.1",
-    classification=Classification.Prototype,
 )
 class FluxLoRALoaderInvocation(BaseInvocation):
     """Apply a LoRA model to a FLUX transformer and/or text encoder."""
@@ -111,7 +109,6 @@ class FluxLoRALoaderInvocation(BaseInvocation):
     tags=["lora", "model", "flux"],
     category="model",
     version="1.3.1",
-    classification=Classification.Prototype,
 )
 class FLUXLoRACollectionLoader(BaseInvocation):
     """Applies a collection of LoRAs to a FLUX transformer."""
