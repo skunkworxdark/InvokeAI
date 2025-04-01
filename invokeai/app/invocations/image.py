@@ -1089,12 +1089,13 @@ class CanvasV2MaskAndCropInvocation(BaseInvocation, WithMetadata, WithBoard):
 
 
 @invocation(
-    "expand_mask_with_fade", title="Expand Mask with Fade", tags=["image", "mask"], category="image", version="1.0.0"
+    "expand_mask_with_fade", title="Expand Mask with Fade", tags=["image", "mask"], category="image", version="1.0.1"
 )
 class ExpandMaskWithFadeInvocation(BaseInvocation, WithMetadata, WithBoard):
     """Expands a mask with a fade effect. The mask uses black to indicate areas to keep from the generated image and white for areas to discard.
     The mask is thresholded to create a binary mask, and then a distance transform is applied to create a fade effect.
     The fade size is specified in pixels, and the mask is expanded by that amount. The result is a mask with a smooth transition from black to white.
+    If the fade size is 0, the mask is returned as-is.
     """
 
     mask: ImageField = InputField(description="The mask to expand")
@@ -1103,6 +1104,11 @@ class ExpandMaskWithFadeInvocation(BaseInvocation, WithMetadata, WithBoard):
 
     def invoke(self, context: InvocationContext) -> ImageOutput:
         pil_mask = context.images.get_pil(self.mask.image_name, mode="L")
+
+        if self.fade_size_px == 0:
+            # If the fade size is 0, just return the mask as-is.
+            image_dto = context.images.save(image=pil_mask, image_category=ImageCategory.MASK)
+            return ImageOutput.build(image_dto)
 
         np_mask = numpy.array(pil_mask)
 
@@ -1141,8 +1147,21 @@ class ExpandMaskWithFadeInvocation(BaseInvocation, WithMetadata, WithBoard):
         coeffs = numpy.polyfit(x_control, y_control, 3)
         poly = numpy.poly1d(coeffs)
 
-        # Evaluate and clip the smooth mapping
-        feather = numpy.clip(poly(d_norm), 0, 1)
+        # Evaluate the polynomial
+        feather = poly(d_norm)
+
+        # The polynomial fit isn't perfect. Points beyond the fade distance are likely to be slightly less than 1.0,
+        # even though the control points indicate that they should be exactly 1.0. This is due to the nature of the
+        # polynomial fit, which is a best approximation of the control points but not an exact match.
+
+        # When this occurs, the area outside the mask and fade-out will not be 100% transparent. For example, it may
+        # have an alpha value of 1 instead of 0. So we must force pixels at or beyond the fade distance to exactly 1.0.
+
+        # Force pixels at or beyond the fade distance to exactly 1.0
+        feather = numpy.where(d_norm >= 1.0, 1.0, feather)
+
+        # Clip any other values to ensure they're in the valid range [0,1]
+        feather = numpy.clip(feather, 0, 1)
 
         # Build final image.
         np_result = numpy.where(black_mask == 1, 0, (feather * 255).astype(numpy.uint8))

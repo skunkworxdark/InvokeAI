@@ -22,9 +22,8 @@ from pathlib import Path
 import humanize
 import torch
 
-from invokeai.backend.model_manager.config import ModelOnDisk
+from invokeai.backend.model_manager.model_on_disk import ModelOnDisk
 from invokeai.backend.model_manager.search import ModelSearch
-from invokeai.backend.model_manager.taxonomy import ModelFormat
 
 
 def strip(v):
@@ -63,7 +62,7 @@ def load_stripped_model(path: Path, *args, **kwargs):
 
 def create_stripped_model(original_model_path: Path, stripped_model_path: Path) -> ModelOnDisk:
     original = ModelOnDisk(original_model_path)
-    if original.format_type == ModelFormat.Checkpoint:
+    if original.path.is_file():
         shutil.copy2(original.path, stripped_model_path)
     else:
         shutil.copytree(original.path, stripped_model_path, dirs_exist_ok=True)
@@ -71,7 +70,7 @@ def create_stripped_model(original_model_path: Path, stripped_model_path: Path) 
     print(f"Created clone of {original.name} at {stripped.path}")
 
     for component_path in stripped.component_paths():
-        original_state_dict = ModelOnDisk.load_state_dict(component_path)
+        original_state_dict = stripped.load_state_dict(component_path)
         stripped_state_dict = strip(original_state_dict)  # type: ignore
         with open(component_path, "w") as f:
             json.dump(stripped_state_dict, f, indent=4)
