@@ -20,12 +20,12 @@ from invokeai.invocation_api import (
 
 def hist_match(source: np.ndarray[Any, Any], template: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
     # Flatten the source and template images
-    source = source.ravel()
-    template = template.ravel()
+    source_flat = source.ravel()
+    template_flat = template.ravel()
 
     # Get the set of unique pixel values and their corresponding indices and counts
-    _, bin_idx, s_counts = np.unique(source, return_inverse=True, return_counts=True)
-    t_values, t_counts = np.unique(template, return_counts=True)
+    _, bin_idx, s_counts = np.unique(source_flat, return_inverse=True, return_counts=True)
+    t_values, t_counts = np.unique(template_flat, return_counts=True)
 
     # Calculate the cumulative distribution function (CDF) of the source and template images
     s_quantiles = np.cumsum(s_counts).astype(np.float64)
@@ -47,10 +47,10 @@ def hist_match(source: np.ndarray[Any, Any], template: np.ndarray[Any, Any]) -> 
     title="Match Histogram",
     tags=["histogram", "color", "image"],
     category="color",
-    version="1.1.0",
+    version="1.1.1",
 )
 class MatchHistogramInvocation(BaseInvocation, WithMetadata, WithBoard):
-    """match a histogram from one image to another"""
+    """Match a histogram from one image to another using YCbCr color space"""
 
     # Inputs
     image: ImageField = InputField(description="The image to receive the histogram")
@@ -68,9 +68,8 @@ class MatchHistogramInvocation(BaseInvocation, WithMetadata, WithBoard):
         source = context.images.get_pil(self.image.image_name)
         reference = context.images.get_pil(self.reference_image.image_name)
 
-        source_has_alpha = source.mode == "RGBA"
-        if source_has_alpha:
-            source_alpha = source.split()[3]
+        # Extract alpha channel if present
+        source_alpha = source.split()[3] if source.mode == "RGBA" else None
 
         # Check if the source and reference images are colored
         source_is_rgb = source.mode == "RGB" or source.mode == "RGBA"
@@ -105,7 +104,7 @@ class MatchHistogramInvocation(BaseInvocation, WithMetadata, WithBoard):
         else:
             output_image = matched_channels[0]
 
-        if source_has_alpha:
+        if source_alpha is not None:
             output_image.putalpha(source_alpha)
 
         # Save the image
@@ -122,7 +121,7 @@ class MatchHistogramInvocation(BaseInvocation, WithMetadata, WithBoard):
     version="1.0.0",
 )
 class MatchHistogramLabInvocation(BaseInvocation, WithMetadata, WithBoard):
-    """Match a histogram from one image to another using Lab color space options"""
+    """Match a histogram from one image to another using Lab color space"""
 
     # Inputs
     image: ImageField = InputField(description="The image to receive the histogram")
@@ -144,9 +143,7 @@ class MatchHistogramLabInvocation(BaseInvocation, WithMetadata, WithBoard):
         source_is_luminance_only = source.mode == "L"
 
         # Extract alpha channel if present
-        source_has_alpha = source.mode == "RGBA"
-        if source_has_alpha:
-            source_alpha = source.split()[3]
+        source_alpha = source.split()[3] if source.mode == "RGBA" else None
 
         # Always convert to RGB first (unless source is luminance-only)
         if source_is_luminance_only:
@@ -190,7 +187,7 @@ class MatchHistogramLabInvocation(BaseInvocation, WithMetadata, WithBoard):
                 output_image = output_image.convert("L")
 
         # Restore alpha channel if present in source
-        if source_has_alpha:
+        if source_alpha is not None:
             output_image.putalpha(source_alpha)
 
         # Save the image
