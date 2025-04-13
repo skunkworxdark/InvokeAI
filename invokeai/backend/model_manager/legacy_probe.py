@@ -27,6 +27,7 @@ from invokeai.backend.model_manager.config import (
     SubmodelDefinition,
 )
 from invokeai.backend.model_manager.load.model_loaders.generic_diffusers import ConfigLoader
+from invokeai.backend.model_manager.model_on_disk import ModelOnDisk
 from invokeai.backend.model_manager.taxonomy import (
     AnyVariant,
     BaseModelType,
@@ -145,6 +146,7 @@ class ModelProbe(object):
         "CLIPTextModelWithProjection": ModelType.CLIPEmbed,
         "SiglipModel": ModelType.SigLIP,
         "LlavaOnevisionForConditionalGeneration": ModelType.LlavaOnevision,
+        "CogView4Pipeline": ModelType.Main,
     }
 
     TYPE2VARIANT: Dict[ModelType, Callable[[str], Optional[AnyVariant]]] = {ModelType.CLIPEmbed: get_clip_variant_type}
@@ -207,6 +209,7 @@ class ModelProbe(object):
         )
         fields["format"] = ModelFormat(fields.get("format")) if "format" in fields else probe.get_format()
         fields["hash"] = fields.get("hash") or ModelHash(algorithm=hash_algo).hash(model_path)
+        fields["file_size"] = fields.get("file_size") or ModelOnDisk(model_path).size()
 
         fields["default_settings"] = fields.get("default_settings")
 
@@ -856,6 +859,8 @@ class PipelineFolderProbe(FolderProbeBase):
                 transformer_conf = json.load(file)
             if transformer_conf["_class_name"] == "SD3Transformer2DModel":
                 return BaseModelType.StableDiffusion3
+            elif transformer_conf["_class_name"] == "CogView4Transformer2DModel":
+                return BaseModelType.CogView4
             else:
                 raise InvalidModelConfigException(f"Unknown base model for {self.model_path}")
 

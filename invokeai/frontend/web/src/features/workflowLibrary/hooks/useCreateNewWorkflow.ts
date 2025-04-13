@@ -5,10 +5,8 @@ import {
   formFieldInitialValuesChanged,
   workflowCategoryChanged,
   workflowIDChanged,
-  workflowIsPublishedChanged,
   workflowNameChanged,
-  workflowSaved,
-} from 'features/nodes/store/workflowSlice';
+} from 'features/nodes/store/nodesSlice';
 import type { WorkflowV3 } from 'features/nodes/types/workflow';
 import { useGetFormFieldInitialValues } from 'features/workflowLibrary/hooks/useGetFormInitialValues';
 import { newWorkflowSaved } from 'features/workflowLibrary/store/actions';
@@ -66,14 +64,12 @@ export const useCreateLibraryWorkflow = (): CreateLibraryWorkflowReturn => {
           meta: { category },
         } = data.workflow;
         dispatch(workflowIDChanged(id));
-        dispatch(workflowIsPublishedChanged(false));
         dispatch(workflowNameChanged(name));
         dispatch(workflowCategoryChanged(category));
         dispatch(newWorkflowSaved({ category }));
         // When a workflow is saved, the form field initial values are updated to the current form field values
         dispatch(formFieldInitialValuesChanged({ formFieldInitialValues: getFormFieldInitialValues() }));
         updateOpenedAt({ workflow_id: id });
-        dispatch(workflowSaved());
         onSuccess && onSuccess();
         toast.update(toastRef.current, {
           title: t('workflows.workflowSaved'),

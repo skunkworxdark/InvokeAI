@@ -13,17 +13,11 @@ export type PendingConnection = {
   fieldTemplate: FieldInputTemplate | FieldOutputTemplate;
 };
 
+export type WorkflowMode = 'edit' | 'view';
+
 export type NodesState = {
   _version: 1;
   nodes: AnyNode[];
   edges: AnyEdge[];
-};
-
-export type WorkflowMode = 'edit' | 'view';
-
-export type WorkflowsState = Omit<WorkflowV3, 'nodes' | 'edges'> & {
-  _version: 1;
-  isTouched: boolean;
-  mode: WorkflowMode;
   formFieldInitialValues: Record<string, StatefulFieldValue>;
-};
+} & Omit<WorkflowV3, 'nodes' | 'edges' | 'is_published'>;

@@ -6,6 +6,7 @@ import { selectModelManagerV2Slice, setSelectedModelKey } from 'features/modelMa
 import ModelBaseBadge from 'features/modelManagerV2/subpanels/ModelManagerPanel/ModelBaseBadge';
 import ModelFormatBadge from 'features/modelManagerV2/subpanels/ModelManagerPanel/ModelFormatBadge';
 import { toast } from 'features/toast/toast';
+import { filesize } from 'filesize';
 import type { MouseEvent } from 'react';
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -91,6 +92,9 @@ const ModelListItem = ({ model }: ModelListItemProps) => {
           <Flex gap={2} w="full" alignItems="flex-start">
             <Text fontWeight="semibold" noOfLines={1} wordBreak="break-all">
               {model.name}
+            </Text>
+            <Text variant="subtext" fontStyle="italic">
+              {filesize(model.file_size)}
             </Text>
             <Spacer />
           </Flex>

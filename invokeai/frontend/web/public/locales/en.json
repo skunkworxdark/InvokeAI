@@ -767,6 +767,7 @@
         "deleteMsg2": "This WILL delete the model from disk if it is in the InvokeAI root folder. If you are using a custom location, then the model WILL NOT be deleted from disk.",
         "description": "Description",
         "edit": "Edit",
+        "fileSize": "File Size",
         "fluxRedux": "FLUX Redux",
         "height": "Height",
         "huggingFace": "HuggingFace",
@@ -1119,6 +1120,10 @@
             "fluxModelIncompatibleBboxHeight": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), bbox height is {{height}}",
             "fluxModelIncompatibleScaledBboxWidth": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), scaled bbox width is {{width}}",
             "fluxModelIncompatibleScaledBboxHeight": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), scaled bbox height is {{height}}",
+            "modelIncompatibleBboxWidth": "Bbox width is {{width}} but {{model}} requires multiple of {{multiple}}",
+            "modelIncompatibleBboxHeight": "Bbox height is {{height}} but {{model}} requires multiple of {{multiple}}",
+            "modelIncompatibleScaledBboxWidth": "Scaled bbox width is {{width}} but {{model}} requires multiple of {{multiple}}",
+            "modelIncompatibleScaledBboxHeight": "Scaled bbox height is {{height}} but {{model}} requires multiple of {{multiple}}",
             "fluxModelMultipleControlLoRAs": "Can only use 1 Control LoRA at a time",
             "canvasIsFiltering": "Canvas is busy (filtering)",
             "canvasIsTransforming": "Canvas is busy (transforming)",
@@ -1306,7 +1311,10 @@
         "unableToCopy": "Unable to Copy",
         "unableToCopyDesc": "Your browser does not support clipboard access. Firefox users may be able to fix this by following ",
         "unableToCopyDesc_theseSteps": "these steps",
-        "fluxFillIncompatibleWithT2IAndI2I": "FLUX Fill is not compatible with Text to Image or Image to Image. Use other FLUX models for these tasks."
+        "fluxFillIncompatibleWithT2IAndI2I": "FLUX Fill is not compatible with Text to Image or Image to Image. Use other FLUX models for these tasks.",
+        "problemUnpublishingWorkflow": "Problem Unpublishing Workflow",
+        "problemUnpublishingWorkflowDescription": "There was a problem unpublishing the workflow. Please try again.",
+        "workflowUnpublished": "Workflow Unpublished"
     },
     "popovers": {
         "clipSkip": {
@@ -1786,8 +1794,8 @@
             "minimum": "Minimum",
             "maximum": "Maximum",
             "publish": "Publish",
-            "published": "Published",
             "unpublish": "Unpublish",
+            "published": "Published",
             "workflowLocked": "Workflow Locked",
             "workflowLockedPublished": "Published workflows are locked for editing.\nYou can unpublish the workflow to edit it, or make a copy of it.",
             "workflowLockedDuringPublishing": "Workflow is locked while configuring for publishing.",
@@ -2016,6 +2024,14 @@
             "styleDesc": "Applies visual style (colors, textures) without considering its layout.",
             "composition": "Composition Only",
             "compositionDesc": "Replicates layout & structure while ignoring the reference's style."
+        },
+        "fluxReduxImageInfluence": {
+            "imageInfluence": "Image Influence",
+            "lowest": "Lowest",
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High",
+            "highest": "Highest"
         },
         "fill": {
             "fillColor": "Fill Color",
