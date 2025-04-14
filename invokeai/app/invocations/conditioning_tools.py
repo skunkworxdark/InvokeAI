@@ -24,7 +24,7 @@ DOWNSAMPLING_FUNCTIONS = Literal["nearest", "bilinear", "bicubic", "area", "near
     title="FLUX Redux Downsampling",
     tags=["image", "flux"],
     category="image",
-    version="1.0.0",
+    version="1.1.0",
 )
 class FluxReduxDownsamplingInvocation(BaseInvocation):
     """Downsampling Flux Redux conditioning"""
@@ -45,9 +45,9 @@ class FluxReduxDownsamplingInvocation(BaseInvocation):
     )
     weight: float = InputField(
         ge=0,
-        le=1,
+        le=2,
         default=1.0,
-        description="Redux weight (0.0-1.0)",
+        description="Redux weight (0.0-2.0)",
     )
 
     def invoke(self, context: InvocationContext) -> FluxReduxOutput:
@@ -71,5 +71,7 @@ class FluxReduxDownsamplingInvocation(BaseInvocation):
 
         tensor_name = context.tensors.save(rc)
         return FluxReduxOutput(
-            redux_cond=FluxReduxConditioningField(conditioning=TensorField(tensor_name=tensor_name), mask=self.redux_conditioning.mask)
+            redux_cond=FluxReduxConditioningField(
+                conditioning=TensorField(tensor_name=tensor_name), mask=self.redux_conditioning.mask
+            )
         )
