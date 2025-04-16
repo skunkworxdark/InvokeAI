@@ -1809,7 +1809,7 @@
             "cannotPublish": "Cannot publish workflow",
             "publishWarnings": "Warnings",
             "errorWorkflowHasUnsavedChanges": "Workflow has unsaved changes",
-            "errorWorkflowHasBatchOrGeneratorNodes": "Workflow has batch and/or generator nodes",
+            "errorWorkflowHasUnpublishableNodes": "Workflow has batch, generator, or metadata extraction nodes",
             "errorWorkflowHasInvalidGraph": "Workflow graph invalid (hover Invoke button for details)",
             "errorWorkflowHasNoOutputNode": "No output node selected",
             "warningWorkflowHasNoPublishableInputFields": "No publishable input fields selected - published workflow will run with only default values",
@@ -2393,9 +2393,8 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "Workflows: Support for custom string drop-downs in Workflow Builder.",
-            "FLUX: Support for FLUX Fill in Workflows and Canvas.",
-            "LLaVA OneVision VLLM: Beta support in Workflows."
+            "CogView4: Support for CogView4 models in Canvas and Workflows.",
+            "Updated Dependencies: Invoke now runs on the latest version of its dependencies, including Python 3.12 and Pytorch 2.6.0."
         ],
         "readReleaseNotes": "Read Release Notes",
         "watchRecentReleaseVideos": "Watch Recent Release Videos",
