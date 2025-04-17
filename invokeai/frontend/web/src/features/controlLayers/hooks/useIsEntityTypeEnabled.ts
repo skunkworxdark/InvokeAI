@@ -1,13 +1,15 @@
 import { useAppSelector } from 'app/store/storeHooks';
 import { selectIsCogView4, selectIsSD3 } from 'features/controlLayers/store/paramsSlice';
 import type { CanvasEntityType } from 'features/controlLayers/store/types';
-import { useCallback } from 'react';
+import { useMemo } from 'react';
+import type { Equals } from 'tsafe';
+import { assert } from 'tsafe';
 
 export const useIsEntityTypeEnabled = (entityType: CanvasEntityType) => {
   const isSD3 = useAppSelector(selectIsSD3);
   const isCogView4 = useAppSelector(selectIsCogView4);
 
-  const isEntityTypeEnabled = useCallback(() => {
+  const isEntityTypeEnabled = useMemo<boolean>(() => {
     switch (entityType) {
       case 'reference_image':
         return !isSD3 && !isCogView4;
@@ -20,7 +22,7 @@ export const useIsEntityTypeEnabled = (entityType: CanvasEntityType) => {
       case 'raster_layer':
         return true;
       default:
-        break;
+        assert<Equals<typeof entityType, never>>(false);
     }
   }, [entityType, isSD3, isCogView4]);
 
