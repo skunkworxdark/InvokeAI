@@ -66,8 +66,20 @@ export type SchedulerField = z.infer<typeof zSchedulerField>;
 // #endregion
 
 // #region Model-related schemas
-const zBaseModel = z.enum(['any', 'sd-1', 'sd-2', 'sd-3', 'sdxl', 'sdxl-refiner', 'flux', 'cogview4']);
-export const zMainModelBase = z.enum(['sd-1', 'sd-2', 'sd-3', 'sdxl', 'flux', 'cogview4']);
+const zBaseModel = z.enum([
+  'any',
+  'sd-1',
+  'sd-2',
+  'sd-3',
+  'sdxl',
+  'sdxl-refiner',
+  'flux',
+  'cogview4',
+  'imagen3',
+  'chatgpt-4o',
+]);
+export type BaseModelType = z.infer<typeof zBaseModel>;
+export const zMainModelBase = z.enum(['sd-1', 'sd-2', 'sd-3', 'sdxl', 'flux', 'cogview4', 'imagen3', 'chatgpt-4o']);
 export type MainModelBase = z.infer<typeof zMainModelBase>;
 export const isMainModelBase = (base: unknown): base is MainModelBase => zMainModelBase.safeParse(base).success;
 const zModelType = z.enum([
@@ -103,6 +115,7 @@ const zSubModelType = z.enum([
   'scheduler',
   'safety_checker',
 ]);
+export type SubModelType = z.infer<typeof zSubModelType>;
 export const zModelIdentifierField = z.object({
   key: z.string().min(1),
   hash: z.string().min(1),
