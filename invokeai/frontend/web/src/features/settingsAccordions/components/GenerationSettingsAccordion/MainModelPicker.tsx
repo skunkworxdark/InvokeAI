@@ -4,6 +4,7 @@ import {
   Button,
   Flex,
   FormLabel,
+  Icon,
   IconButton,
   Input,
   InputGroup,
@@ -27,6 +28,7 @@ import { typedMemo } from 'common/util/typedMemo';
 import { $installModelsTab } from 'features/modelManagerV2/subpanels/InstallModels';
 import { BASE_COLOR_MAP } from 'features/modelManagerV2/subpanels/ModelManagerPanel/ModelBaseBadge';
 import ModelImage from 'features/modelManagerV2/subpanels/ModelManagerPanel/ModelImage';
+import { DisabledModelWarning } from 'features/parameters/components/MainModel/DisabledModelWarning';
 import { NavigateToModelManagerButton } from 'features/parameters/components/MainModel/NavigateToModelManagerButton';
 import { UseDefaultSettingsButton } from 'features/parameters/components/MainModel/UseDefaultSettingsButton';
 import { modelSelected } from 'features/parameters/store/actions';
@@ -38,10 +40,12 @@ import { isEqual } from 'lodash-es';
 import type { PropsWithChildren } from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { MdMoneyOff } from 'react-icons/md';
 import { PiArrowsInLineVerticalBold, PiArrowsOutLineVerticalBold, PiCaretDownBold, PiXBold } from 'react-icons/pi';
 import { useMainModels } from 'services/api/hooks/modelsByType';
 import { useSelectedModelConfig } from 'services/api/hooks/useSelectedModelConfig';
 import type { AnyModelConfig, BaseModelType } from 'services/api/types';
+import { isCheckpointMainModelConfig } from 'services/api/types';
 
 const getOptionId = (modelConfig: AnyModelConfig) => modelConfig.key;
 
@@ -180,6 +184,10 @@ export const MainModelPicker = memo(() => {
   const pickerRef = useRef<ImperativeModelPickerHandle>(null);
   const dispatch = useAppDispatch();
 
+  const isFluxDevSelected = useMemo(() => {
+    return modelConfig && isCheckpointMainModelConfig(modelConfig) && modelConfig.config_path === 'flux-dev';
+  }, [modelConfig]);
+
   const onClose = useCallback(() => {
     popover.close();
     pickerRef.current?.setSearchTerm('');
@@ -200,10 +208,18 @@ export const MainModelPicker = memo(() => {
       onClose={onClose}
       initialFocusRef={pickerRef.current?.inputRef}
     >
+      <DisabledModelWarning />
       <Flex alignItems="center" gap={2}>
         <InformationalPopover feature="paramModel">
           <FormLabel>{t('modelManager.model')}</FormLabel>
         </InformationalPopover>
+        {isFluxDevSelected && (
+          <InformationalPopover feature="fluxDevLicense" hideDisable={true}>
+            <Flex justifyContent="flex-start">
+              <Icon as={MdMoneyOff} />
+            </Flex>
+          </InformationalPopover>
+        )}
         <PopoverTrigger>
           <Button size="sm" flexGrow={1} variant="outline" colorScheme={modelConfig ? undefined : 'error'}>
             {modelConfig?.name ?? 'Select Model'}
