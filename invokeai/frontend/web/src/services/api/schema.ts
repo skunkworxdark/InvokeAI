@@ -352,7 +352,8 @@ export type paths = {
         put?: never;
         /** Do Hf Login */
         post: operations["do_hf_login"];
-        delete?: never;
+        /** Reset Hf Token */
+        delete: operations["reset_hf_token"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1797,6 +1798,11 @@ export type components = {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
             /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
+            /**
              * Trigger Phrases
              * @description Set of trigger phrases for this model
              */
@@ -3052,6 +3058,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @default  */
             repo_variant?: components["schemas"]["ModelRepoVariant"] | null;
             /**
@@ -3134,6 +3145,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @default  */
             repo_variant?: components["schemas"]["ModelRepoVariant"] | null;
             /**
@@ -3292,6 +3308,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @default  */
             repo_variant?: components["schemas"]["ModelRepoVariant"] | null;
         };
@@ -4783,6 +4804,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @description Default settings for this model */
             default_settings?: components["schemas"]["ControlAdapterDefaultSettings"] | null;
             /**
@@ -4876,6 +4902,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @description Default settings for this model */
             default_settings?: components["schemas"]["ControlAdapterDefaultSettings"] | null;
             /**
@@ -4958,6 +4989,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @description Default settings for this model */
             default_settings?: components["schemas"]["ControlAdapterDefaultSettings"] | null;
             /**
@@ -5044,6 +5080,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @description Default settings for this model */
             default_settings?: components["schemas"]["ControlAdapterDefaultSettings"] | null;
             /** @default  */
@@ -8239,6 +8280,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /**
          * FLUX Redux
@@ -9026,6 +9072,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /** IPAdapterField */
         IPAdapterField: {
@@ -9219,6 +9270,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** Image Encoder Model Id */
             image_encoder_model_id: string;
         };
@@ -13300,6 +13356,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @default  */
             repo_variant?: components["schemas"]["ModelRepoVariant"] | null;
         };
@@ -13471,6 +13532,11 @@ export type components = {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
             /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
+            /**
              * Trigger Phrases
              * @description Set of trigger phrases for this model
              */
@@ -13636,6 +13702,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /**
              * Trigger Phrases
              * @description Set of trigger phrases for this model
@@ -13908,6 +13979,11 @@ export type components = {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
             /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
+            /**
              * Trigger Phrases
              * @description Set of trigger phrases for this model
              */
@@ -14012,6 +14088,11 @@ export type components = {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
             /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
+            /**
              * Trigger Phrases
              * @description Set of trigger phrases for this model
              */
@@ -14115,6 +14196,11 @@ export type components = {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
             /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
+            /**
              * Trigger Phrases
              * @description Set of trigger phrases for this model
              */
@@ -14202,6 +14288,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /**
              * Trigger Phrases
              * @description Set of trigger phrases for this model
@@ -17208,6 +17299,12 @@ export type components = {
              * @description The ID of the session (aka graph execution state)
              */
             session_id: string;
+            /**
+             * Credits
+             * @description The total credits used for this queue item
+             * @default null
+             */
+            credits: number | null;
         };
         /**
          * QueueItemsRetriedEvent
@@ -18998,6 +19095,11 @@ export type components = {
              * @description The nodes that were used as output from the API
              */
             api_output_fields?: components["schemas"]["FieldIdentifier"][] | null;
+            /**
+             * Credits
+             * @description The total credits used for this queue item
+             */
+            credits?: number | null;
             /** @description The fully-populated session to be executed */
             session: components["schemas"]["GraphExecutionState"];
             /** @description The workflow associated with this queue item */
@@ -19114,6 +19216,11 @@ export type components = {
              * @description The nodes that were used as output from the API
              */
             api_output_fields?: components["schemas"]["FieldIdentifier"][] | null;
+            /**
+             * Credits
+             * @description The total credits used for this queue item
+             */
+            credits?: number | null;
         };
         /** SessionQueueStatus */
         SessionQueueStatus: {
@@ -19275,6 +19382,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @default  */
             repo_variant?: components["schemas"]["ModelRepoVariant"] | null;
         };
@@ -19419,6 +19531,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /**
          * Image-to-Image
@@ -20141,6 +20258,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
             /** @description Default settings for this model */
             default_settings?: components["schemas"]["ControlAdapterDefaultSettings"] | null;
             /** @default  */
@@ -20364,6 +20486,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /** T5EncoderConfig */
         T5EncoderConfig: {
@@ -20435,6 +20562,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /** T5EncoderField */
         T5EncoderField: {
@@ -20543,6 +20675,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /**
          * TextualInversionFolderConfig
@@ -20617,6 +20754,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /** Tile */
         Tile: {
@@ -20929,7 +21071,7 @@ export type components = {
          *     used, and the type will be ignored. They are included here for backwards compatibility.
          * @enum {string}
          */
-        UIType: "MainModelField" | "CogView4MainModelField" | "FluxMainModelField" | "SD3MainModelField" | "SDXLMainModelField" | "SDXLRefinerModelField" | "ONNXModelField" | "VAEModelField" | "FluxVAEModelField" | "LoRAModelField" | "ControlNetModelField" | "IPAdapterModelField" | "T2IAdapterModelField" | "T5EncoderModelField" | "CLIPEmbedModelField" | "CLIPLEmbedModelField" | "CLIPGEmbedModelField" | "SpandrelImageToImageModelField" | "ControlLoRAModelField" | "SigLipModelField" | "FluxReduxModelField" | "LLaVAModelField" | "SchedulerField" | "AnyField" | "CollectionField" | "CollectionItemField" | "DEPRECATED_Boolean" | "DEPRECATED_Color" | "DEPRECATED_Conditioning" | "DEPRECATED_Control" | "DEPRECATED_Float" | "DEPRECATED_Image" | "DEPRECATED_Integer" | "DEPRECATED_Latents" | "DEPRECATED_String" | "DEPRECATED_BooleanCollection" | "DEPRECATED_ColorCollection" | "DEPRECATED_ConditioningCollection" | "DEPRECATED_ControlCollection" | "DEPRECATED_FloatCollection" | "DEPRECATED_ImageCollection" | "DEPRECATED_IntegerCollection" | "DEPRECATED_LatentsCollection" | "DEPRECATED_StringCollection" | "DEPRECATED_BooleanPolymorphic" | "DEPRECATED_ColorPolymorphic" | "DEPRECATED_ConditioningPolymorphic" | "DEPRECATED_ControlPolymorphic" | "DEPRECATED_FloatPolymorphic" | "DEPRECATED_ImagePolymorphic" | "DEPRECATED_IntegerPolymorphic" | "DEPRECATED_LatentsPolymorphic" | "DEPRECATED_StringPolymorphic" | "DEPRECATED_UNet" | "DEPRECATED_Vae" | "DEPRECATED_CLIP" | "DEPRECATED_Collection" | "DEPRECATED_CollectionItem" | "DEPRECATED_Enum" | "DEPRECATED_WorkflowField" | "DEPRECATED_IsIntermediate" | "DEPRECATED_BoardField" | "DEPRECATED_MetadataItem" | "DEPRECATED_MetadataItemCollection" | "DEPRECATED_MetadataItemPolymorphic" | "DEPRECATED_MetadataDict";
+        UIType: "MainModelField" | "CogView4MainModelField" | "FluxMainModelField" | "SD3MainModelField" | "SDXLMainModelField" | "SDXLRefinerModelField" | "ONNXModelField" | "VAEModelField" | "FluxVAEModelField" | "LoRAModelField" | "ControlNetModelField" | "IPAdapterModelField" | "T2IAdapterModelField" | "T5EncoderModelField" | "CLIPEmbedModelField" | "CLIPLEmbedModelField" | "CLIPGEmbedModelField" | "SpandrelImageToImageModelField" | "ControlLoRAModelField" | "SigLipModelField" | "FluxReduxModelField" | "LLaVAModelField" | "Imagen3ModelField" | "ChatGPT4oModelField" | "SchedulerField" | "AnyField" | "CollectionField" | "CollectionItemField" | "DEPRECATED_Boolean" | "DEPRECATED_Color" | "DEPRECATED_Conditioning" | "DEPRECATED_Control" | "DEPRECATED_Float" | "DEPRECATED_Image" | "DEPRECATED_Integer" | "DEPRECATED_Latents" | "DEPRECATED_String" | "DEPRECATED_BooleanCollection" | "DEPRECATED_ColorCollection" | "DEPRECATED_ConditioningCollection" | "DEPRECATED_ControlCollection" | "DEPRECATED_FloatCollection" | "DEPRECATED_ImageCollection" | "DEPRECATED_IntegerCollection" | "DEPRECATED_LatentsCollection" | "DEPRECATED_StringCollection" | "DEPRECATED_BooleanPolymorphic" | "DEPRECATED_ColorPolymorphic" | "DEPRECATED_ConditioningPolymorphic" | "DEPRECATED_ControlPolymorphic" | "DEPRECATED_FloatPolymorphic" | "DEPRECATED_ImagePolymorphic" | "DEPRECATED_IntegerPolymorphic" | "DEPRECATED_LatentsPolymorphic" | "DEPRECATED_StringPolymorphic" | "DEPRECATED_UNet" | "DEPRECATED_Vae" | "DEPRECATED_CLIP" | "DEPRECATED_Collection" | "DEPRECATED_CollectionItem" | "DEPRECATED_Enum" | "DEPRECATED_WorkflowField" | "DEPRECATED_IsIntermediate" | "DEPRECATED_BoardField" | "DEPRECATED_MetadataItem" | "DEPRECATED_MetadataItemCollection" | "DEPRECATED_MetadataItemPolymorphic" | "DEPRECATED_MetadataDict";
         /** UNetField */
         UNetField: {
             /** @description Info to load unet submodel */
@@ -21144,6 +21286,11 @@ export type components = {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
             /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
+            /**
              * Config Path
              * @description path to the checkpoint model config file
              */
@@ -21227,6 +21374,11 @@ export type components = {
             submodels?: {
                 [key: string]: components["schemas"]["SubmodelDefinition"];
             } | null;
+            /**
+             * Usage Info
+             * @description Usage information for this model
+             */
+            usage_info?: string | null;
         };
         /** VAEField */
         VAEField: {
@@ -22498,6 +22650,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_hf_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HFTokenStatus"];
                 };
             };
         };
