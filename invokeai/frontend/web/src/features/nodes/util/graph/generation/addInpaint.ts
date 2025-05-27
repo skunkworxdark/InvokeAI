@@ -14,7 +14,7 @@ import type {
   VaeSourceNodes,
 } from 'features/nodes/util/graph/types';
 import { isEqual } from 'lodash-es';
-import type { Invocation } from 'services/api/types';
+import type { ImageDTO, Invocation } from 'services/api/types';
 
 type AddInpaintArg = {
   state: RootState;
@@ -29,6 +29,7 @@ type AddInpaintArg = {
   scaledSize: Dimensions;
   denoising_start: number;
   fp32: boolean;
+  seed: number;
 };
 
 export const addInpaint = async ({
@@ -44,6 +45,7 @@ export const addInpaint = async ({
   scaledSize,
   denoising_start,
   fp32,
+  seed,
 }: AddInpaintArg): Promise<Invocation<'invokeai_img_blend' | 'apply_mask_to_image'>> => {
   denoise.denoising_start = denoising_start;
 
@@ -51,19 +53,38 @@ export const addInpaint = async ({
   const canvasSettings = selectCanvasSettingsSlice(state);
   const canvas = selectCanvasSlice(state);
 
-  const { bbox } = canvas;
+  const { rect } = canvas.bbox;
 
   const rasterAdapters = manager.compositor.getVisibleAdaptersOfType('raster_layer');
-  const initialImage = await manager.compositor.getCompositeImageDTO(rasterAdapters, bbox.rect, {
+  const initialImage = await manager.compositor.getCompositeImageDTO(rasterAdapters, rect, {
     is_intermediate: true,
     silent: true,
   });
 
   const inpaintMaskAdapters = manager.compositor.getVisibleAdaptersOfType('inpaint_mask');
-  const maskImage = await manager.compositor.getCompositeImageDTO(inpaintMaskAdapters, bbox.rect, {
-    is_intermediate: true,
-    silent: true,
-  });
+
+  // Get inpaint mask adapters that have noise settings
+  const noiseMaskAdapters = inpaintMaskAdapters.filter((adapter) => adapter.state.noiseLevel !== undefined);
+
+  // Create a composite noise mask if we have any adapters with noise settings
+  let noiseMaskImage: ImageDTO | null = null;
+  if (noiseMaskAdapters.length > 0) {
+    noiseMaskImage = await manager.compositor.getGrayscaleMaskCompositeImageDTO(noiseMaskAdapters, rect, 'noiseLevel', {
+      is_intermediate: true,
+      silent: true,
+    });
+  }
+
+  // Create a composite denoise limit mask
+  const maskImage = await manager.compositor.getGrayscaleMaskCompositeImageDTO(
+    inpaintMaskAdapters, // denoise limit defaults to 1 for masks that don't have it
+    rect,
+    'denoiseLimit',
+    {
+      is_intermediate: true,
+      silent: true,
+    }
+  );
 
   const needsScaleBeforeProcessing = !isEqual(scaledSize, originalSize);
 
@@ -82,15 +103,38 @@ export const addInpaint = async ({
       image: { image_name: initialImage.image_name },
       ...scaledSize,
     });
-    const alphaToMask = g.addNode({
-      id: getPrefixedId('alpha_to_mask'),
-      type: 'tomask',
-      image: { image_name: maskImage.image_name },
-      invert: !canvasSettings.preserveMask,
-    });
+
+    // If we have a noise mask, apply it to the input image before i2l conversion
+    if (noiseMaskImage) {
+      // Resize the noise mask to match the scaled size
+      const resizeNoiseMaskToScaledSize = g.addNode({
+        id: getPrefixedId('resize_noise_mask_to_scaled_size'),
+        type: 'img_resize',
+        image: { image_name: noiseMaskImage.image_name },
+        ...scaledSize,
+      });
+
+      // Add noise to the scaled image using the mask
+      const noiseNode = g.addNode({
+        type: 'img_noise',
+        id: getPrefixedId('add_inpaint_noise'),
+        noise_type: 'gaussian',
+        amount: 1.0, // the mask controls the actual intensity
+        noise_color: true,
+        seed: seed,
+      });
+
+      g.addEdge(resizeImageToScaledSize, 'image', noiseNode, 'image');
+      g.addEdge(resizeNoiseMaskToScaledSize, 'image', noiseNode, 'mask');
+      g.addEdge(noiseNode, 'image', i2l, 'image');
+    } else {
+      g.addEdge(resizeImageToScaledSize, 'image', i2l, 'image');
+    }
+
     const resizeMaskToScaledSize = g.addNode({
       id: getPrefixedId('resize_mask_to_scaled_size'),
       type: 'img_resize',
+      image: { image_name: maskImage.image_name },
       ...scaledSize,
     });
     const resizeImageToOriginalSize = g.addNode({
@@ -117,12 +161,8 @@ export const addInpaint = async ({
       fade_size_px: params.maskBlur,
     });
 
-    // Resize initial image and mask to scaled size, feed into to gradient mask
-    g.addEdge(alphaToMask, 'image', resizeMaskToScaledSize, 'image');
-    g.addEdge(resizeImageToScaledSize, 'image', i2l, 'image');
     g.addEdge(i2l, 'latents', denoise, 'latents');
     g.addEdge(vaeSource, 'vae', i2l, 'vae');
-
     g.addEdge(vaeSource, 'vae', createGradientMask, 'vae');
     if (!isMainModelWithoutUnet(modelLoader)) {
       g.addEdge(modelLoader, 'unet', createGradientMask, 'unet');
@@ -169,12 +209,23 @@ export const addInpaint = async ({
       ...(i2lNodeType === 'i2l' ? { fp32 } : {}),
     });
 
-    const alphaToMask = g.addNode({
-      id: getPrefixedId('alpha_to_mask'),
-      type: 'tomask',
-      image: { image_name: maskImage.image_name },
-      invert: !canvasSettings.preserveMask,
-    });
+    // If we have a noise mask, apply it to the input image before i2l conversion
+    if (noiseMaskImage) {
+      // Add noise to the scaled image using the mask
+      const noiseNode = g.addNode({
+        type: 'img_noise',
+        id: getPrefixedId('add_inpaint_noise'),
+        image: initialImage.image_name ? { image_name: initialImage.image_name } : undefined,
+        noise_type: 'gaussian',
+        amount: 1.0, // the mask controls the actual intensity
+        noise_color: true,
+        seed: seed,
+        mask: { image_name: noiseMaskImage.image_name },
+      });
+
+      g.addEdge(noiseNode, 'image', i2l, 'image');
+    }
+
     const createGradientMask = g.addNode({
       id: getPrefixedId('create_gradient_mask'),
       type: 'create_gradient_mask',
@@ -183,9 +234,9 @@ export const addInpaint = async ({
       edge_radius: params.canvasCoherenceEdgeSize,
       fp32,
       image: { image_name: initialImage.image_name },
+      mask: { image_name: maskImage.image_name },
     });
 
-    g.addEdge(alphaToMask, 'image', createGradientMask, 'mask');
     g.addEdge(i2l, 'latents', denoise, 'latents');
     g.addEdge(vaeSource, 'vae', i2l, 'vae');
     g.addEdge(vaeSource, 'vae', createGradientMask, 'vae');

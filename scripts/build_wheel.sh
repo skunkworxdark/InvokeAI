@@ -38,6 +38,12 @@ echo -e "${BGREEN}HEAD${RESET}:"
 git_show HEAD
 echo
 
+# If the classifiers are invalid, publishing to PyPI will fail but the build will succeed.
+# It's a fast check, do it early.
+echo "Checking pyproject classifiers..."
+python3 ./check_classifiers.py ../pyproject.toml
+echo
+
 # ---------------------- FRONTEND ----------------------
 
 pushd ../invokeai/frontend/web >/dev/null
