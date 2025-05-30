@@ -1,5 +1,6 @@
 import { Box, Textarea } from '@invoke-ai/ui-library';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
+import { usePersistedTextAreaSize } from 'common/hooks/usePersistedTextareaSize';
 import { positivePromptChanged, selectBase, selectPositivePrompt } from 'features/controlLayers/store/paramsSlice';
 import { ShowDynamicPromptsPreviewButton } from 'features/dynamicPrompts/components/ShowDynamicPromptsPreviewButton';
 import { PromptLabel } from 'features/parameters/components/Prompts/PromptLabel';
@@ -19,12 +20,21 @@ import type { HotkeyCallback } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { useListStylePresetsQuery } from 'services/api/endpoints/stylePresets';
 
+const persistOptions: Parameters<typeof usePersistedTextAreaSize>[2] = {
+  trackWidth: false,
+  trackHeight: true,
+  initialHeight: 120,
+};
+
 export const ParamPositivePrompt = memo(() => {
   const dispatch = useAppDispatch();
   const prompt = useAppSelector(selectPositivePrompt);
   const baseModel = useAppSelector(selectBase);
   const viewMode = useAppSelector(selectStylePresetViewMode);
   const activeStylePresetId = useAppSelector(selectStylePresetActivePresetId);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  usePersistedTextAreaSize('positive_prompt', textareaRef, persistOptions);
 
   const { activeStylePreset } = useListStylePresetsQuery(undefined, {
     selectFromResult: ({ data }) => {
@@ -36,7 +46,6 @@ export const ParamPositivePrompt = memo(() => {
     },
   });
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { t } = useTranslation();
   const handleChange = useCallback(
     (v: string) => {
@@ -75,7 +84,6 @@ export const ParamPositivePrompt = memo(() => {
           ref={textareaRef}
           value={prompt}
           onChange={onChange}
-          minH={40}
           onKeyDown={onKeyDown}
           variant="darkFilled"
           borderTopWidth={24} // This prevents the prompt from being hidden behind the header
@@ -83,6 +91,8 @@ export const ParamPositivePrompt = memo(() => {
           paddingInlineStart={3}
           paddingTop={0}
           paddingBottom={3}
+          resize="vertical"
+          minH={28}
         />
         <PromptOverlayButtonWrapper>
           <AddPromptTriggerButton isOpen={isOpen} onOpen={onOpen} />

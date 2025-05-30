@@ -1,12 +1,13 @@
 import io
+import json
 import traceback
-from typing import Optional
+from typing import ClassVar, Optional
 
 from fastapi import BackgroundTasks, Body, HTTPException, Path, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.routing import APIRouter
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from invokeai.app.api.dependencies import ApiDependencies
 from invokeai.app.api.extract_metadata_from_image import extract_metadata_from_image
@@ -19,12 +20,27 @@ from invokeai.app.services.image_records.image_records_common import (
 from invokeai.app.services.images.images_common import ImageDTO, ImageUrlsDTO
 from invokeai.app.services.shared.pagination import OffsetPaginatedResults
 from invokeai.app.services.shared.sqlite.sqlite_common import SQLiteDirection
+from invokeai.app.util.controlnet_utils import heuristic_resize_fast
+from invokeai.backend.image_util.util import np_to_pil, pil_to_np
 
 images_router = APIRouter(prefix="/v1/images", tags=["images"])
 
 
 # images are immutable; set a high max-age
 IMAGE_MAX_AGE = 31536000
+
+
+class ResizeToDimensions(BaseModel):
+    width: int = Field(..., gt=0)
+    height: int = Field(..., gt=0)
+
+    MAX_SIZE: ClassVar[int] = 4096 * 4096
+
+    @model_validator(mode="after")
+    def validate_total_output_size(self):
+        if self.width * self.height > self.MAX_SIZE:
+            raise ValueError(f"Max total output size for resizing is {self.MAX_SIZE} pixels")
+        return self
 
 
 @images_router.post(
@@ -46,6 +62,11 @@ async def upload_image(
     board_id: Optional[str] = Query(default=None, description="The board to add this image to, if any"),
     session_id: Optional[str] = Query(default=None, description="The session ID associated with this upload, if any"),
     crop_visible: Optional[bool] = Query(default=False, description="Whether to crop the image"),
+    resize_to: Optional[str] = Body(
+        default=None,
+        description=f"Dimensions to resize the image to, must be stringified tuple of 2 integers. Max total pixel count: {ResizeToDimensions.MAX_SIZE}",
+        example='"[1024,1024]"',
+    ),
     metadata: Optional[str] = Body(
         default=None,
         description="The metadata to associate with the image, must be a stringified JSON dict",
@@ -59,12 +80,30 @@ async def upload_image(
     contents = await file.read()
     try:
         pil_image = Image.open(io.BytesIO(contents))
-        if crop_visible:
-            bbox = pil_image.getbbox()
-            pil_image = pil_image.crop(bbox)
     except Exception:
         ApiDependencies.invoker.services.logger.error(traceback.format_exc())
         raise HTTPException(status_code=415, detail="Failed to read image")
+
+    if crop_visible:
+        try:
+            bbox = pil_image.getbbox()
+            pil_image = pil_image.crop(bbox)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to crop image")
+
+    if resize_to:
+        try:
+            dims = json.loads(resize_to)
+            resize_dims = ResizeToDimensions(**dims)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid resize_to format or size")
+
+        try:
+            np_image = pil_to_np(pil_image)
+            np_image = heuristic_resize_fast(np_image, (resize_dims.width, resize_dims.height))
+            pil_image = np_to_pil(np_image)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to resize image")
 
     extracted_metadata = extract_metadata_from_image(
         pil_image=pil_image,
@@ -343,6 +382,29 @@ class DeleteImagesFromListResult(BaseModel):
 async def delete_images_from_list(
     image_names: list[str] = Body(description="The list of names of images to delete", embed=True),
 ) -> DeleteImagesFromListResult:
+    try:
+        deleted_images: list[str] = []
+        for image_name in image_names:
+            try:
+                ApiDependencies.invoker.services.images.delete(image_name)
+                deleted_images.append(image_name)
+            except Exception:
+                pass
+        return DeleteImagesFromListResult(deleted_images=deleted_images)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete images")
+
+
+@images_router.delete(
+    "/uncategorized", operation_id="delete_uncategorized_images", response_model=DeleteImagesFromListResult
+)
+async def delete_uncategorized_images() -> DeleteImagesFromListResult:
+    """Deletes all images that are uncategorized"""
+
+    image_names = ApiDependencies.invoker.services.board_images.get_all_board_image_names_for_board(
+        board_id="none", categories=None, is_intermediate=None
+    )
+
     try:
         deleted_images: list[str] = []
         for image_name in image_names:

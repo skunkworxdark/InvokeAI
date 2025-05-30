@@ -2,6 +2,7 @@ import type { PayloadAction } from '@reduxjs/toolkit';
 import { createSelector, createSlice } from '@reduxjs/toolkit';
 import type { PersistConfig, RootState } from 'app/store/store';
 import { newSessionRequested } from 'features/controlLayers/store/actions';
+import type { Dimensions } from 'features/controlLayers/store/types';
 import { workflowLoaded } from 'features/nodes/store/nodesSlice';
 import { atom } from 'nanostores';
 
@@ -15,6 +16,7 @@ const initialUIState: UIState = {
   shouldShowProgressInViewer: true,
   accordions: {},
   expanders: {},
+  textAreaSizes: {},
   shouldShowNotificationV2: true,
 };
 
@@ -42,6 +44,10 @@ export const uiSlice = createSlice({
       const { id, isOpen } = action.payload;
       state.expanders[id] = isOpen;
     },
+    textAreaSizesStateChanged: (state, action: PayloadAction<{ id: string; size: Partial<Dimensions> }>) => {
+      const { id, size } = action.payload;
+      state.textAreaSizes[id] = size;
+    },
     shouldShowNotificationChanged: (state, action: PayloadAction<boolean>) => {
       state.shouldShowNotificationV2 = action.payload;
     },
@@ -64,6 +70,7 @@ export const {
   accordionStateChanged,
   expanderStateChanged,
   shouldShowNotificationChanged,
+  textAreaSizesStateChanged,
 } = uiSlice.actions;
 
 export const selectUiSlice = (state: RootState) => state.ui;

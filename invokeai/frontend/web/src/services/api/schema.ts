@@ -661,6 +661,26 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/images/uncategorized": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Uncategorized Images
+         * @description Deletes all images that are uncategorized
+         */
+        delete: operations["delete_uncategorized_images"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/images/star": {
         parameters: {
             query?: never;
@@ -2723,6 +2743,11 @@ export type components = {
              * Format: binary
              */
             file: Blob;
+            /**
+             * Resize To
+             * @description Dimensions to resize the image to, must be stringified tuple of 2 integers. Max total pixel count: 16777216
+             */
+            resize_to?: string | null;
             /**
              * Metadata
              * @description The metadata to associate with the image, must be a stringified JSON dict
@@ -23485,6 +23510,26 @@ export interface operations {
             };
         };
     };
+    delete_uncategorized_images: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteImagesFromListResult"];
+                };
+            };
+        };
+    };
     star_images_in_list: {
         parameters: {
             query?: never;
@@ -23812,7 +23857,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description The id of the board */
+                /** @description The id of the board or 'none' for uncategorized images */
                 board_id: string;
             };
             cookie?: never;

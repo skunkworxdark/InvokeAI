@@ -12,6 +12,9 @@ from invokeai.app.invocations.fields import InputFieldJSONSchemaExtra, OutputFie
 from invokeai.app.invocations.model import ModelIdentifierField
 from invokeai.app.services.events.events_common import EventBase
 from invokeai.app.services.session_processor.session_processor_common import ProgressImage
+from invokeai.backend.util.logging import InvokeAILogger
+
+logger = InvokeAILogger.get_logger()
 
 
 def move_defs_to_top_level(openapi_schema: dict[str, Any], component_schema: dict[str, Any]) -> None:

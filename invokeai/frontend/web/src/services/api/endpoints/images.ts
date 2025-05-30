@@ -160,6 +160,42 @@ export const imagesApi = api.injectEndpoints({
         return [];
       },
     }),
+    deleteUncategorizedImages: build.mutation<components['schemas']['DeleteImagesFromListResult'], void>({
+      query: () => ({ url: buildImagesUrl('uncategorized'), method: 'DELETE' }),
+      invalidatesTags: (result) => {
+        if (result && result.deleted_images.length > 0) {
+          const boardId = 'none';
+
+          const tags: ApiTagDescription[] = [
+            {
+              type: 'ImageList',
+              id: getListImagesUrl({
+                board_id: boardId,
+                categories: IMAGE_CATEGORIES,
+              }),
+            },
+            {
+              type: 'ImageList',
+              id: getListImagesUrl({
+                board_id: boardId,
+                categories: ASSETS_CATEGORIES,
+              }),
+            },
+            {
+              type: 'Board',
+              id: boardId,
+            },
+            {
+              type: 'BoardImagesTotal',
+              id: boardId,
+            },
+          ];
+
+          return tags;
+        }
+        return [];
+      },
+    }),
     /**
      * Change an image's `is_intermediate` property.
      */
@@ -270,11 +306,14 @@ export const imagesApi = api.injectEndpoints({
       },
     }),
     uploadImage: build.mutation<ImageDTO, UploadImageArg>({
-      query: ({ file, image_category, is_intermediate, session_id, board_id, crop_visible, metadata }) => {
+      query: ({ file, image_category, is_intermediate, session_id, board_id, crop_visible, metadata, resize_to }) => {
         const formData = new FormData();
         formData.append('file', file);
         if (metadata) {
           formData.append('metadata', JSON.stringify(metadata));
+        }
+        if (resize_to) {
+          formData.append('resize_to', JSON.stringify(resize_to));
         }
         return {
           url: buildImagesUrl('upload'),
@@ -563,6 +602,7 @@ export const {
   useAddImagesToBoardMutation,
   useRemoveImagesFromBoardMutation,
   useDeleteBoardAndImagesMutation,
+  useDeleteUncategorizedImagesMutation,
   useDeleteBoardMutation,
   useStarImagesMutation,
   useUnstarImagesMutation,
