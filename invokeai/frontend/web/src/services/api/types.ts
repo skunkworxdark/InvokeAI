@@ -46,7 +46,7 @@ export type BaseModelType = S['BaseModelType'];
 
 export type ControlLoRAModelConfig = S['ControlLoRALyCORISConfig'] | S['ControlLoRADiffusersConfig'];
 // TODO(MM2): Can we make key required in the pydantic model?
-export type LoRAModelConfig = S['LoRADiffusersConfig'] | S['LoRALyCORISConfig'];
+export type LoRAModelConfig = S['LoRADiffusersConfig'] | S['LoRALyCORISConfig'] | S['LoRAOmiConfig'];
 // TODO(MM2): Can we rename this from Vae -> VAE
 export type VAEModelConfig = S['VAECheckpointConfig'] | S['VAEDiffusersConfig'];
 export type ControlNetModelConfig = S['ControlNetDiffusersConfig'] | S['ControlNetCheckpointConfig'];
@@ -238,6 +238,10 @@ export const isImagen3ModelConfig = (config: AnyModelConfig): config is ApiModel
 
 export const isImagen4ModelConfig = (config: AnyModelConfig): config is ApiModelConfig => {
   return config.type === 'main' && config.base === 'imagen4';
+};
+
+export const isFluxKontextModelConfig = (config: AnyModelConfig): config is ApiModelConfig => {
+  return config.type === 'main' && config.base === 'flux-kontext';
 };
 
 export const isNonRefinerMainModelConfig = (config: AnyModelConfig): config is MainModelConfig => {
