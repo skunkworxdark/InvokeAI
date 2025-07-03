@@ -18,6 +18,7 @@ import {
   getReferenceImageState,
   imageDTOToImageWithDims,
   initialChatGPT4oReferenceImage,
+  initialFluxKontextReferenceImage,
   initialFLUXRedux,
   initialIPAdapter,
 } from './util';
@@ -121,6 +122,16 @@ export const refImagesSlice = createSlice({
         return;
       }
 
+      if (entity.config.model.base === 'flux-kontext') {
+        // Switching to flux-kontext ref image
+        entity.config = {
+          ...initialFluxKontextReferenceImage,
+          image: entity.config.image,
+          model: entity.config.model,
+        };
+        return;
+      }
+
       if (entity.config.model.type === 'flux_redux') {
         // Switching to flux_redux
         entity.config = {
@@ -211,6 +222,14 @@ export const refImagesSlice = createSlice({
       }
       state.selectedEntityId = id;
     },
+    refImageIsEnabledToggled: (state, action: PayloadActionWithId) => {
+      const { id } = action.payload;
+      const entity = selectRefImageEntity(state, id);
+      if (!entity) {
+        return;
+      }
+      entity.isEnabled = !entity.isEnabled;
+    },
     refImagesReset: () => getInitialRefImagesState(),
   },
   extraReducers(builder) {
@@ -232,6 +251,7 @@ export const {
   refImageIPAdapterWeightChanged,
   refImageIPAdapterBeginEndStepPctChanged,
   refImageFLUXReduxImageInfluenceChanged,
+  refImageIsEnabledToggled,
 } = refImagesSlice.actions;
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
