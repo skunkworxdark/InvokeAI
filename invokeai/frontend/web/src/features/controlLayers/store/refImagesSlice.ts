@@ -5,7 +5,6 @@ import { createMemoizedSelector } from 'app/store/createMemoizedSelector';
 import type { PersistConfig, RootState } from 'app/store/store';
 import { clamp } from 'es-toolkit/compat';
 import { getPrefixedId } from 'features/controlLayers/konva/util';
-import { canvasMetadataRecalled } from 'features/controlLayers/store/canvasSlice';
 import type { FLUXReduxImageInfluence, RefImagesState } from 'features/controlLayers/store/types';
 import { zModelIdentifierField } from 'features/nodes/types/common';
 import type { ApiModelConfig, FLUXReduxModelConfig, ImageDTO, IPAdapterModelConfig } from 'services/api/types';
@@ -232,12 +231,6 @@ export const refImagesSlice = createSlice({
     },
     refImagesReset: () => getInitialRefImagesState(),
   },
-  extraReducers(builder) {
-    builder.addCase(canvasMetadataRecalled, (state, action) => {
-      const { referenceImages } = action.payload;
-      state.entities = referenceImages;
-    });
-  },
 });
 
 export const {
@@ -252,6 +245,7 @@ export const {
   refImageIPAdapterBeginEndStepPctChanged,
   refImageFLUXReduxImageInfluenceChanged,
   refImageIsEnabledToggled,
+  refImageRecalled,
 } = refImagesSlice.actions;
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
