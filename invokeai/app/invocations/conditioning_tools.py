@@ -1,11 +1,12 @@
 # 2025 skunkworxdark (https://github.com/skunkworxdark)
 
+import re
 from math import sqrt
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 
 import torch
 from torch.linalg import norm
-from transformers import T5Tokenizer, T5TokenizerFast
+from transformers import T5TokenizerFast
 from typing_extensions import get_args
 
 from invokeai.app.invocations.fields import (
@@ -15,16 +16,24 @@ from invokeai.app.invocations.fields import (
     UIComponent,
 )
 from invokeai.app.invocations.flux_redux import FluxReduxOutput
+from invokeai.app.invocations.flux_text_encoder import FluxTextEncoderInvocation
 from invokeai.app.invocations.model import ModelIdentifierField, T5EncoderField
 from invokeai.app.invocations.primitives import FluxConditioningOutput
 from invokeai.backend.stable_diffusion.diffusion.conditioning_data import ConditioningFieldData, FLUXConditioningInfo
 from invokeai.invocation_api import (
     BaseInvocation,
+    BaseInvocationOutput,
+    CLIPField,
+    FieldDescriptions,
     Input,
     InputField,
     InvocationContext,
+    OutputField,
     invocation,
+    invocation_output,
 )
+
+from .prompt_ast_parser import NestedPromptParser, flatten_ast
 
 DOWNSAMPLING_FUNCTIONS = Literal["nearest", "bilinear", "bicubic", "area", "nearest-exact"]
 
@@ -78,23 +87,23 @@ class FluxReduxDownsamplingInvocation(BaseInvocation):
     def invoke(self, context: InvocationContext) -> FluxReduxOutput:
         cond_redux = context.tensors.load(self.redux_conditioning.conditioning.tensor_name)
 
-        rc = cond_redux.clone()
-        (b, t, h) = rc.shape
-        m = int(sqrt(t))
+        redux_cond_tensor = cond_redux.clone()
+        (b, t, h) = redux_cond_tensor.shape
+        side_length = int(sqrt(t))
         if self.downsampling_factor > 1:
-            rc = rc.view(b, m, m, h)
+            redux_cond_tensor = redux_cond_tensor.view(b, side_length, side_length, h)
 
-            rc = torch.nn.functional.interpolate(
-                rc.transpose(1, -1),
-                size=(m // self.downsampling_factor, m // self.downsampling_factor),
+            redux_cond_tensor = torch.nn.functional.interpolate(
+                redux_cond_tensor.transpose(1, -1),
+                size=(side_length // self.downsampling_factor, side_length // self.downsampling_factor),
                 mode=self.downsampling_function,
             )
-            rc = rc.transpose(1, -1).reshape(b, -1, h)
+            redux_cond_tensor = redux_cond_tensor.transpose(1, -1).reshape(b, -1, h)
 
         if self.weight != 1.0:
-            rc = rc * self.weight * self.weight
+            redux_cond_tensor = redux_cond_tensor * self.weight * self.weight
 
-        tensor_name = context.tensors.save(rc)
+        tensor_name = context.tensors.save(redux_cond_tensor)
         return FluxReduxOutput(
             redux_cond=FluxReduxConditioningField(
                 conditioning=TensorField(tensor_name=tensor_name), mask=self.redux_conditioning.mask
@@ -600,7 +609,7 @@ class FluxReduxRescaleConditioningInvocation(BaseInvocation):
     title="Scale FLUX Prompt Section(s)",
     tags=["conditioning", "prompt", "scale", "flux"],
     category="conditioning",
-    version="1.0.0",
+    version="1.3.0",
 )
 class FluxScalePromptSectionInvocation(BaseInvocation):
     """Scales one or more sections of a FLUX prompt conditioning."""
@@ -624,6 +633,11 @@ class FluxScalePromptSectionInvocation(BaseInvocation):
     scale: Union[float, list[float]] = InputField(
         default=1.0, description="The scaling factor or factors for the prompt section(s)."
     )
+    positions: Optional[Union[int, list[int]]] = InputField(
+        default=None,
+        description="The start character position(s) of the section(s) to scale. If provided, this is used to locate the section(s) instead of searching.",
+        input=Input.Connection,
+    )
     rescale_output: bool = InputField(
         default=False,
         description="Rescales the output T5 embeddings to have the same max vector norm as the original conditioning.",
@@ -638,11 +652,19 @@ class FluxScalePromptSectionInvocation(BaseInvocation):
         sections: list[str] = self.prompt_section if isinstance(self.prompt_section, list) else [self.prompt_section]
         scales: list[float] = self.scale if isinstance(self.scale, list) else [self.scale]
 
-        if len(sections) > 1 and len(scales) == 1:
-            scales = scales * len(sections)
+        positions_list: Optional[list[int]] = None
+        if self.positions is not None:
+            positions_list = [self.positions] if isinstance(self.positions, int) else self.positions
+            if len(positions_list) != len(sections):
+                raise ValueError("The number of prompt sections must match the number of positions.")
 
-        if len(sections) != len(scales):
-            raise ValueError("The number of prompt sections must match the number of scales.")
+        num_items_to_scale = len(sections)
+
+        if len(scales) == 1 and num_items_to_scale > 1:
+            scales = scales * num_items_to_scale
+
+        if len(scales) != num_items_to_scale:
+            raise ValueError("The number of scales must match the number of sections to be scaled.")
 
         new_t5_embeds = self._process_embeds(
             context,
@@ -651,6 +673,7 @@ class FluxScalePromptSectionInvocation(BaseInvocation):
             self.prompt,
             sections,
             scales,
+            positions_list,
         )
 
         if self.rescale_output:
@@ -688,15 +711,6 @@ class FluxScalePromptSectionInvocation(BaseInvocation):
             )
         )
 
-    def _find_all_subsequence_indices(self, sequence, subsequence):
-        """Finds all occurrences of a subsequence and yields their start and end indices."""
-        len_sub = len(subsequence)
-        if len_sub == 0:
-            return
-        for i in range(len(sequence) - len_sub + 1):
-            if sequence[i : i + len_sub] == subsequence:
-                yield i, i + len_sub
-
     def _process_embeds(
         self,
         context: InvocationContext,
@@ -705,6 +719,7 @@ class FluxScalePromptSectionInvocation(BaseInvocation):
         prompt: str,
         sections: list[str],
         scales: list[float],
+        positions: Optional[list[int]] = None,
     ) -> torch.Tensor:
         # Pooled embeddings (e.g. from CLIP) are 2D. Sequence embeddings (e.g. from T5) are 3D.
         # We can only scale a section of a sequence embedding.
@@ -712,32 +727,249 @@ class FluxScalePromptSectionInvocation(BaseInvocation):
             context.logger.warning(f"Cannot apply prompt section scaling to a {embeds.dim()}D tensor. Skipping.")
             return embeds.clone()
 
+        multipliers = torch.ones(embeds.shape[1], device=embeds.device, dtype=embeds.dtype)
+
         with context.models.load(tokenizer_loader) as tokenizer:
-            assert isinstance(tokenizer, (T5Tokenizer, T5TokenizerFast))
-            # We encode without special tokens to find the subsequence of token IDs.
-            prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+            # Tokenize the prompt to get token offsets.
+            assert isinstance(tokenizer, T5TokenizerFast)
+            encoding = tokenizer(prompt, return_offsets_mapping=True, add_special_tokens=False)
+            token_offsets = encoding["offset_mapping"]
+            input_ids = encoding["input_ids"]
 
-            # Create a multiplier tensor (mask) to scale the embeddings.
-            # Initialize with ones, so non-scaled parts are multiplied by 1.
-            multipliers = torch.ones(embeds.shape[1], device=embeds.device, dtype=embeds.dtype)
+            if len(input_ids) > embeds.shape[1]:
+                context.logger.warning(
+                    f"The tokenized prompt length ({len(input_ids)}) exceeds the conditioning tensor "
+                    f"length ({embeds.shape[1]}). The calculated token indices may be incorrect. This can happen "
+                    "if the prompt was truncated during the original encoding."
+                )
 
-            for i, section in enumerate(sections):
-                section_tokens = tokenizer.encode(section, add_special_tokens=False)
-                scale = scales[i]
+            if positions is not None:
+                # If positions are provided, use them to locate the sections to scale.
+                for i, start_char in enumerate(positions):
+                    section = sections[i]
+                    scale = scales[i]
+                    end_char = start_char + len(section)
 
-                if not section_tokens:
-                    context.logger.warning(f"Prompt section at index {i} is empty, not scaling.")
-                    continue
+                    # Sanity check that the section text at the given position matches.
+                    if not prompt.startswith(section, start_char):
+                        context.logger.warning(
+                            f"The prompt section '{section}' was not found at character position {start_char}. Skipping."
+                        )
+                        continue
 
-                indices = list(self._find_all_subsequence_indices(prompt_tokens, section_tokens))
+                    token_indices = [
+                        idx
+                        for idx, (start, end) in enumerate(list(token_offsets))
+                        if start < end_char and end > start_char
+                    ]
 
-                if not indices:
-                    context.logger.warning(f"Prompt section '{section}' not found in prompt '{prompt}'.")
-                    continue
+                    if not token_indices:
+                        context.logger.warning(
+                            f"Could not find tokens for section '{section}' at position {start_char}."
+                        )
+                        continue
 
-                for start_idx, end_idx in indices:
-                    multipliers[start_idx:end_idx] *= scale
+                    start_token_idx = min(token_indices)
+                    end_token_idx = max(token_indices) + 1
 
-            # Reshape multipliers to (1, sequence_length, 1) to broadcast correctly with embeds (1, sequence_length, embedding_dim)
-            # and apply the scaling in a single vectorized operation.
-            return embeds * multipliers.view(1, -1, 1)
+                    if end_token_idx > multipliers.shape[0]:
+                        context.logger.warning(
+                            f"Section '{section}' at position {start_char} extends beyond conditioning length of {multipliers.shape[0]}. Truncating."
+                        )
+                        end_token_idx = multipliers.shape[0]
+
+                    context.logger.info(
+                        f"POS: Scaled '{section}' by {scale:.2f} at tokens {start_token_idx} to {end_token_idx - 1}."
+                    )
+                    multipliers[start_token_idx:end_token_idx] *= scale
+            else:
+                # If no positions, find all occurrences of sections in the prompt string.
+                for i, section in enumerate(sections):
+                    scale = scales[i]
+
+                    if not section:
+                        context.logger.warning(f"Prompt section at index {i} is empty, not scaling.")
+                        continue
+
+                    # Find all occurrences of the section string.
+                    for match in re.finditer(re.escape(section), prompt):
+                        start_char, end_char = match.span()
+
+                        token_indices = [
+                            idx
+                            for idx, (start, end) in enumerate(list(token_offsets))
+                            if start < end_char and end > start_char
+                        ]
+
+                        if not token_indices:
+                            # This can happen if the section is part of a larger token, e.g. searching for "cat" in "caterpillar"
+                            context.logger.warning(
+                                f"Could not find tokens for section '{section}' at position {start_char}."
+                            )
+                            continue
+
+                        start_token_idx = min(token_indices)
+                        end_token_idx = max(token_indices) + 1
+
+                        if end_token_idx > multipliers.shape[0]:
+                            context.logger.warning(
+                                f"Section '{section}' at position {start_char} extends beyond conditioning length of {multipliers.shape[0]}. Truncating."
+                            )
+                            end_token_idx = multipliers.shape[0]
+
+                        context.logger.info(
+                            f"Norm: Scaled '{section}' by {scale:.2f} at tokens {start_token_idx} to {end_token_idx - 1}."
+                        )
+                        multipliers[start_token_idx:end_token_idx] *= scale
+
+        # Reshape multipliers to (1, sequence_length, 1) to broadcast correctly with embeds (1, sequence_length, embedding_dim)
+        # and apply the scaling in a single vectorized operation.
+        return embeds * multipliers.view(1, -1, 1)
+
+
+@invocation_output("flux_weighted_prompt_output")
+class FluxWeightedPromptOutput(BaseInvocationOutput):
+    """Outputs a FLUX conditioning and a cleaned prompt"""
+
+    conditioning: FluxConditioningField = OutputField(description="The FLUX conditioning")
+    cleaned_prompt: str = OutputField(description="The prompt with all weighting syntax removed")
+
+
+@invocation(
+    "flux_weighted_prompt",
+    title="FLUX Weighted Prompt",
+    tags=["prompt", "conditioning", "flux", "weighted"],
+    category="conditioning",
+    version="1.0.0",
+)
+class FluxWeightedPromptInvocation(BaseInvocation):
+    """Parses a weighted prompt, then encodes it for FLUX."""
+
+    prompt: str = InputField(description="Text prompt to encode.", ui_component=UIComponent.Textarea)
+    clip: CLIPField = InputField(
+        title="CLIP",
+        description=FieldDescriptions.clip,
+        input=Input.Connection,
+    )
+    t5_encoder: T5EncoderField = InputField(
+        title="T5Encoder",
+        description=FieldDescriptions.t5_encoder,
+        input=Input.Connection,
+    )
+    t5_max_seq_len: Literal[256, 512] = InputField(
+        description="Max sequence length for the T5 encoder. Expected to be 256 for FLUX schnell models and 512 for FLUX dev models."
+    )
+    mask: Optional[TensorField] = InputField(
+        default=None, description="A mask defining the region that this conditioning prompt applies to."
+    )
+    rescale_output: bool = InputField(
+        default=False,
+        description="Rescales the output T5 embeddings to have the same max vector norm as the original conditioning.",
+    )
+
+    def _nested_parse_prompt(self, prompt: str) -> list[tuple[str, float]]:
+        """
+        Parses a prompt with potentially nested weights and returns a list of (text, weight) tuples.
+        """
+        parser = NestedPromptParser(prompt)
+        ast = parser.parse()
+        weighted_segments = flatten_ast(ast)
+
+        if not weighted_segments:
+            return []
+
+        # The output of flatten_ast might have consecutive text segments with the same weight.
+        # We can merge them for efficiency.
+        merged_segments = [weighted_segments[0]]
+        for text, weight in weighted_segments[1:]:
+            last_text, last_weight = merged_segments[-1]
+            if last_weight == weight:
+                merged_segments[-1] = (last_text + text, weight)
+            else:
+                merged_segments.append((text, weight))
+
+        return merged_segments
+
+    def invoke(self, context: InvocationContext) -> FluxWeightedPromptOutput:
+        # Parse the prompt into weighted segments
+        segments = self._nested_parse_prompt(self.prompt)
+
+        # join the texts to create a clean prompt without any weighting syntax
+        texts = [text for text, _ in segments]
+        cleaned_prompt = "".join(texts)
+
+        # Encode the cleaned prompt using the existing invocation
+        text_encoder = FluxTextEncoderInvocation(
+            prompt=cleaned_prompt,
+            clip=self.clip,
+            t5_encoder=self.t5_encoder,
+            t5_max_seq_len=self.t5_max_seq_len,
+        )
+        text_encoder_output = text_encoder.invoke(context)
+
+        # Load the conditioning data
+        cond_data = context.conditioning.load(text_encoder_output.conditioning.conditioning_name)
+        original_info = cond_data.conditionings[0]
+        assert isinstance(original_info, FLUXConditioningInfo)
+
+        new_t5_embeds = original_info.t5_embeds.clone()
+
+        # Apply scaling to the T5 embeddings based on the parsed segments
+        with context.models.load(self.t5_encoder.tokenizer) as tokenizer:
+            # Tokenize the cleaned prompt to get token offsets
+
+            assert isinstance(tokenizer, T5TokenizerFast)
+            encoding = tokenizer(cleaned_prompt, return_offsets_mapping=True, add_special_tokens=False)
+            token_offsets = encoding["offset_mapping"]
+
+            current_char_idx = 0
+            for i in range(len(texts)):
+                text = texts[i]
+                weight = segments[i][1]  # get weight from original segments
+                if weight != 1.0:
+                    start_char = current_char_idx
+                    end_char = start_char + len(text)
+
+                    token_indices = [
+                        idx for idx, (start, end) in enumerate(token_offsets) if start < end_char and end > start_char
+                    ]
+
+                    if token_indices:
+                        start_token_idx = min(token_indices)
+                        end_token_idx = max(token_indices) + 1
+
+                        context.logger.info(
+                            f"Weighted: Scaled '{text}' by {weight:.2f} at tokens {start_token_idx} to {end_token_idx - 1}."
+                        )
+                        new_t5_embeds[:, start_token_idx:end_token_idx, :] *= weight
+                    else:
+                        context.logger.warning(f"Could not find tokens for segment '{text}'.")
+
+                current_char_idx += len(text)
+
+        if self.rescale_output:
+            original_norms = torch.linalg.norm(original_info.t5_embeds, dim=-1)
+            original_max_norm = torch.max(original_norms)
+            new_norms = torch.linalg.norm(new_t5_embeds, dim=-1)
+            new_max_norm = torch.max(new_norms)
+            context.logger.info(f"Original max norm: {original_max_norm.item():.4f}")
+            context.logger.info(f"Max norm after scaling section(s): {new_max_norm.item():.4f}")
+            epsilon = torch.finfo(new_t5_embeds.dtype).eps
+            if new_max_norm > epsilon:
+                rescale_factor = original_max_norm / new_max_norm
+                new_t5_embeds = new_t5_embeds * rescale_factor
+                context.logger.info(
+                    f"Rescaling by a factor of {rescale_factor.item():.4f} to restore original max norm."
+                )
+                new_norms = torch.linalg.norm(new_t5_embeds, dim=-1)
+                new_max_norm = torch.max(new_norms)
+                context.logger.info(f"Max norm after Rescaling: {new_max_norm.item():.4f}")
+
+        new_info = FLUXConditioningInfo(clip_embeds=original_info.clip_embeds.clone(), t5_embeds=new_t5_embeds)
+        new_cond_data = ConditioningFieldData(conditionings=[new_info])
+        new_cond_name = context.conditioning.save(new_cond_data)
+
+        return FluxWeightedPromptOutput(
+            conditioning=FluxConditioningField(conditioning_name=new_cond_name, mask=self.mask),
+            cleaned_prompt=cleaned_prompt,
+        )
