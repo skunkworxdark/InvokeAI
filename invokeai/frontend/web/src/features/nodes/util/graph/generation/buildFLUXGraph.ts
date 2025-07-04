@@ -3,6 +3,8 @@ import { getPrefixedId } from 'features/controlLayers/konva/util';
 import { selectMainModelConfig, selectParamsSlice } from 'features/controlLayers/store/paramsSlice';
 import { selectRefImagesSlice } from 'features/controlLayers/store/refImagesSlice';
 import { selectCanvasMetadata, selectCanvasSlice } from 'features/controlLayers/store/selectors';
+import { isFluxKontextReferenceImageConfig } from 'features/controlLayers/store/types';
+import { getGlobalReferenceImageWarnings } from 'features/controlLayers/store/validators';
 import { addFLUXFill } from 'features/nodes/util/graph/generation/addFLUXFill';
 import { addFLUXLoRAs } from 'features/nodes/util/graph/generation/addFLUXLoRAs';
 import { addFLUXReduxes } from 'features/nodes/util/graph/generation/addFLUXRedux';
@@ -87,6 +89,15 @@ export const buildFLUXGraph = async (arg: GraphBuilderArg): Promise<GraphBuilder
     guidance = 30;
   }
 
+  const isFluxKontextDev = model.name?.toLowerCase().includes('kontext');
+  if (isFluxKontextDev) {
+    if (generationMode !== 'txt2img') {
+      throw new UnsupportedGenerationModeError(t('toast.fluxKontextIncompatibleGenerationMode'));
+    }
+
+    guidance = 30;
+  }
+
   const { positivePrompt } = selectPresetModifiedPrompts(state);
 
   const g = new Graph(getPrefixedId('flux_graph'));
@@ -108,6 +119,7 @@ export const buildFLUXGraph = async (arg: GraphBuilderArg): Promise<GraphBuilder
     type: 'collect',
     id: getPrefixedId('pos_cond_collect'),
   });
+
   const denoise = g.addNode({
     type: 'flux_denoise',
     id: getPrefixedId('flux_denoise'),
@@ -124,6 +136,31 @@ export const buildFLUXGraph = async (arg: GraphBuilderArg): Promise<GraphBuilder
     type: 'flux_vae_decode',
     id: getPrefixedId('flux_vae_decode'),
   });
+
+  if (isFluxKontextDev) {
+    const validFLUXKontextConfigs = selectRefImagesSlice(state)
+      .entities.filter((entity) => entity.isEnabled)
+      .filter((entity) => isFluxKontextReferenceImageConfig(entity.config))
+      .filter((entity) => getGlobalReferenceImageWarnings(entity, model).length === 0);
+
+    // FLUX Kontext supports only a single conditioning image - we'll just take the first one.
+    // In the future, we can explore concatenating multiple conditioning images in image or latent space.
+    const firstValidFLUXKontextConfig = validFLUXKontextConfigs[0];
+
+    if (firstValidFLUXKontextConfig) {
+      const { image } = firstValidFLUXKontextConfig.config;
+
+      assert(image, 'getGlobalReferenceImageWarnings checks if the image is there, this should never raise');
+
+      const kontextConditioning = g.addNode({
+        type: 'flux_kontext',
+        id: getPrefixedId('flux_kontext'),
+        image,
+      });
+      g.addEdge(kontextConditioning, 'kontext_cond', denoise, 'kontext_conditioning');
+      g.upsertMetadata({ ref_images: [firstValidFLUXKontextConfig] }, 'merge');
+    }
+  }
 
   g.addEdge(modelLoader, 'transformer', denoise, 'transformer');
   g.addEdge(modelLoader, 'vae', denoise, 'controlnet_vae');

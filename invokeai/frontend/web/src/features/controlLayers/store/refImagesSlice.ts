@@ -7,7 +7,13 @@ import { clamp } from 'es-toolkit/compat';
 import { getPrefixedId } from 'features/controlLayers/konva/util';
 import type { FLUXReduxImageInfluence, RefImagesState } from 'features/controlLayers/store/types';
 import { zModelIdentifierField } from 'features/nodes/types/common';
-import type { ApiModelConfig, FLUXReduxModelConfig, ImageDTO, IPAdapterModelConfig } from 'services/api/types';
+import type {
+  ChatGPT4oModelConfig,
+  FLUXKontextModelConfig,
+  FLUXReduxModelConfig,
+  ImageDTO,
+  IPAdapterModelConfig,
+} from 'services/api/types';
 import { assert } from 'tsafe';
 import type { PartialDeep } from 'type-fest';
 
@@ -86,7 +92,9 @@ export const refImagesSlice = createSlice({
     },
     refImageModelChanged: (
       state,
-      action: PayloadActionWithId<{ modelConfig: IPAdapterModelConfig | FLUXReduxModelConfig | ApiModelConfig | null }>
+      action: PayloadActionWithId<{
+        modelConfig: IPAdapterModelConfig | FLUXReduxModelConfig | ChatGPT4oModelConfig | FLUXKontextModelConfig | null;
+      }>
     ) => {
       const { id, modelConfig } = action.payload;
       const entity = selectRefImageEntity(state, id);
@@ -121,7 +129,10 @@ export const refImagesSlice = createSlice({
         return;
       }
 
-      if (entity.config.model.base === 'flux-kontext') {
+      if (
+        entity.config.model.base === 'flux-kontext' ||
+        (entity.config.model.base === 'flux' && entity.config.model.name?.toLowerCase().includes('kontext'))
+      ) {
         // Switching to flux-kontext ref image
         entity.config = {
           ...initialFluxKontextReferenceImage,
