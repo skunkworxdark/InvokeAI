@@ -3,6 +3,7 @@ import { createDeferredPromise, type Deferred } from 'common/util/createDeferred
 import { DockviewPanel, GridviewPanel, type IDockviewPanel, type IGridviewPanel } from 'dockview';
 import { debounce } from 'es-toolkit';
 import type { StoredDockviewPanelState, StoredGridviewPanelState, TabName } from 'features/ui/store/uiTypes';
+import type { Atom } from 'nanostores';
 import { atom } from 'nanostores';
 
 import {
@@ -27,11 +28,20 @@ type Waiter = {
   timeoutId: ReturnType<typeof setTimeout> | null;
 };
 
+/**
+ * The API exposed by the application to manage navigation and panel states.
+ */
 export type NavigationAppApi = {
+  /**
+   * API to manage the currently active tab in the application.
+   */
   activeTab: {
     get: () => TabName;
     set: (tab: TabName) => void;
   };
+  /**
+   * API to manage the storage of panel states.
+   */
   panelStorage: {
     get: (id: string) => StoredDockviewPanelState | StoredGridviewPanelState | undefined;
     set: (id: string, state: StoredDockviewPanelState | StoredGridviewPanelState) => void;
@@ -54,20 +64,17 @@ export class NavigationApi {
   /**
    * A flag indicating if the application is currently switching tabs, which can take some time.
    */
-  $isSwitchingTabs = atom(false);
-  /**
-   * The timeout used to add a short additional delay when switching tabs.
-   *
-   * The time it takes to switch tabs varies depending on the tab, and sometimes it is very fast, resulting in a flicker
-   * of the loading screen. This timeout is used to artificially extend the time the loading screen is shown.
-   */
-  switchingTabsTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _$isLoading = atom(false);
+  $isLoading: Atom<boolean> = this._$isLoading;
 
   /**
    * Separator used to create unique keys for panels. Typo protection.
    */
   KEY_SEPARATOR = ':';
 
+  /**
+   * The application API that provides methods to set and get the current app tab and manage panel storage.
+   */
   _app: NavigationAppApi | null = null;
 
   /**
@@ -87,44 +94,54 @@ export class NavigationApi {
   };
 
   /**
+   * Sets the flag indicating that the navigation is loading and schedules a debounced hide of the loading screen.
+   */
+  _showFakeLoadingScreen = () => {
+    log.debug('Showing fake loading screen for tab switch');
+    this._$isLoading.set(true);
+    this._hideLoadingScreenDebounced();
+  };
+
+  /**
+   * Debounced function to hide the loading screen after a delay.
+   */
+  _hideLoadingScreenDebounced = debounce(() => {
+    log.debug('Hiding fake loading screen for tab switch');
+    this._$isLoading.set(false);
+  }, SWITCH_TABS_FAKE_DELAY_MS);
+
+  /**
    * Switch to a specific app tab.
    *
-   * The loading screen will be shown while the tab is switching.
+   * The loading screen will be shown while the tab is switching (and for a little while longer to smooth out the UX).
    *
    * @param tab - The tab to switch to
    * @return True if the switch was successful, false otherwise
    */
   switchToTab = (tab: TabName): boolean => {
-    if (this.switchingTabsTimeout !== null) {
-      clearTimeout(this.switchingTabsTimeout);
-      this.switchingTabsTimeout = null;
-    }
-    if (tab === this._app?.activeTab.get?.()) {
-      return true;
-    }
-    this.$isSwitchingTabs.set(true);
-    log.debug(`Switching to tab: ${tab}`);
-    if (this._app) {
-      this._app.activeTab.set(tab);
-      return true;
-    } else {
-      log.error('No setAppTab function available to switch tabs');
+    if (!this._app) {
+      log.error('No app connected to switch tabs');
       return false;
     }
+
+    if (tab === this._app.activeTab.get()) {
+      log.debug(`Already on tab: ${tab}`);
+      return true;
+    }
+
+    log.debug(`Switching to tab: ${tab}`);
+    this._showFakeLoadingScreen();
+    this._app.activeTab.set(tab);
+    return true;
   };
 
   /**
-   * Callback for when a tab is ready after switching.
+   * Initializes storage for Gridview panels.
    *
-   * Hides the loading screen after a short delay.
+   * - If the panel has no stored state, it its current dimensions are saved.
+   * - If the panel has a stored state, it is restored to those dimensions.
+   * - If the stored state has dimensions of 0, it is assumed that the panel was collapsed by the user.
    */
-  onTabReady = (tab: TabName): void => {
-    this.switchingTabsTimeout = setTimeout(() => {
-      this.$isSwitchingTabs.set(false);
-      log.debug(`Tab ${tab} ready`);
-    }, SWITCH_TABS_FAKE_DELAY_MS);
-  };
-
   _initGridviewPanelStorage = (key: string, panel: IGridviewPanel) => {
     if (!this._app) {
       log.error('App not connected');
@@ -184,6 +201,12 @@ export class NavigationApi {
     return dispose;
   };
 
+  /**
+   * Initializes storage for Dockview panels.
+   *
+   * - If the panel has no stored state, it saves its current active state.
+   * - If the panel has a stored state, it restores that state.
+   */
   _initDockviewPanelStorage = (key: string, panel: IDockviewPanel) => {
     if (!this._app) {
       log.error('App not connected');
@@ -225,6 +248,9 @@ export class NavigationApi {
     return dispose;
   };
 
+  /**
+   * Helper function to initialize storage for a panel based on its type.
+   */
   _initPanelStorage = (key: string, panel: PanelType) => {
     if (panel instanceof GridviewPanel) {
       return this._initGridviewPanelStorage(key, panel);

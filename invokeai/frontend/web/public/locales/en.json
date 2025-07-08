@@ -1399,7 +1399,7 @@
         "fluxFillIncompatibleWithT2IAndI2I": "FLUX Fill is not compatible with Text to Image or Image to Image. Use other FLUX models for these tasks.",
         "imagenIncompatibleGenerationMode": "Google {{model}} supports Text to Image only. Use other models for Image to Image, Inpainting and Outpainting tasks.",
         "chatGPT4oIncompatibleGenerationMode": "ChatGPT 4o supports Text to Image and Image to Image only. Use other models Inpainting and Outpainting tasks.",
-        "fluxKontextIncompatibleGenerationMode": "FLUX Kontext supports Text to Image only. Use other models for Image to Image, Inpainting and Outpainting tasks.",
+        "fluxKontextIncompatibleGenerationMode": "FLUX Kontext does not support generation from images placed on the canvas. Re-try using the Reference Image section and disable any Raster Layers.",
         "problemUnpublishingWorkflow": "Problem Unpublishing Workflow",
         "problemUnpublishingWorkflowDescription": "There was a problem unpublishing the workflow. Please try again.",
         "workflowUnpublished": "Workflow Unpublished",
@@ -2339,7 +2339,8 @@
             "isolatedLayerPreview": "Isolated Layer Preview",
             "isolatedLayerPreviewDesc": "Whether to show only this layer when performing operations like filtering or transforming.",
             "invertBrushSizeScrollDirection": "Invert Scroll for Brush Size",
-            "pressureSensitivity": "Pressure Sensitivity"
+            "pressureSensitivity": "Pressure Sensitivity",
+            "defaultAutoSwitch": "Default Auto-Switch Mode"
         },
         "HUD": {
             "bbox": "Bbox",
@@ -2380,6 +2381,11 @@
             "saveToGallery": "Save To Gallery",
             "showResultsOn": "Showing Results",
             "showResultsOff": "Hiding Results"
+        },
+        "autoSwitch": {
+            "off": "Off",
+            "switchOnStart": "On Start",
+            "switchOnFinish": "On Finish"
         }
     },
     "upscaling": {
@@ -2555,8 +2561,9 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "Inpainting: Per-mask noise levels and denoise limits.",
-            "Canvas: Smarter aspect ratios for SDXL and improved scroll-to-zoom."
+            "Generate images faster with new Launchpads and a simplified Generate tab.",
+            "Edit with prompts using Flux Kontext Dev.",
+            "Export to PSD, bulk-hide overlays, organize models & images — all in a reimagined interface built for control."
         ],
         "readReleaseNotes": "Read Release Notes",
         "watchRecentReleaseVideos": "Watch Recent Release Videos",
