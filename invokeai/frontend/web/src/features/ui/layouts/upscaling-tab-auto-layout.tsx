@@ -24,7 +24,7 @@ import { AutoLayoutProvider, useAutoLayoutContext, withPanelContainer } from 'fe
 import { TabWithoutCloseButton } from 'features/ui/layouts/TabWithoutCloseButton';
 import type { TabName } from 'features/ui/store/uiTypes';
 import { dockviewTheme } from 'features/ui/styles/theme';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 
 import { navigationApi } from './navigation-api';
 import { PanelHotkeysLogical } from './PanelHotkeysLogical';
@@ -91,7 +91,8 @@ const initializeCenterPanelLayout = (tab: TabName, api: DockviewApi) => {
     },
   });
 
-  // Register panels with navigation API
+  launchpad.api.setActive();
+
   navigationApi.registerPanel(tab, LAUNCHPAD_PANEL_ID, launchpad);
   navigationApi.registerPanel(tab, VIEWER_PANEL_ID, viewer);
 
@@ -102,23 +103,7 @@ const MainPanel = memo(() => {
   const { tab } = useAutoLayoutContext();
   const onReady = useCallback<IDockviewReactProps['onReady']>(
     ({ api }) => {
-      const panels = initializeCenterPanelLayout(tab, api);
-      panels.launchpad.api.setActive();
-
-      const disposables = [
-        api.onWillShowOverlay((e) => {
-          if (e.kind === 'header_space' || e.kind === 'tab') {
-            return;
-          }
-          e.preventDefault();
-        }),
-      ];
-
-      return () => {
-        disposables.forEach((disposable) => {
-          disposable.dispose();
-        });
-      };
+      initializeCenterPanelLayout(tab, api);
     },
     [tab]
   );
@@ -288,30 +273,21 @@ const initializeRootPanelLayout = (layoutApi: GridviewApi) => {
 };
 
 export const UpscalingTabAutoLayout = memo(() => {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [rootApi, setRootApi] = useState<GridviewApi | null>(null);
   const onReady = useCallback<IGridviewReactProps['onReady']>(({ api }) => {
-    setRootApi(api);
+    initializeRootPanelLayout(api);
+    navigationApi.onTabReady('upscaling');
   }, []);
 
-  useEffect(() => {
-    if (!rootApi) {
-      return;
-    }
-
-    initializeRootPanelLayout(rootApi);
-
-    navigationApi.onSwitchedTab();
-
-    return () => {
+  useEffect(
+    () => () => {
       navigationApi.unregisterTab('upscaling');
-    };
-  }, [rootApi]);
+    },
+    []
+  );
 
   return (
-    <AutoLayoutProvider tab="upscaling" rootRef={rootRef}>
+    <AutoLayoutProvider tab="upscaling">
       <GridviewReact
-        ref={rootRef}
         className="dockview-theme-invoke"
         components={rootPanelComponents}
         onReady={onReady}

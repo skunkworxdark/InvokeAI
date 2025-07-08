@@ -25,7 +25,7 @@ import { AutoLayoutProvider, useAutoLayoutContext, withPanelContainer } from 'fe
 import { TabWithoutCloseButton } from 'features/ui/layouts/TabWithoutCloseButton';
 import type { TabName } from 'features/ui/store/uiTypes';
 import { dockviewTheme } from 'features/ui/styles/theme';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 
 import { CanvasTabLeftPanel } from './CanvasTabLeftPanel';
 import { CanvasWorkspacePanel } from './CanvasWorkspacePanel';
@@ -112,7 +112,8 @@ const initializeCenterPanelLayout = (tab: TabName, api: DockviewApi) => {
     },
   });
 
-  // Register panels with navigation API
+  launchpad.api.setActive();
+
   navigationApi.registerPanel(tab, LAUNCHPAD_PANEL_ID, launchpad);
   navigationApi.registerPanel(tab, WORKSPACE_PANEL_ID, workspace);
   navigationApi.registerPanel(tab, VIEWER_PANEL_ID, viewer);
@@ -125,23 +126,7 @@ const MainPanel = memo(() => {
 
   const onReady = useCallback<IDockviewReactProps['onReady']>(
     ({ api }) => {
-      const panels = initializeCenterPanelLayout(tab, api);
-      panels.launchpad.api.setActive();
-
-      const disposables = [
-        api.onWillShowOverlay((e) => {
-          if (e.kind === 'header_space' || e.kind === 'tab') {
-            return;
-          }
-          e.preventDefault();
-        }),
-      ];
-
-      return () => {
-        disposables.forEach((disposable) => {
-          disposable.dispose();
-        });
-      };
+      initializeCenterPanelLayout(tab, api);
     },
     [tab]
   );
@@ -326,30 +311,21 @@ const initializeRootPanelLayout = (api: GridviewApi) => {
 };
 
 export const CanvasTabAutoLayout = memo(() => {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [rootApi, setRootApi] = useState<GridviewApi | null>(null);
   const onReady = useCallback<IGridviewReactProps['onReady']>(({ api }) => {
-    setRootApi(api);
+    initializeRootPanelLayout(api);
+    navigationApi.onTabReady('canvas');
   }, []);
 
-  useEffect(() => {
-    if (!rootApi) {
-      return;
-    }
-
-    initializeRootPanelLayout(rootApi);
-
-    navigationApi.onSwitchedTab();
-
-    return () => {
+  useEffect(
+    () => () => {
       navigationApi.unregisterTab('canvas');
-    };
-  }, [rootApi]);
+    },
+    []
+  );
 
   return (
-    <AutoLayoutProvider tab="canvas" rootRef={rootRef}>
+    <AutoLayoutProvider tab="canvas">
       <GridviewReact
-        ref={rootRef}
         className="dockview-theme-invoke"
         components={rootPanelComponents}
         onReady={onReady}
