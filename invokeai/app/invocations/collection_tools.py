@@ -2,11 +2,11 @@
 
 import json
 import random
-from typing import Any, Generic, Optional, Type, TypeVar, Union, cast
+from typing import Any, Optional, TypeVar, Union, cast
 
 from pydantic import BaseModel
 
-from invokeai.app.invocations.fields import FluxConditioningField, FluxReduxConditioningField
+from invokeai.app.invocations.fields import FluxReduxConditioningField
 from invokeai.app.invocations.flux_controlnet import FluxControlNetField, FluxControlNetOutput
 from invokeai.app.invocations.flux_redux import FluxReduxOutput
 from invokeai.app.invocations.model import LoRAField
@@ -35,6 +35,8 @@ from invokeai.invocation_api import (
     ConditioningField,
     FieldDescriptions,
     FloatOutput,
+    FluxConditioningCollectionOutput,
+    FluxConditioningField,
     ImageField,
     ImageOutput,
     Input,
@@ -280,14 +282,6 @@ class LoRACollectionLinkedInvocation(LoRACollectionInvocation):
             self.collection = join_collections(LoRAField, self.collection, new_lora_field)
 
         return super().invoke(context)
-
-
-# --FLUX Conditioning Collection
-@invocation_output("flux_conditioning_collection_output")
-class FluxConditioningCollectionOutput(BaseInvocationOutput):
-    collection: list[FluxConditioningField] = OutputField(
-        description="The collection of input items", title="Flux Conditionings"
-    )
 
 
 @invocation(
