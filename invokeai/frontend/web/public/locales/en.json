@@ -253,6 +253,7 @@
         "cancel": "Cancel",
         "cancelAllExceptCurrentQueueItemAlertDialog": "Canceling all queue items except the current one will stop pending items but allow the in-progress one to finish.",
         "cancelAllExceptCurrentQueueItemAlertDialog2": "Are you sure you want to cancel all pending queue items?",
+        "cancelAllExceptCurrent": "Cancel All Except Current",
         "cancelAllExceptCurrentTooltip": "Cancel All Except Current Item",
         "cancelTooltip": "Cancel Current Item",
         "cancelSucceeded": "Item Canceled",
@@ -273,7 +274,7 @@
         "retryItem": "Retry Item",
         "cancelBatchSucceeded": "Batch Canceled",
         "cancelBatchFailed": "Problem Canceling Batch",
-        "clearQueueAlertDialog": "Clearing the queue immediately cancels any processing items and clears the queue entirely. Pending filters will be canceled.",
+        "clearQueueAlertDialog": "Clearing the queue immediately cancels any processing items and clears the queue entirely. Pending filters will be canceled and the Canvas Staging Area will be reset.",
         "clearQueueAlertDialog2": "Are you sure you want to clear the queue?",
         "current": "Current",
         "next": "Next",
@@ -470,6 +471,11 @@
             "togglePanels": {
                 "title": "Toggle Panels",
                 "desc": "Show or hide both left and right panels at once."
+            },
+            "selectGenerateTab": {
+                "title": "Select the Generate Tab",
+                "desc": "Selects the Generate tab.",
+                "key": "1"
             }
         },
         "canvas": {
@@ -607,6 +613,16 @@
             "fitBboxToMasks": {
                 "title": "Fit Bbox To Masks",
                 "desc": "Automatically adjust the generation bounding box to fit visible inpaint masks"
+            },
+            "applySegmentAnything": {
+                "title": "Apply Segment Anything",
+                "desc": "Apply the current Segment Anything mask.",
+                "key": "enter"
+            },
+            "cancelSegmentAnything": {
+                "title": "Cancel Segment Anything",
+                "desc": "Cancel the current Segment Anything operation.",
+                "key": "esc"
             }
         },
         "workflows": {
@@ -736,6 +752,10 @@
             "deleteSelection": {
                 "title": "Delete",
                 "desc": "Delete all selected images. By default, you will be prompted to confirm deletion. If the images are currently in use in the app, you will be warned."
+            },
+            "starImage": {
+                "title": "Star/Unstar Image",
+                "desc": "Star or unstar the selected image."
             }
         }
     },
@@ -2611,9 +2631,10 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "Generate images faster with new Launchpads and a simplified Generate tab.",
-            "Edit with prompts using Flux Kontext Dev.",
-            "Export to PSD, bulk-hide overlays, organize models & images — all in a reimagined interface built for control."
+            "New setting to send all Canvas generations directly to the Gallery.",
+            "New Invert Mask (Shift+V) and Fit BBox to Mask (Shift+B) capabilities.",
+            "Expanded support for Model Thumbnails and configurations.",
+            "Various other quality of life updates and fixes"
         ],
         "readReleaseNotes": "Read Release Notes",
         "watchRecentReleaseVideos": "Watch Recent Release Videos",
