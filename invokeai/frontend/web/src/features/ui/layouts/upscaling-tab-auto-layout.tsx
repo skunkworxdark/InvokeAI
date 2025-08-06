@@ -2,7 +2,6 @@ import type { DockviewApi, GridviewApi, IDockviewReactProps, IGridviewReactProps
 import { DockviewReact, GridviewReact, LayoutPriority, Orientation } from 'dockview';
 import { BoardsPanel } from 'features/gallery/components/BoardsListPanelContent';
 import { GalleryPanel } from 'features/gallery/components/Gallery';
-import { GenerationProgressPanel } from 'features/gallery/components/ImageViewer/GenerationProgressPanel';
 import { ImageViewerPanel } from 'features/gallery/components/ImageViewer/ImageViewerPanel';
 import { FloatingLeftPanelButtons } from 'features/ui/components/FloatingLeftPanelButtons';
 import { FloatingRightPanelButtons } from 'features/ui/components/FloatingRightPanelButtons';
@@ -16,6 +15,7 @@ import { AutoLayoutProvider, useAutoLayoutContext, withPanelContainer } from 'fe
 import { DockviewTab } from 'features/ui/layouts/DockviewTab';
 import type { TabName } from 'features/ui/store/uiTypes';
 import { dockviewTheme } from 'features/ui/styles/theme';
+import { t } from 'i18next';
 import { memo, useCallback, useEffect } from 'react';
 
 import { DockviewTabLaunchpad } from './DockviewTabLaunchpad';
@@ -36,7 +36,6 @@ import {
   LEFT_PANEL_ID,
   LEFT_PANEL_MIN_SIZE_PX,
   MAIN_PANEL_ID,
-  PROGRESS_PANEL_ID,
   RIGHT_PANEL_ID,
   RIGHT_PANEL_MIN_SIZE_PX,
   SETTINGS_PANEL_ID,
@@ -54,7 +53,6 @@ const tabComponents = {
 const mainPanelComponents: AutoLayoutDockviewComponents = {
   [LAUNCHPAD_PANEL_ID]: withPanelContainer(UpscalingLaunchpadPanel),
   [VIEWER_PANEL_ID]: withPanelContainer(ImageViewerPanel),
-  [PROGRESS_PANEL_ID]: withPanelContainer(GenerationProgressPanel),
 };
 
 const initializeMainPanelLayout = (tab: TabName, api: DockviewApi) => {
@@ -62,7 +60,7 @@ const initializeMainPanelLayout = (tab: TabName, api: DockviewApi) => {
     const launchpad = api.addPanel<PanelParameters>({
       id: LAUNCHPAD_PANEL_ID,
       component: LAUNCHPAD_PANEL_ID,
-      title: 'Launchpad',
+      title: t('ui.panels.launchpad'),
       tabComponent: DOCKVIEW_TAB_LAUNCHPAD_ID,
       params: {
         tab,
@@ -73,7 +71,7 @@ const initializeMainPanelLayout = (tab: TabName, api: DockviewApi) => {
     api.addPanel<PanelParameters>({
       id: VIEWER_PANEL_ID,
       component: VIEWER_PANEL_ID,
-      title: 'Image Viewer',
+      title: t('ui.panels.imageViewer'),
       tabComponent: DOCKVIEW_TAB_PROGRESS_ID,
       params: {
         tab,

@@ -1,12 +1,11 @@
 import 'i18n';
 
 import type { Middleware } from '@reduxjs/toolkit';
-import { ClearStorageProvider } from 'app/contexts/clear-storage-context';
 import type { StudioInitAction } from 'app/hooks/useStudioInitAction';
 import { $didStudioInit } from 'app/hooks/useStudioInitAction';
 import type { LoggingOverrides } from 'app/logging/logger';
 import { $loggingOverrides, configureLogging } from 'app/logging/logger';
-import { buildStorageApi } from 'app/store/enhancers/reduxRemember/driver';
+import { addStorageListeners } from 'app/store/enhancers/reduxRemember/driver';
 import { $accountSettingsLink } from 'app/store/nanostores/accountSettingsLink';
 import { $authToken } from 'app/store/nanostores/authToken';
 import { $baseUrl } from 'app/store/nanostores/baseUrl';
@@ -37,7 +36,7 @@ import {
 import type { WorkflowCategory } from 'features/nodes/types/workflow';
 import type { ToastConfig } from 'features/toast/toast';
 import type { PropsWithChildren, ReactNode } from 'react';
-import React, { lazy, memo, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { lazy, memo, useEffect, useLayoutEffect, useState } from 'react';
 import { Provider } from 'react-redux';
 import { addMiddleware, resetMiddlewares } from 'redux-dynamic-middlewares';
 import { $socketOptions } from 'services/events/stores';
@@ -72,14 +71,7 @@ interface Props extends PropsWithChildren {
    * If provided, overrides in-app navigation to the model manager
    */
   onClickGoToModelManager?: () => void;
-  storageConfig?: {
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    getItem: (key: string) => Promise<any>;
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    setItem: (key: string, value: any) => Promise<any>;
-    clear: () => Promise<void>;
-    persistThrottle: number;
-  };
+  storagePersistThrottle?: number;
 }
 
 const InvokeAIUI = ({
@@ -106,8 +98,11 @@ const InvokeAIUI = ({
   loggingOverrides,
   onClickGoToModelManager,
   whatsNew,
-  storageConfig,
+  storagePersistThrottle = 2000,
 }: Props) => {
+  const [store, setStore] = useState<ReturnType<typeof createStore> | undefined>(undefined);
+  const [didRehydrate, setDidRehydrate] = useState(false);
+
   useLayoutEffect(() => {
     /*
      * We need to configure logging before anything else happens - useLayoutEffect ensures we set this at the first
@@ -319,44 +314,38 @@ const InvokeAIUI = ({
     };
   }, [isDebugging]);
 
-  const storage = useMemo(() => buildStorageApi(storageConfig), [storageConfig]);
-
   useEffect(() => {
-    const storageCleanup = storage.registerListeners();
-    return () => {
-      storageCleanup();
+    const onRehydrated = () => {
+      setDidRehydrate(true);
     };
-  }, [storage]);
-
-  const store = useMemo(() => {
-    return createStore({
-      driver: storage.reduxRememberDriver,
-      persistThrottle: storageConfig?.persistThrottle ?? 2000,
-    });
-  }, [storage.reduxRememberDriver, storageConfig?.persistThrottle]);
-
-  useEffect(() => {
+    const store = createStore({ persist: true, persistThrottle: storagePersistThrottle, onRehydrated });
+    setStore(store);
     $store.set(store);
     if (import.meta.env.MODE === 'development') {
       window.$store = $store;
     }
+    const removeStorageListeners = addStorageListeners();
     return () => {
+      removeStorageListeners();
+      setStore(undefined);
       $store.set(undefined);
       if (import.meta.env.MODE === 'development') {
         window.$store = undefined;
       }
     };
-  }, [store]);
+  }, [storagePersistThrottle]);
+
+  if (!store || !didRehydrate) {
+    return <Loading />;
+  }
 
   return (
     <React.StrictMode>
-      <ClearStorageProvider value={storage.clearStorage}>
-        <Provider store={store}>
-          <React.Suspense fallback={<Loading />}>
-            <App config={config} studioInitAction={studioInitAction} />
-          </React.Suspense>
-        </Provider>
-      </ClearStorageProvider>
+      <Provider store={store}>
+        <React.Suspense fallback={<Loading />}>
+          <App config={config} studioInitAction={studioInitAction} />
+        </React.Suspense>
+      </Provider>
     </React.StrictMode>
   );
 };

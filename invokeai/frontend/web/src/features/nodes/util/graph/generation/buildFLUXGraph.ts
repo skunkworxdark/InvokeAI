@@ -5,6 +5,7 @@ import { selectRefImagesSlice } from 'features/controlLayers/store/refImagesSlic
 import { selectCanvasMetadata, selectCanvasSlice } from 'features/controlLayers/store/selectors';
 import { isFluxKontextReferenceImageConfig } from 'features/controlLayers/store/types';
 import { getGlobalReferenceImageWarnings } from 'features/controlLayers/store/validators';
+import { zImageField } from 'features/nodes/types/common';
 import { addFLUXFill } from 'features/nodes/util/graph/generation/addFLUXFill';
 import { addFLUXLoRAs } from 'features/nodes/util/graph/generation/addFLUXLoRAs';
 import { addFLUXReduxes } from 'features/nodes/util/graph/generation/addFLUXRedux';
@@ -154,22 +155,20 @@ export const buildFLUXGraph = async (arg: GraphBuilderArg): Promise<GraphBuilder
       .filter((entity) => isFluxKontextReferenceImageConfig(entity.config))
       .filter((entity) => getGlobalReferenceImageWarnings(entity, model).length === 0);
 
-    // FLUX Kontext supports only a single conditioning image - we'll just take the first one.
-    // In the future, we can explore concatenating multiple conditioning images in image or latent space.
-    const firstValidFLUXKontextConfig = validFLUXKontextConfigs[0];
-
-    if (firstValidFLUXKontextConfig) {
-      const { image } = firstValidFLUXKontextConfig.config;
-
-      assert(image, 'getGlobalReferenceImageWarnings checks if the image is there, this should never raise');
-
+    if (validFLUXKontextConfigs.length > 0) {
+      const kontextConcatenator = g.addNode({
+        id: getPrefixedId('flux_kontext_image_prep'),
+        type: 'flux_kontext_image_prep',
+        images: validFLUXKontextConfigs.map(({ config }) => zImageField.parse(config.image)),
+      });
       const kontextConditioning = g.addNode({
         type: 'flux_kontext',
         id: getPrefixedId('flux_kontext'),
-        image,
       });
+      g.addEdge(kontextConcatenator, 'image', kontextConditioning, 'image');
       g.addEdge(kontextConditioning, 'kontext_cond', denoise, 'kontext_conditioning');
-      g.upsertMetadata({ ref_images: [firstValidFLUXKontextConfig] }, 'merge');
+
+      g.upsertMetadata({ ref_images: [validFLUXKontextConfigs] }, 'merge');
     }
   }
 

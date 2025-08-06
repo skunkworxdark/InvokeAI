@@ -19,6 +19,7 @@ from invokeai.app.api.routers import (
     app_info,
     board_images,
     boards,
+    client_state,
     download_queue,
     images,
     model_manager,
@@ -131,6 +132,7 @@ app.include_router(app_info.app_router, prefix="/api")
 app.include_router(session_queue.session_queue_router, prefix="/api")
 app.include_router(workflows.workflows_router, prefix="/api")
 app.include_router(style_presets.style_presets_router, prefix="/api")
+app.include_router(client_state.client_state_router, prefix="/api")
 
 app.openapi = get_openapi_func(app)
 
@@ -154,6 +156,12 @@ def overridden_redoc() -> HTMLResponse:
 
 
 web_root_path = Path(list(web_dir.__path__)[0])
+
+if app_config.unsafe_disable_picklescan:
+    logger.warning(
+        "The unsafe_disable_picklescan option is enabled. This disables malware scanning while installing and"
+        "loading models, which may allow malicious code to be executed. Use at your own risk."
+    )
 
 try:
     app.mount("/", NoCacheStaticFiles(directory=Path(web_root_path, "dist"), html=True), name="ui")

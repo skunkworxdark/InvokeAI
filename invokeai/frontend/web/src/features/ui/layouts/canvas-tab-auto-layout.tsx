@@ -3,7 +3,6 @@ import { DockviewReact, GridviewReact, LayoutPriority, Orientation } from 'dockv
 import { CanvasLayersPanel } from 'features/controlLayers/components/CanvasLayersPanelContent';
 import { BoardsPanel } from 'features/gallery/components/BoardsListPanelContent';
 import { GalleryPanel } from 'features/gallery/components/Gallery';
-import { GenerationProgressPanel } from 'features/gallery/components/ImageViewer/GenerationProgressPanel';
 import { ImageViewerPanel } from 'features/gallery/components/ImageViewer/ImageViewerPanel';
 import { FloatingCanvasLeftPanelButtons } from 'features/ui/components/FloatingLeftPanelButtons';
 import { FloatingRightPanelButtons } from 'features/ui/components/FloatingRightPanelButtons';
@@ -17,6 +16,7 @@ import { AutoLayoutProvider, useAutoLayoutContext, withPanelContainer } from 'fe
 import { CanvasLaunchpadPanel } from 'features/ui/layouts/CanvasLaunchpadPanel';
 import type { TabName } from 'features/ui/store/uiTypes';
 import { dockviewTheme } from 'features/ui/styles/theme';
+import { t } from 'i18next';
 import { memo, useCallback, useEffect } from 'react';
 
 import { CanvasTabLeftPanel } from './CanvasTabLeftPanel';
@@ -42,7 +42,6 @@ import {
   LEFT_PANEL_ID,
   LEFT_PANEL_MIN_SIZE_PX,
   MAIN_PANEL_ID,
-  PROGRESS_PANEL_ID,
   RIGHT_PANEL_ID,
   RIGHT_PANEL_MIN_SIZE_PX,
   SETTINGS_PANEL_ID,
@@ -60,7 +59,6 @@ const mainPanelComponents: AutoLayoutDockviewComponents = {
   [LAUNCHPAD_PANEL_ID]: withPanelContainer(CanvasLaunchpadPanel),
   [WORKSPACE_PANEL_ID]: withPanelContainer(CanvasWorkspacePanel),
   [VIEWER_PANEL_ID]: withPanelContainer(ImageViewerPanel),
-  [PROGRESS_PANEL_ID]: withPanelContainer(GenerationProgressPanel),
 };
 
 const initializeCenterPanelLayout = (tab: TabName, api: DockviewApi) => {
@@ -68,7 +66,7 @@ const initializeCenterPanelLayout = (tab: TabName, api: DockviewApi) => {
     const launchpad = api.addPanel<PanelParameters>({
       id: LAUNCHPAD_PANEL_ID,
       component: LAUNCHPAD_PANEL_ID,
-      title: 'Launchpad',
+      title: t('ui.panels.launchpad'),
       tabComponent: DOCKVIEW_TAB_LAUNCHPAD_ID,
       params: {
         tab,
@@ -79,7 +77,7 @@ const initializeCenterPanelLayout = (tab: TabName, api: DockviewApi) => {
     api.addPanel<PanelParameters>({
       id: WORKSPACE_PANEL_ID,
       component: WORKSPACE_PANEL_ID,
-      title: 'Canvas',
+      title: t('ui.panels.canvas'),
       tabComponent: DOCKVIEW_TAB_CANVAS_WORKSPACE_ID,
       params: {
         tab,
@@ -94,7 +92,7 @@ const initializeCenterPanelLayout = (tab: TabName, api: DockviewApi) => {
     api.addPanel<PanelParameters>({
       id: VIEWER_PANEL_ID,
       component: VIEWER_PANEL_ID,
-      title: 'Image Viewer',
+      title: t('ui.panels.imageViewer'),
       tabComponent: DOCKVIEW_TAB_CANVAS_VIEWER_ID,
       params: {
         tab,

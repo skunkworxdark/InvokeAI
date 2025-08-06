@@ -299,7 +299,7 @@
         "pruneTooltip": "Cắt bớt {{item_count}} mục đã hoàn tất",
         "pruneSucceeded": "Đã cắt bớt {{item_count}} mục đã hoàn tất khỏi hàng",
         "clearTooltip": "Huỷ Và Dọn Dẹp Tất Cả Mục",
-        "clearQueueAlertDialog": "Dọn dẹp hàng đợi sẽ ngay lập tức huỷ tất cả mục đang xử lý và làm sạch hàng hoàn toàn. Bộ lọc đang chờ xử lý sẽ bị huỷ bỏ.",
+        "clearQueueAlertDialog": "Dọn dẹp hàng đợi sẽ ngay lập tức huỷ tất cả mục đang xử lý và làm sạch hàng hoàn toàn. Bộ lọc đang chờ xử lý sẽ bị huỷ bỏ và Vùng Dựng Canva sẽ được khởi động lại.",
         "session": "Phiên",
         "item": "Mục",
         "resumeFailed": "Có Vấn Đề Khi Tiếp Tục Bộ Xử Lý",
@@ -343,13 +343,14 @@
         "retrySucceeded": "Mục Đã Thử Lại",
         "retryFailed": "Có Vấn Đề Khi Thử Lại Mục",
         "retryItem": "Thử Lại Mục",
-        "credits": "Nguồn"
+        "credits": "Nguồn",
+        "cancelAllExceptCurrent": "Huỷ Bỏ Tất Cả Ngoại Trừ Mục Hiện Tại"
     },
     "hotkeys": {
         "canvas": {
             "fitLayersToCanvas": {
                 "title": "Xếp Vừa Layers Vào Canvas",
-                "desc": "Căn chỉnh để góc nhìn vừa vặn với tất cả layer."
+                "desc": "Căn chỉnh để góc nhìn vừa vặn với tất cả layer nhìn thấy dược."
             },
             "setZoomTo800Percent": {
                 "desc": "Phóng to canvas lên 800%.",
@@ -473,6 +474,24 @@
             "toggleNonRasterLayers": {
                 "title": "Bật/Tắt Layer Không Thuộc Dạng Raster",
                 "desc": "Hiện hoặc ẩn tất cả layer không thuộc dạng raster (Layer Điều Khiển Được, Lớp Phủ Inpaint, Chỉ Dẫn Khu Vực)."
+            },
+            "invertMask": {
+                "title": "Đảo Ngược Lớp Phủ",
+                "desc": "Đảo ngược lớp phủ inpaint được chọn, tạo một lớp phủ mới với độ trong suốt đối nghịch."
+            },
+            "fitBboxToMasks": {
+                "title": "Xếp Vừa Hộp Giới Hạn Vào Lớp Phủ",
+                "desc": "Tự động điểu chỉnh hộp giới hạn tạo sinh vừa vặn vào lớp phủ inpaint nhìn thấy được"
+            },
+            "applySegmentAnything": {
+                "title": "Áp Dụng Segment Anything",
+                "desc": "Áp dụng lớp phủ Segment Anything hiện tại.",
+                "key": "enter"
+            },
+            "cancelSegmentAnything": {
+                "title": "Huỷ Segment Anything",
+                "desc": "Huỷ hoạt động Segment Anything hiện tại.",
+                "key": "esc"
             }
         },
         "workflows": {
@@ -602,6 +621,10 @@
             "clearSelection": {
                 "desc": "Xoá phần lựa chọn hiện tại nếu có.",
                 "title": "Xoá Phần Lựa Chọn"
+            },
+            "starImage": {
+                "title": "Dấu/Huỷ Sao Hình Ảnh",
+                "desc": "Đánh dấu sao hoặc huỷ đánh dấu sao ảnh được chọn."
             }
         },
         "app": {
@@ -661,6 +684,11 @@
             "selectModelsTab": {
                 "desc": "Chọn tab Model (Mô Hình).",
                 "title": "Chọn Tab Model"
+            },
+            "selectGenerateTab": {
+                "title": "Chọn Tab Tạo Sinh",
+                "desc": "Chọn tab Tạo Sinh.",
+                "key": "1"
             }
         },
         "searchHotkeys": "Tìm Phím tắt",
@@ -1090,7 +1118,23 @@
         "unknownField_withName": "Vùng Dữ Liệu Không Rõ \"{{name}}\"",
         "unexpectedField_withName": "Sai Vùng Dữ Liệu \"{{name}}\"",
         "unknownFieldEditWorkflowToFix_withName": "Workflow chứa vùng dữ liệu không rõ \"{{name}}\".\nHãy biên tập workflow để sửa lỗi.",
-        "missingField_withName": "Thiếu Vùng Dữ Liệu \"{{name}}\""
+        "missingField_withName": "Thiếu Vùng Dữ Liệu \"{{name}}\"",
+        "layout": {
+            "autoLayout": "Bố Cục Tự Động",
+            "layeringStrategy": "Chiến Lược Phân Layer",
+            "networkSimplex": "Network Simplex",
+            "longestPath": "Đường Đi Dài Nhất",
+            "nodeSpacing": "Khoảng Cách Node",
+            "layerSpacing": "Khoảng Cách Layer",
+            "layoutDirection": "Hướng Bố Cục",
+            "layoutDirectionRight": "Phải",
+            "layoutDirectionDown": "Xuống",
+            "alignment": "Căn Chỉnh Node",
+            "alignmentUL": "Trên Cùng Bên Trái",
+            "alignmentDL": "Dưới Cùng Bên Trái",
+            "alignmentUR": "Trên Cùng Bên Phải",
+            "alignmentDR": "Dưới Cùng Bên Phải"
+        }
     },
     "popovers": {
         "paramCFGRescaleMultiplier": {
@@ -1597,7 +1641,7 @@
             "modelIncompatibleScaledBboxHeight": "Chiều dài hộp giới hạn theo tỉ lệ là {{height}} nhưng {{model}} yêu cầu bội số của {{multiple}}",
             "modelIncompatibleScaledBboxWidth": "Chiều rộng hộp giới hạn theo tỉ lệ là {{width}} nhưng {{model}} yêu cầu bội số của {{multiple}}",
             "modelDisabledForTrial": "Tạo sinh với {{modelName}} là không thể với tài khoản trial. Vào phần thiết lập tài khoản để nâng cấp.",
-            "fluxKontextMultipleReferenceImages": "Chỉ có thể dùng 1 Ảnh Mẫu cùng lúc với Flux Kontext",
+            "fluxKontextMultipleReferenceImages": "Chỉ có thể dùng 1 Ảnh Mẫu cùng lúc với LUX Kontext thông qua BFL API",
             "promptExpansionPending": "Trong quá trình mở rộng lệnh",
             "promptExpansionResultPending": "Hãy chấp thuận hoặc huỷ bỏ kết quả mở rộng lệnh của bạn"
         },
@@ -2192,7 +2236,11 @@
             "off": "Tắt",
             "switchOnStart": "Khi Bắt Đầu",
             "switchOnFinish": "Khi Kết Thúc"
-        }
+        },
+        "fitBboxToMasks": "Xếp Vừa Hộp Giới Hạn Vào Lớp Phủ",
+        "invertMask": "Đảo Ngược Lớp Phủ",
+        "maxRefImages": "Ảnh Mẫu Tối Đa",
+        "useAsReferenceImage": "Dùng Làm Ảnh Mẫu"
     },
     "stylePresets": {
         "negativePrompt": "Lệnh Tiêu Cực",
@@ -2354,20 +2402,28 @@
         "noValidLayerAdapters": "Không có Layer Adaper Phù Hợp",
         "promptGenerationStarted": "Trình tạo sinh lệnh khởi động",
         "uploadAndPromptGenerationFailed": "Thất bại khi tải lên ảnh để tạo sinh lệnh",
-        "promptExpansionFailed": "Có vấn đề xảy ra. Hãy thử mở rộng lệnh lại."
+        "promptExpansionFailed": "Có vấn đề xảy ra. Hãy thử mở rộng lệnh lại.",
+        "maskInverted": "Đã Đảo Ngược Lớp Phủ",
+        "maskInvertFailed": "Thất Bại Khi Đảo Ngược Lớp Phủ",
+        "noVisibleMasks": "Không Có Lớp Phủ Đang Hiển Thị",
+        "noVisibleMasksDesc": "Tạo hoặc bật ít nhất một lớp phủ inpaint để đảo ngược",
+        "noInpaintMaskSelected": "Không Có Lớp Phủ Inpant Được Chọn",
+        "noInpaintMaskSelectedDesc": "Chọn một lớp phủ inpaint để đảo ngược",
+        "invalidBbox": "Hộp Giới Hạn Không Hợp Lệ",
+        "invalidBboxDesc": "Hợp giới hạn có kích thước không hợp lệ"
     },
     "ui": {
         "tabs": {
             "gallery": "Thư Viện Ảnh",
             "models": "Models",
-            "generation": "Generation (Máy Tạo Sinh)",
             "upscaling": "Upscale (Nâng Cấp Chất Lượng Hình Ảnh)",
             "canvas": "Canvas (Vùng Ảnh)",
             "upscalingTab": "$t(common.tab) $t(ui.tabs.upscaling)",
             "modelsTab": "$t(common.tab) $t(ui.tabs.models)",
             "queue": "Queue (Hàng Đợi)",
             "workflows": "Workflow (Luồng Làm Việc)",
-            "workflowsTab": "$t(common.tab) $t(ui.tabs.workflows)"
+            "workflowsTab": "$t(common.tab) $t(ui.tabs.workflows)",
+            "generate": "Tạo Sinh"
         },
         "launchpad": {
             "workflowsTitle": "Đi sâu hơn với Workflow.",
@@ -2415,8 +2471,43 @@
                     "promptAdvice": "Khi upscale, dùng lệnh để mô tả phương thức và phong cách. Tránh mô tả các chi tiết cụ thể trong ảnh.",
                     "styleAdvice": "Upscale thích hợp nhất cho phong cách chung của ảnh."
                 },
-                "scale": "Kích Thước"
+                "scale": "Kích Thước",
+                "creativityAndStructure": {
+                    "title": "Độ Sáng Tạo & Cấu Trúc Mặc Định",
+                    "conservative": "Bảo toàn",
+                    "balanced": "Cân bằng",
+                    "creative": "Sáng tạo",
+                    "artistic": "Thẩm mỹ"
+                }
+            },
+            "createNewWorkflowFromScratch": "Tạo workflow mới từ đầu",
+            "browseAndLoadWorkflows": "Duyệt và tải workflow có sẵn",
+            "addStyleRef": {
+                "title": "Thêm Phong Cách Mẫu",
+                "description": "Thêm ảnh để chuyển đổi diện mạo của nó."
+            },
+            "editImage": {
+                "title": "Biên Tập Ảnh",
+                "description": "Thêm ảnh để chỉnh sửa."
+            },
+            "generateFromText": {
+                "title": "Tạo Sinh Từ Chữ",
+                "description": "Nhập lệnh vào và Kích Hoạt."
+            },
+            "useALayoutImage": {
+                "title": "Dùng Bố Cục Ảnh",
+                "description": "Thêm ảnh để điều khiển bố cục."
+            },
+            "generate": {
+                "canvasCalloutTitle": "Đang tìm cách để điều khiển, chỉnh sửa, và làm lại ảnh?",
+                "canvasCalloutLink": "Vào Canvas cho nhiều tính năng hơn."
             }
+        },
+        "panels": {
+            "launchpad": "Launchpad",
+            "workflowEditor": "Trình Biên Tập Workflow",
+            "imageViewer": "Trình Xem Ảnh",
+            "canvas": "Canvas"
         }
     },
     "workflows": {
@@ -2588,9 +2679,8 @@
         "watchRecentReleaseVideos": "Xem Video Phát Hành Mới Nhất",
         "watchUiUpdatesOverview": "Xem Tổng Quan Về Những Cập Nhật Cho Giao Diện Người Dùng",
         "items": [
-            "Tạo sinh ảnh nhanh hơn với Launchpad và thẻ Tạo Sinh đã cơ bản hoá.",
-            "Biên tập với lệnh bằng Flux Kontext Dev.",
-            "Xuất ra file PSD, ẩn số lượng lớn lớp phủ, sắp xếp model & ảnh — tất cả cho một giao diện đã thiết kế lại để chuyên điều khiển."
+            "Trạng thái Studio được lưu vào server, giúp bạn tiếp tục công việc ở mọi thiết bị.",
+            "Hỗ trợ nhiều ảnh mẫu cho FLUX KONTEXT (chỉ cho model trên máy)."
         ]
     },
     "upsell": {
