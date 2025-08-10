@@ -58,12 +58,40 @@ export class CanvasObjectBrushLine extends CanvasModuleBase {
     if (force || this.state !== state) {
       this.log.trace({ state }, 'Updating brush line');
       const { points, color, strokeWidth } = state;
-      this.konva.line.setAttrs({
-        // A line with only one point will not be rendered, so we duplicate the points to make it visible
-        points: points.length === 2 ? [...points, ...points] : points,
-        stroke: rgbaColorToString(color),
-        strokeWidth,
-      });
+      const { brushSoftness } = this.manager.store.getState().canvasSettings;
+
+      if (brushSoftness > 0) {
+        // A soft brush is a gradient from opaque to transparent.
+        const softnessRatio = brushSoftness / 100;
+        // The gradient stop for the solid center of the brush.
+        // At 0 softness, the solid part is the whole brush (stop at 1).
+        // As softness increases, the solid part shrinks (stop moves towards 0).
+        const solidCenterStop = 1 - softnessRatio;
+        const opaqueColor = rgbaColorToString(color);
+        const transparentColor = rgbaColorToString({ ...color, a: 0 });
+
+        this.konva.line.setAttrs({
+          points: points.length === 2 ? [...points, ...points] : points,
+          strokeWidth,
+          strokeLinearGradientColorStops: [0, opaqueColor, solidCenterStop, opaqueColor, 1, transparentColor],
+          // The gradient is defined as being perpendicular to the line. Konva handles the rotation.
+          strokeLinearGradientStartPoint: { x: 0, y: -strokeWidth / 2 },
+          strokeLinearGradientEndPoint: { x: 0, y: strokeWidth / 2 },
+          // Gradients do not need shadows.
+          shadowForStrokeEnabled: false,
+          // We must clear the stroke, as it is replaced by the gradient.
+          stroke: undefined,
+        });
+      } else {
+        // A hard brush is a simple solid-color stroke with no shadow.
+        this.konva.line.setAttrs({
+          points: points.length === 2 ? [...points, ...points] : points,
+          stroke: rgbaColorToString(color),
+          strokeWidth,
+          strokeLinearGradientColorStops: [], // Clear any existing gradient
+          shadowForStrokeEnabled: false,
+        });
+      }
       this.state = state;
       return true;
     }

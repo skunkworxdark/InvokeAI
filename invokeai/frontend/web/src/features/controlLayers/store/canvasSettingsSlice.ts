@@ -30,6 +30,10 @@ const zCanvasSettingsState = z.object({
    */
   brushWidth: z.int().gt(0).default(50),
   /**
+   * The softness of the brush tool, as a percentage.
+   */
+  brushSoftness: z.number().min(0).max(100).default(0),
+  /**
    * The width of the eraser tool.
    */
   eraserWidth: z.int().gt(0).default(50),
@@ -110,6 +114,9 @@ export const canvasSettingsSlice = createSlice({
     settingsBrushWidthChanged: (state, action: PayloadAction<CanvasSettingsState['brushWidth']>) => {
       state.brushWidth = Math.round(action.payload);
     },
+    settingsBrushSoftnessChanged: (state, action: PayloadAction<CanvasSettingsState['brushSoftness']>) => {
+      state.brushSoftness = action.payload;
+    },
     settingsEraserWidthChanged: (state, action: PayloadAction<CanvasSettingsState['eraserWidth']>) => {
       state.eraserWidth = Math.round(action.payload);
     },
@@ -169,6 +176,7 @@ export const {
   settingsDynamicGridToggled,
   settingsShowHUDToggled,
   settingsBrushWidthChanged,
+  settingsBrushSoftnessChanged,
   settingsEraserWidthChanged,
   settingsColorChanged,
   settingsInvertScrollForToolWidthChanged,
@@ -220,3 +228,4 @@ export const selectPressureSensitivity = createCanvasSettingsSelector((settings)
 export const selectRuleOfThirds = createCanvasSettingsSelector((settings) => settings.ruleOfThirds);
 export const selectSaveAllImagesToGallery = createCanvasSettingsSelector((settings) => settings.saveAllImagesToGallery);
 export const selectStagingAreaAutoSwitch = createCanvasSettingsSelector((settings) => settings.stagingAreaAutoSwitch);
+export const selectBrushSoftness = createCanvasSettingsSelector((settings) => settings.brushSoftness);

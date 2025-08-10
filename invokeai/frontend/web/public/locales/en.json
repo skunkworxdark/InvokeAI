@@ -2207,6 +2207,7 @@
             "view": "View",
             "colorPicker": "Color Picker"
         },
+        "brushSoftness": "Brush Softness",
         "filter": {
             "filter": "Filter",
             "filters": "Filters",
