@@ -181,15 +181,6 @@ const slice = createSlice({
     negativePromptChanged: (state, action: PayloadAction<ParameterNegativePrompt>) => {
       state.negativePrompt = action.payload;
     },
-    positivePrompt2Changed: (state, action: PayloadAction<string>) => {
-      state.positivePrompt2 = action.payload;
-    },
-    negativePrompt2Changed: (state, action: PayloadAction<string>) => {
-      state.negativePrompt2 = action.payload;
-    },
-    shouldConcatPromptsChanged: (state, action: PayloadAction<boolean>) => {
-      state.shouldConcatPrompts = action.payload;
-    },
     refinerModelChanged: (state, action: PayloadAction<ParameterSDXLRefinerModel | null>) => {
       const result = zParamsState.shape.refinerModel.safeParse(action.payload);
       if (!result.success) {
@@ -425,9 +416,6 @@ export const {
   shouldUseCpuNoiseChanged,
   positivePromptChanged,
   negativePromptChanged,
-  positivePrompt2Changed,
-  negativePrompt2Changed,
-  shouldConcatPromptsChanged,
   refinerModelChanged,
   setRefinerSteps,
   setRefinerCFGScale,
@@ -460,8 +448,7 @@ export const paramsSliceConfig: SliceConfig<typeof slice> = {
 };
 
 export const selectParamsSlice = (state: RootState) => state.params;
-export const createParamsSelector = <T>(selector: Selector<ParamsState, T>) =>
-  createSelector(selectParamsSlice, selector);
+const createParamsSelector = <T>(selector: Selector<ParamsState, T>) => createSelector(selectParamsSlice, selector);
 
 export const selectBase = createParamsSelector((params) => params.model?.base);
 export const selectIsSDXL = createParamsSelector((params) => params.model?.base === 'sdxl');
@@ -518,9 +505,6 @@ export const selectModelSupportsNegativePrompt = createSelector(
   [selectIsFLUX, selectIsChatGPT4o, selectIsFluxKontext],
   (isFLUX, isChatGPT4o, isFluxKontext) => !isFLUX && !isChatGPT4o && !isFluxKontext
 );
-export const selectPositivePrompt2 = createParamsSelector((params) => params.positivePrompt2);
-export const selectNegativePrompt2 = createParamsSelector((params) => params.negativePrompt2);
-export const selectShouldConcatPrompts = createParamsSelector((params) => params.shouldConcatPrompts);
 export const selectScheduler = createParamsSelector((params) => params.scheduler);
 export const selectSeamlessXAxis = createParamsSelector((params) => params.seamlessXAxis);
 export const selectSeamlessYAxis = createParamsSelector((params) => params.seamlessYAxis);
