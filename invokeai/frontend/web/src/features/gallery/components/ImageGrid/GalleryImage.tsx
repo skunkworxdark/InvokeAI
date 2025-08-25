@@ -118,6 +118,9 @@ const buildOnClick =
         const start = Math.min(lastClickedIndex, currentClickedIndex);
         const end = Math.max(lastClickedIndex, currentClickedIndex);
         const imagesToSelect = imageNames.slice(start, end + 1);
+        if (currentClickedIndex < lastClickedIndex) {
+          imagesToSelect.reverse();
+        }
         dispatch(selectionChanged(uniq(selection.concat(imagesToSelect))));
       }
     } else if (ctrlKey || metaKey) {
