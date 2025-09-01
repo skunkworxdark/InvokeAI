@@ -12,6 +12,7 @@ import { buildChatGPT4oGraph } from 'features/nodes/util/graph/generation/buildC
 import { buildCogView4Graph } from 'features/nodes/util/graph/generation/buildCogView4Graph';
 import { buildFLUXGraph } from 'features/nodes/util/graph/generation/buildFLUXGraph';
 import { buildFluxKontextGraph } from 'features/nodes/util/graph/generation/buildFluxKontextGraph';
+import { buildGemini2_5Graph } from 'features/nodes/util/graph/generation/buildGemini2_5Graph';
 import { buildImagen3Graph } from 'features/nodes/util/graph/generation/buildImagen3Graph';
 import { buildImagen4Graph } from 'features/nodes/util/graph/generation/buildImagen4Graph';
 import { buildSD1Graph } from 'features/nodes/util/graph/generation/buildSD1Graph';
@@ -38,11 +39,15 @@ const enqueueCanvas = async (store: AppStore, canvasManager: CanvasManager, prep
 
   const destination = selectCanvasDestination(state);
 
-  const buildGraphResult = await withResultAsync(async () => {
-    const model = state.params.model;
-    assert(model, 'No model found in state');
-    const base = model.base;
+  const model = state.params.model;
+  if (!model) {
+    log.error('No model found in state');
+    return;
+  }
 
+  const base = model.base;
+
+  const buildGraphResult = await withResultAsync(async () => {
     const generationMode = await canvasManager.compositor.getGenerationMode();
     const graphBuilderArg: GraphBuilderArg = { generationMode, state, manager: canvasManager };
 
@@ -66,6 +71,8 @@ const enqueueCanvas = async (store: AppStore, canvasManager: CanvasManager, prep
         return await buildChatGPT4oGraph(graphBuilderArg);
       case 'flux-kontext':
         return buildFluxKontextGraph(graphBuilderArg);
+      case 'gemini-2.5':
+        return buildGemini2_5Graph(graphBuilderArg);
       default:
         assert(false, `No graph builders for base ${base}`);
     }
@@ -98,6 +105,7 @@ const enqueueCanvas = async (store: AppStore, canvasManager: CanvasManager, prep
     prepareLinearUIBatch({
       state,
       g,
+      base,
       prepend,
       seedNode: seed,
       positivePromptNode: positivePrompt,

@@ -1,3 +1,6 @@
+import type { S } from 'services/api/types';
+import type { Equals } from 'tsafe';
+import { assert } from 'tsafe';
 import { z } from 'zod';
 
 // #region Field data schemas
@@ -10,6 +13,13 @@ const zImageFieldCollection = z.array(zImageField);
 type ImageFieldCollection = z.infer<typeof zImageFieldCollection>;
 export const isImageFieldCollection = (field: unknown): field is ImageFieldCollection =>
   zImageFieldCollection.safeParse(field).success;
+
+const zVideoField = z.object({
+  video_id: z.string().trim().min(1),
+});
+type VideoField = z.infer<typeof zVideoField>;
+export const isVideoField = (field: unknown): field is VideoField => zVideoField.safeParse(field).success;
+assert<Equals<VideoField, S['VideoField']>>();
 
 export const zBoardField = z.object({
   board_id: z.string().trim().min(1),
@@ -76,6 +86,9 @@ const zBaseModel = z.enum([
   'imagen4',
   'chatgpt-4o',
   'flux-kontext',
+  'gemini-2.5',
+  'veo3',
+  'runway',
 ]);
 export type BaseModelType = z.infer<typeof zBaseModel>;
 export const zMainModelBase = z.enum([
@@ -89,6 +102,9 @@ export const zMainModelBase = z.enum([
   'imagen4',
   'chatgpt-4o',
   'flux-kontext',
+  'gemini-2.5',
+  'veo3',
+  'runway',
 ]);
 type MainModelBase = z.infer<typeof zMainModelBase>;
 export const isMainModelBase = (base: unknown): base is MainModelBase => zMainModelBase.safeParse(base).success;
@@ -109,6 +125,7 @@ export const zModelType = z.enum([
   'clip_embed',
   'siglip',
   'flux_redux',
+  'video',
 ]);
 const zSubModelType = z.enum([
   'unet',

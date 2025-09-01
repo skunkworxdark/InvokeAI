@@ -1,7 +1,7 @@
 import { CompositeNumberInput, CompositeSlider, FormControl, FormLabel } from '@invoke-ai/ui-library';
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import { InformationalPopover } from 'common/components/InformationalPopover/InformationalPopover';
-import { heightChanged, selectHeight } from 'features/controlLayers/store/paramsSlice';
+import { heightChanged, selectHeight, selectIsApiBaseModel } from 'features/controlLayers/store/paramsSlice';
 import { selectGridSize, selectOptimalDimension } from 'features/controlLayers/store/selectors';
 import { selectHeightConfig } from 'features/system/store/configSlice';
 import { memo, useCallback, useMemo } from 'react';
@@ -14,6 +14,7 @@ export const DimensionsHeight = memo(() => {
   const height = useAppSelector(selectHeight);
   const config = useAppSelector(selectHeightConfig);
   const gridSize = useAppSelector(selectGridSize);
+  const isApiModel = useAppSelector(selectIsApiBaseModel);
 
   const onChange = useCallback(
     (v: number) => {
@@ -28,7 +29,7 @@ export const DimensionsHeight = memo(() => {
   );
 
   return (
-    <FormControl>
+    <FormControl isDisabled={isApiModel}>
       <InformationalPopover feature="paramHeight">
         <FormLabel>{t('parameters.height')}</FormLabel>
       </InformationalPopover>

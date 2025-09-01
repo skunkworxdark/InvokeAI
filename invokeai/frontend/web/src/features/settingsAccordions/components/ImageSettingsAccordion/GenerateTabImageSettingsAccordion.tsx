@@ -6,30 +6,58 @@ import {
   selectAspectRatioID,
   selectAspectRatioIsLocked,
   selectHeight,
+  selectModelSupportsAspectRatio,
+  selectModelSupportsPixelDimensions,
+  selectModelSupportsSeed,
   selectShouldRandomizeSeed,
   selectWidth,
 } from 'features/controlLayers/store/paramsSlice';
 import { Dimensions } from 'features/parameters/components/Dimensions/Dimensions';
 import { ParamSeed } from 'features/parameters/components/Seed/ParamSeed';
-import { useIsApiModel } from 'features/parameters/hooks/useIsApiModel';
 import { useStandaloneAccordionToggle } from 'features/settingsAccordions/hooks/useStandaloneAccordionToggle';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const selectBadges = createMemoizedSelector(
-  [selectWidth, selectHeight, selectAspectRatioID, selectAspectRatioIsLocked, selectShouldRandomizeSeed],
-  (width, height, aspectRatioID, aspectRatioIsLocked, shouldRandomizeSeed) => {
+  [
+    selectWidth,
+    selectHeight,
+    selectAspectRatioID,
+    selectAspectRatioIsLocked,
+    selectShouldRandomizeSeed,
+    selectModelSupportsSeed,
+    selectModelSupportsAspectRatio,
+    selectModelSupportsPixelDimensions,
+  ],
+  (
+    width,
+    height,
+    aspectRatioID,
+    aspectRatioIsLocked,
+    shouldRandomizeSeed,
+    modelSupportsSeed,
+    modelSupportsAspectRatio,
+    modelSupportsPixelDimensions
+  ) => {
     const badges: string[] = [];
 
-    badges.push(`${width}×${height}`);
-    badges.push(aspectRatioID);
-
-    if (aspectRatioIsLocked) {
-      badges.push('locked');
+    if (modelSupportsPixelDimensions) {
+      badges.push(`${width}×${height}`);
     }
 
-    if (!shouldRandomizeSeed) {
-      badges.push('Manual Seed');
+    if (modelSupportsAspectRatio) {
+      badges.push(aspectRatioID);
+
+      // If a model does not support pixel dimensions, the ratio is essentially always locked.
+      if (modelSupportsPixelDimensions && aspectRatioIsLocked) {
+        badges.push('locked');
+      }
+    }
+
+    if (modelSupportsSeed) {
+      if (!shouldRandomizeSeed) {
+        badges.push('Manual Seed');
+      }
     }
 
     if (badges.length === 0) {
@@ -47,7 +75,12 @@ export const GenerateTabImageSettingsAccordion = memo(() => {
     id: 'image-settings-generate-tab',
     defaultIsOpen: true,
   });
-  const isApiModel = useIsApiModel();
+  const supportsSeed = useAppSelector(selectModelSupportsSeed);
+  const supportsAspectRatio = useAppSelector(selectModelSupportsAspectRatio);
+
+  if (!supportsAspectRatio && !supportsSeed) {
+    return;
+  }
 
   return (
     <StandaloneAccordion
@@ -56,17 +89,9 @@ export const GenerateTabImageSettingsAccordion = memo(() => {
       isOpen={isOpenAccordion}
       onToggle={onToggleAccordion}
     >
-      <Flex
-        px={4}
-        pt={4}
-        pb={isApiModel ? 4 : 0}
-        w="full"
-        h="full"
-        flexDir="column"
-        data-testid="image-settings-accordion"
-      >
-        <Dimensions />
-        {!isApiModel && <ParamSeed py={3} />}
+      <Flex px={4} pt={4} pb={4} w="full" h="full" flexDir="column" data-testid="image-settings-accordion">
+        {supportsAspectRatio && <Dimensions />}
+        {supportsSeed && <ParamSeed py={3} />}
       </Flex>
     </StandaloneAccordion>
   );

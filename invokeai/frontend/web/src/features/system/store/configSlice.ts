@@ -22,6 +22,12 @@ const slice = createSlice({
   initialState: getInitialState(),
   reducers: {
     configChanged: (state, action: PayloadAction<PartialAppConfig>) => {
+      // Handle disabledTabs specially - if provided, it should completely replace the default array
+      if (action.payload.disabledTabs !== undefined) {
+        state.disabledTabs = action.payload.disabledTabs;
+      }
+
+      // Merge the rest of the config normally
       merge(state, action.payload);
       state.didLoad = true;
     },
@@ -65,6 +71,8 @@ export const selectIsModelsTabDisabled = createConfigSelector((config) => config
 export const selectIsClientSideUploadEnabled = createConfigSelector((config) => config.allowClientSideUpload);
 export const selectAllowPublishWorkflows = createConfigSelector((config) => config.allowPublishWorkflows);
 export const selectAllowPromptExpansion = createConfigSelector((config) => config.allowPromptExpansion);
+export const selectAllowVideo = createConfigSelector((config) => config.allowVideo);
+
 export const selectIsLocal = createSelector(selectConfigSlice, (config) => config.isLocal);
 export const selectShouldShowCredits = createConfigSelector((config) => config.shouldShowCredits);
 const selectDisabledTabs = createConfigSelector((config) => config.disabledTabs);
@@ -86,4 +94,7 @@ export const selectWithModelsTab = createSelector(selectDidLoad, selectDisabledT
 );
 export const selectWithQueueTab = createSelector(selectDidLoad, selectDisabledTabs, (didLoad, disabledTabs) =>
   didLoad ? !disabledTabs.includes('queue') : false
+);
+export const selectWithVideoTab = createSelector(selectDidLoad, selectDisabledTabs, (didLoad, disabledTabs) =>
+  didLoad ? !disabledTabs.includes('video') : false
 );

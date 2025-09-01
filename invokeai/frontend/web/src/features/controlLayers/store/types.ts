@@ -264,6 +264,13 @@ const zChatGPT4oReferenceImageConfig = z.object({
 });
 export type ChatGPT4oReferenceImageConfig = z.infer<typeof zChatGPT4oReferenceImageConfig>;
 
+const zGemini2_5ReferenceImageConfig = z.object({
+  type: z.literal('gemini_2_5_reference_image'),
+  image: zImageWithDims.nullable(),
+  model: zModelIdentifierField.nullable(),
+});
+export type Gemini2_5ReferenceImageConfig = z.infer<typeof zGemini2_5ReferenceImageConfig>;
+
 const zFluxKontextReferenceImageConfig = z.object({
   type: z.literal('flux_kontext_reference_image'),
   image: zImageWithDims.nullable(),
@@ -286,6 +293,7 @@ export const zRefImageState = z.object({
     zFLUXReduxConfig,
     zChatGPT4oReferenceImageConfig,
     zFluxKontextReferenceImageConfig,
+    zGemini2_5ReferenceImageConfig,
   ]),
 });
 export type RefImageState = z.infer<typeof zRefImageState>;
@@ -298,9 +306,14 @@ export const isFLUXReduxConfig = (config: RefImageState['config']): config is FL
 export const isChatGPT4oReferenceImageConfig = (
   config: RefImageState['config']
 ): config is ChatGPT4oReferenceImageConfig => config.type === 'chatgpt_4o_reference_image';
+
 export const isFluxKontextReferenceImageConfig = (
   config: RefImageState['config']
 ): config is FluxKontextReferenceImageConfig => config.type === 'flux_kontext_reference_image';
+
+export const isGemini2_5ReferenceImageConfig = (
+  config: RefImageState['config']
+): config is Gemini2_5ReferenceImageConfig => config.type === 'gemini_2_5_reference_image';
 
 const zFillStyle = z.enum(['solid', 'grid', 'crosshatch', 'diagonal', 'horizontal', 'vertical']);
 export type FillStyle = z.infer<typeof zFillStyle>;
@@ -447,6 +460,14 @@ export const CHATGPT_ASPECT_RATIOS: Record<ChatGPT4oAspectRatio, Dimensions> = {
   '2:3': { width: 1024, height: 1536 },
 } as const;
 
+export const zGemini2_5AspectRatioID = z.enum(['1:1']);
+type Gemini2_5AspectRatio = z.infer<typeof zGemini2_5AspectRatioID>;
+export const isGemini2_5AspectRatioID = (v: unknown): v is Gemini2_5AspectRatio =>
+  zGemini2_5AspectRatioID.safeParse(v).success;
+export const GEMINI_2_5_ASPECT_RATIOS: Record<Gemini2_5AspectRatio, Dimensions> = {
+  '1:1': { width: 1024, height: 1024 },
+} as const;
+
 export const zFluxKontextAspectRatioID = z.enum(['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21']);
 type FluxKontextAspectRatio = z.infer<typeof zFluxKontextAspectRatioID>;
 export const isFluxKontextAspectRatioID = (v: unknown): v is z.infer<typeof zFluxKontextAspectRatioID> =>
@@ -461,6 +482,33 @@ export const FLUX_KONTEXT_ASPECT_RATIOS: Record<FluxKontextAspectRatio, Dimensio
   '1:1': { width: 1024, height: 1024 },
 };
 
+export const zVeo3AspectRatioID = z.enum(['16:9']);
+type Veo3AspectRatio = z.infer<typeof zVeo3AspectRatioID>;
+export const isVeo3AspectRatioID = (v: unknown): v is Veo3AspectRatio => zVeo3AspectRatioID.safeParse(v).success;
+
+export const zRunwayAspectRatioID = z.enum(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9']);
+type RunwayAspectRatio = z.infer<typeof zRunwayAspectRatioID>;
+export const isRunwayAspectRatioID = (v: unknown): v is RunwayAspectRatio => zRunwayAspectRatioID.safeParse(v).success;
+
+export const zVideoAspectRatio = z.union([zVeo3AspectRatioID, zRunwayAspectRatioID]);
+export type VideoAspectRatio = z.infer<typeof zVideoAspectRatio>;
+export const isVideoAspectRatio = (v: unknown): v is VideoAspectRatio => zVideoAspectRatio.safeParse(v).success;
+
+export const zVeo3Resolution = z.enum(['720p', '1080p']);
+type Veo3Resolution = z.infer<typeof zVeo3Resolution>;
+export const isVeo3Resolution = (v: unknown): v is Veo3Resolution => zVeo3Resolution.safeParse(v).success;
+export const RESOLUTION_MAP: Record<Veo3Resolution | RunwayResolution, Dimensions> = {
+  '720p': { width: 1280, height: 720 },
+  '1080p': { width: 1920, height: 1080 },
+};
+
+export const zRunwayResolution = z.enum(['720p']);
+type RunwayResolution = z.infer<typeof zRunwayResolution>;
+export const isRunwayResolution = (v: unknown): v is RunwayResolution => zRunwayResolution.safeParse(v).success;
+
+export const zVideoResolution = z.union([zVeo3Resolution, zRunwayResolution]);
+export type VideoResolution = z.infer<typeof zVideoResolution>;
+
 const zAspectRatioConfig = z.object({
   id: zAspectRatioID,
   value: z.number().gt(0),
@@ -473,6 +521,24 @@ export const DEFAULT_ASPECT_RATIO_CONFIG: AspectRatioConfig = {
   value: 1,
   isLocked: false,
 };
+
+const zVeo3DurationID = z.enum(['8']);
+type Veo3Duration = z.infer<typeof zVeo3DurationID>;
+export const isVeo3DurationID = (v: unknown): v is Veo3Duration => zVeo3DurationID.safeParse(v).success;
+export const VEO3_DURATIONS: Record<Veo3Duration, string> = {
+  '8': '8 seconds',
+};
+
+const zRunwayDurationID = z.enum(['5', '10']);
+type RunwayDuration = z.infer<typeof zRunwayDurationID>;
+export const isRunwayDurationID = (v: unknown): v is RunwayDuration => zRunwayDurationID.safeParse(v).success;
+export const RUNWAY_DURATIONS: Record<RunwayDuration, string> = {
+  '5': '5 seconds',
+  '10': '10 seconds',
+};
+
+export const zVideoDuration = z.union([zVeo3DurationID, zRunwayDurationID]);
+export type VideoDuration = z.infer<typeof zVideoDuration>;
 
 const zBboxState = z.object({
   rect: z.object({
@@ -491,6 +557,8 @@ const zBboxState = z.object({
 });
 
 const zDimensionsState = z.object({
+  // TODO(psyche): There is no concept of x/y coords for the dimensions state here... It's just width and height.
+  // Remove the extraneous data.
   rect: z.object({
     x: z.number().int(),
     y: z.number().int(),
@@ -655,7 +723,12 @@ export const getInitialRefImagesState = (): RefImagesState => ({
 
 export const zCanvasReferenceImageState_OLD = zCanvasEntityBase.extend({
   type: z.literal('reference_image'),
-  ipAdapter: z.discriminatedUnion('type', [zIPAdapterConfig, zFLUXReduxConfig, zChatGPT4oReferenceImageConfig]),
+  ipAdapter: z.discriminatedUnion('type', [
+    zIPAdapterConfig,
+    zFLUXReduxConfig,
+    zChatGPT4oReferenceImageConfig,
+    zGemini2_5ReferenceImageConfig,
+  ]),
 });
 
 export const zCanvasMetadata = z.object({

@@ -43,6 +43,8 @@
         "move": "Move",
         "movingImagesToBoard_one": "Moving {{count}} image to board:",
         "movingImagesToBoard_other": "Moving {{count}} images to board:",
+        "movingVideosToBoard_one": "Moving {{count}} video to board:",
+        "movingVideosToBoard_other": "Moving {{count}} videos to board:",
         "myBoard": "My Board",
         "noBoards": "No {{boardType}} Boards",
         "noMatching": "No matching Boards",
@@ -59,6 +61,8 @@
         "imagesWithCount_other": "{{count}} images",
         "assetsWithCount_one": "{{count}} asset",
         "assetsWithCount_other": "{{count}} assets",
+        "videosWithCount_one": "{{count}} video",
+        "videosWithCount_other": "{{count}} videos",
         "updateBoardError": "Error updating board"
     },
     "accordions": {
@@ -361,6 +365,9 @@
         "deleteImage_one": "Delete Image",
         "deleteImage_other": "Delete {{count}} Images",
         "deleteImagePermanent": "Deleted images cannot be restored.",
+        "deleteVideo_one": "Delete Video",
+        "deleteVideo_other": "Delete {{count}} Videos",
+        "deleteVideoPermanent": "Deleted videos cannot be restored.",
         "displayBoardSearch": "Board Search",
         "displaySearch": "Image Search",
         "download": "Download",
@@ -380,9 +387,10 @@
         "sortDirection": "Sort Direction",
         "showStarredImagesFirst": "Show Starred Images First",
         "noImageSelected": "No Image Selected",
+        "noVideoSelected": "No Video Selected",
         "noImagesInGallery": "No Images to Display",
-        "starImage": "Star Image",
-        "unstarImage": "Unstar Image",
+        "starImage": "Star",
+        "unstarImage": "Unstar",
         "unableToLoad": "Unable to load Gallery",
         "deleteSelection": "Delete Selection",
         "downloadSelection": "Download Selection",
@@ -411,7 +419,9 @@
         "openViewer": "Open Viewer",
         "closeViewer": "Close Viewer",
         "move": "Move",
-        "useForPromptGeneration": "Use for Prompt Generation"
+        "useForPromptGeneration": "Use for Prompt Generation",
+        "videos": "Videos",
+        "videosTab": "Videos you've created and saved within Invoke."
     },
     "hotkeys": {
         "hotkeys": "Hotkeys",
@@ -456,6 +466,10 @@
                 "title": "Select the Queue Tab",
                 "desc": "Selects the Queue tab."
             },
+            "selectVideoTab": {
+                "title": "Select the Video Tab",
+                "desc": "Selects the Video tab."
+            },
             "focusPrompt": {
                 "title": "Focus Prompt",
                 "desc": "Move cursor focus to the positive prompt."
@@ -481,6 +495,9 @@
                 "desc": "Selects the Generate tab.",
                 "key": "1"
             }
+        },
+        "video": {
+            "title": "Video"
         },
         "canvas": {
             "title": "Canvas",
@@ -781,11 +798,13 @@
         "guidance": "Guidance",
         "height": "Height",
         "imageDetails": "Image Details",
+        "videoDetails": "Video Details",
         "imageDimensions": "Image Dimensions",
         "metadata": "Metadata",
         "model": "Model",
         "negativePrompt": "Negative Prompt",
         "noImageDetails": "No image details found",
+        "noVideoDetails": "No video details found",
         "noMetaData": "No metadata found",
         "noRecallParameters": "No parameters to recall found",
         "parameterSet": "Parameter {{parameter}} set",
@@ -803,7 +822,11 @@
         "vae": "VAE",
         "width": "Width",
         "workflow": "Workflow",
-        "canvasV2Metadata": "Canvas Layers"
+        "canvasV2Metadata": "Canvas Layers",
+        "videoModel": "Model",
+        "videoDuration": "Duration",
+        "videoAspectRatio": "Aspect Ratio",
+        "videoResolution": "Resolution"
     },
     "modelManager": {
         "active": "active",
@@ -1189,6 +1212,7 @@
     },
     "parameters": {
         "aspect": "Aspect",
+        "duration": "Duration",
         "lockAspectRatio": "Lock Aspect Ratio",
         "swapDimensions": "Swap Dimensions",
         "setToOptimalSize": "Optimize size for model",
@@ -1213,9 +1237,14 @@
         "height": "Height",
         "imageFit": "Fit Initial Image To Output Size",
         "images": "Images",
+        "images_withCount_one": "Image",
+        "images_withCount_other": "Images",
+        "videos_withCount_one": "Video",
+        "videos_withCount_other": "Videos",
         "infillMethod": "Infill Method",
         "infillColorValue": "Fill Color",
         "info": "Info",
+        "startingFrameImage": "Start Frame",
         "invoke": {
             "addingImagesTo": "Adding images to",
             "modelDisabledForTrial": "Generating with {{modelName}} is not available on trial accounts. Visit your account settings to upgrade.",
@@ -1239,6 +1268,7 @@
             "batchNodeCollectionSizeMismatchNoGroupId": "Batch group collection size mismatch",
             "batchNodeCollectionSizeMismatch": "Collection size mismatch on Batch {{batchGroupId}}",
             "noModelSelected": "No model selected",
+            "noStartingFrameImage": "No starting frame image",
             "noT5EncoderModelSelected": "No T5 Encoder model selected for FLUX generation",
             "noFLUXVAEModelSelected": "No VAE model selected for FLUX generation",
             "noCLIPEmbedModelSelected": "No CLIP Embed model selected for FLUX generation",
@@ -1251,7 +1281,7 @@
             "modelIncompatibleScaledBboxWidth": "Scaled bbox width is {{width}} but {{model}} requires multiple of {{multiple}}",
             "modelIncompatibleScaledBboxHeight": "Scaled bbox height is {{height}} but {{model}} requires multiple of {{multiple}}",
             "fluxModelMultipleControlLoRAs": "Can only use 1 Control LoRA at a time",
-            "fluxKontextMultipleReferenceImages": "Can only use 1 Reference Image at a time with FLUX Kontext via BFL API",
+            "incompatibleLoRAs": "Incompatible LoRA(s) added",
             "canvasIsFiltering": "Canvas is busy (filtering)",
             "canvasIsTransforming": "Canvas is busy (transforming)",
             "canvasIsRasterizing": "Canvas is busy (rasterizing)",
@@ -1261,7 +1291,8 @@
             "noNodesInGraph": "No nodes in graph",
             "systemDisconnected": "System disconnected",
             "promptExpansionPending": "Prompt expansion in progress",
-            "promptExpansionResultPending": "Please accept or discard your prompt expansion result"
+            "promptExpansionResultPending": "Please accept or discard your prompt expansion result",
+            "videoIsDisabled": "Video generation is not enabled for {{accountType}} accounts."
         },
         "maskBlur": "Mask Blur",
         "negativePromptPlaceholder": "Negative Prompt",
@@ -1279,9 +1310,11 @@
         "seamlessXAxis": "Seamless X Axis",
         "seamlessYAxis": "Seamless Y Axis",
         "seed": "Seed",
+        "videoActions": "Video Actions",
         "imageActions": "Image Actions",
         "sendToCanvas": "Send To Canvas",
         "sendToUpscale": "Send To Upscale",
+        "sendToVideo": "Send To Video",
         "showOptionsPanel": "Show Side Panel (O or T)",
         "shuffle": "Shuffle Seed",
         "steps": "Steps",
@@ -1293,6 +1326,7 @@
         "postProcessing": "Post-Processing (Shift + U)",
         "processImage": "Process Image",
         "upscaling": "Upscaling",
+        "video": "Video",
         "useAll": "Use All",
         "useSize": "Use Size",
         "useCpuNoise": "Use CPU Noise",
@@ -1304,6 +1338,7 @@
         "gaussianBlur": "Gaussian Blur",
         "boxBlur": "Box Blur",
         "staged": "Staged",
+        "resolution": "Resolution",
         "modelDisabledForTrial": "Generating with {{modelName}} is not available on trial accounts. Visit your <LinkComponent>account settings</LinkComponent> to upgrade."
     },
     "dynamicPrompts": {
@@ -1381,8 +1416,8 @@
         "addedToBoard": "Added to board {{name}}'s assets",
         "addedToUncategorized": "Added to board $t(boards.uncategorized)'s assets",
         "baseModelChanged": "Base Model Changed",
-        "baseModelChangedCleared_one": "Cleared or disabled {{count}} incompatible submodel",
-        "baseModelChangedCleared_other": "Cleared or disabled {{count}} incompatible submodels",
+        "baseModelChangedCleared_one": "Updated, cleared or disabled {{count}} incompatible submodel",
+        "baseModelChangedCleared_other": "Updated, cleared or disabled {{count}} incompatible submodels",
         "canceled": "Processing Canceled",
         "connected": "Connected to Server",
         "imageCopied": "Image Copied",
@@ -2565,19 +2600,30 @@
             "queue": "Queue",
             "upscaling": "Upscaling",
             "upscalingTab": "$t(ui.tabs.upscaling) $t(common.tab)",
+            "video": "Video",
             "gallery": "Gallery"
         },
         "panels": {
             "launchpad": "Launchpad",
             "workflowEditor": "Workflow Editor",
-            "imageViewer": "Image Viewer",
-            "canvas": "Canvas"
+            "imageViewer": "Viewer",
+            "canvas": "Canvas",
+            "video": "Video"
         },
         "launchpad": {
             "workflowsTitle": "Go deep with Workflows.",
             "upscalingTitle": "Upscale and add detail.",
             "canvasTitle": "Edit and refine on Canvas.",
             "generateTitle": "Generate images from text prompts.",
+            "videoTitle": "Generate videos from text prompts.",
+            "video": {
+                "startingFrameCalloutTitle": "Add a Starting Frame",
+                "startingFrameCalloutDesc": "Add an image to control the first frame of your video."
+            },
+            "addStartingFrame": {
+                "title": "Add a Starting Frame",
+                "description": "Add an image to control the first frame of your video."
+            },
             "modelGuideText": "Want to learn what prompts work best for each model?",
             "modelGuideLink": "Check out our Model Guide.",
             "createNewWorkflowFromScratch": "Create a new Workflow from scratch",
@@ -2652,6 +2698,10 @@
             }
         }
     },
+    "video": {
+        "noVideoSelected": "No video selected",
+        "selectFromGallery": "Select a video from the gallery to play"
+    },
     "system": {
         "enableLogging": "Enable Logging",
         "logLevel": {
@@ -2689,8 +2739,8 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "Misc QoL: Toggle Bbox visibility, highlight nodes with errors, prevent adding node fields to Builder form multiple times, CLIP Skip metadata recallable",
-            "Reduced VRAM usage for multiple Kontext Ref images and VAE encoding"
+            "Canvas: Color Picker does not sample alpha, bbox respects aspect ratio lock when resizing shuffle button for number fields in Workflow Builder, hide pixel dimension sliders when using a model that doesn't support them",
+            "Workflows: Add a Shuffle button to number input fields"
         ],
         "readReleaseNotes": "Read Release Notes",
         "watchRecentReleaseVideos": "Watch Recent Release Videos",

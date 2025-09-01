@@ -17,6 +17,9 @@ export const MODEL_TYPE_MAP: Record<BaseModelType, string> = {
   imagen4: 'Imagen4',
   'chatgpt-4o': 'ChatGPT 4o',
   'flux-kontext': 'Flux Kontext',
+  'gemini-2.5': 'Gemini 2.5',
+  veo3: 'Veo3',
+  runway: 'Runway',
 };
 
 /**
@@ -35,12 +38,15 @@ export const MODEL_TYPE_SHORT_MAP: Record<BaseModelType, string> = {
   imagen4: 'Imagen4',
   'chatgpt-4o': 'ChatGPT 4o',
   'flux-kontext': 'Flux Kontext',
+  'gemini-2.5': 'Gemini 2.5',
+  veo3: 'Veo3',
+  runway: 'Runway',
 };
 
 /**
  * Mapping of base model to CLIP skip parameter constraints
  */
-export const CLIP_SKIP_MAP: Record<BaseModelType, { maxClip: number; markers: number[] }> = {
+export const CLIP_SKIP_MAP: { [key in BaseModelType]?: { maxClip: number; markers: number[] } } = {
   any: {
     maxClip: 0,
     markers: [],
@@ -89,6 +95,10 @@ export const CLIP_SKIP_MAP: Record<BaseModelType, { maxClip: number; markers: nu
     maxClip: 0,
     markers: [],
   },
+  'gemini-2.5': {
+    maxClip: 0,
+    markers: [],
+  },
 };
 
 /**
@@ -130,4 +140,53 @@ export const SCHEDULER_OPTIONS: ComboboxOption[] = [
 /**
  * List of base models that make API requests
  */
-export const API_BASE_MODELS = ['imagen3', 'imagen4', 'chatgpt-4o', 'flux-kontext'];
+export const API_BASE_MODELS: BaseModelType[] = ['imagen3', 'imagen4', 'chatgpt-4o', 'flux-kontext', 'gemini-2.5'];
+
+export const SUPPORTS_SEED_BASE_MODELS: BaseModelType[] = ['sd-1', 'sd-2', 'sd-3', 'sdxl', 'flux', 'cogview4'];
+
+export const SUPPORTS_OPTIMIZED_DENOISING_BASE_MODELS: BaseModelType[] = ['flux', 'sd-3'];
+
+export const SUPPORTS_REF_IMAGES_BASE_MODELS: BaseModelType[] = [
+  'sd-1',
+  'sdxl',
+  'flux',
+  'flux-kontext',
+  'chatgpt-4o',
+  'gemini-2.5',
+];
+
+export const SUPPORTS_NEGATIVE_PROMPT_BASE_MODELS: BaseModelType[] = [
+  'sd-1',
+  'sd-2',
+  'sdxl',
+  'cogview4',
+  'sd-3',
+  'imagen3',
+  'imagen4',
+];
+
+export const SUPPORTS_PIXEL_DIMENSIONS_BASE_MODELS: BaseModelType[] = [
+  'sd-1',
+  'sd-2',
+  'sd-3',
+  'sdxl',
+  'flux',
+  'cogview4',
+];
+
+export const SUPPORTS_ASPECT_RATIO_BASE_MODELS: BaseModelType[] = [
+  'sd-1',
+  'sd-2',
+  'sd-3',
+  'sdxl',
+  'flux',
+  'cogview4',
+  'imagen3',
+  'imagen4',
+  'flux-kontext',
+  'chatgpt-4o',
+];
+
+export const VIDEO_BASE_MODELS = ['veo3', 'runway'];
+
+export const REQUIRES_STARTING_FRAME_BASE_MODELS = ['runway'];

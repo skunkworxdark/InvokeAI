@@ -11,15 +11,26 @@ import {
   CHATGPT_ASPECT_RATIOS,
   DEFAULT_ASPECT_RATIO_CONFIG,
   FLUX_KONTEXT_ASPECT_RATIOS,
+  GEMINI_2_5_ASPECT_RATIOS,
   getInitialParamsState,
   IMAGEN_ASPECT_RATIOS,
   isChatGPT4oAspectRatioID,
   isFluxKontextAspectRatioID,
+  isGemini2_5AspectRatioID,
   isImagenAspectRatioID,
   zParamsState,
 } from 'features/controlLayers/store/types';
 import { calculateNewSize } from 'features/controlLayers/util/getScaledBoundingBoxDimensions';
-import { CLIP_SKIP_MAP } from 'features/parameters/types/constants';
+import {
+  API_BASE_MODELS,
+  CLIP_SKIP_MAP,
+  SUPPORTS_ASPECT_RATIO_BASE_MODELS,
+  SUPPORTS_NEGATIVE_PROMPT_BASE_MODELS,
+  SUPPORTS_OPTIMIZED_DENOISING_BASE_MODELS,
+  SUPPORTS_PIXEL_DIMENSIONS_BASE_MODELS,
+  SUPPORTS_REF_IMAGES_BASE_MODELS,
+  SUPPORTS_SEED_BASE_MODELS,
+} from 'features/parameters/types/constants';
 import type {
   ParameterCanvasCoherenceMode,
   ParameterCFGRescaleMultiplier,
@@ -105,6 +116,14 @@ const slice = createSlice({
       // If the model base changes (e.g. SD1.5 -> SDXL), we need to change a few things
       if (model === null || previousModel?.base === model.base) {
         return;
+      }
+
+      if (API_BASE_MODELS.includes(model.base)) {
+        state.dimensions.aspectRatio.isLocked = true;
+        state.dimensions.aspectRatio.value = 1;
+        state.dimensions.aspectRatio.id = '1:1';
+        state.dimensions.rect.width = 1024;
+        state.dimensions.rect.height = 1024;
       }
 
       applyClipSkip(state, model, state.clipSkip);
@@ -290,6 +309,12 @@ const slice = createSlice({
         state.dimensions.rect.height = height;
         state.dimensions.aspectRatio.value = state.dimensions.rect.width / state.dimensions.rect.height;
         state.dimensions.aspectRatio.isLocked = true;
+      } else if (state.model?.base === 'gemini-2.5' && isGemini2_5AspectRatioID(id)) {
+        const { width, height } = GEMINI_2_5_ASPECT_RATIOS[id];
+        state.dimensions.rect.width = width;
+        state.dimensions.rect.height = height;
+        state.dimensions.aspectRatio.value = state.dimensions.rect.width / state.dimensions.rect.height;
+        state.dimensions.aspectRatio.isLocked = true;
       } else if (state.model?.base === 'flux-kontext' && isFluxKontextAspectRatioID(id)) {
         const { width, height } = FLUX_KONTEXT_ASPECT_RATIOS[id];
         state.dimensions.rect.width = width;
@@ -366,7 +391,7 @@ const applyClipSkip = (state: { clipSkip: number }, model: ParameterModel | null
 
   const maxClip = getModelMaxClipSkip(model);
 
-  state.clipSkip = clamp(clipSkip, 0, maxClip);
+  state.clipSkip = clamp(clipSkip, 0, maxClip ?? 0);
 };
 
 const hasModelClipSkip = (model: ParameterModel | null) => {
@@ -374,7 +399,7 @@ const hasModelClipSkip = (model: ParameterModel | null) => {
     return false;
   }
 
-  return getModelMaxClipSkip(model) > 0;
+  return getModelMaxClipSkip(model) ?? 0 > 0;
 };
 
 const getModelMaxClipSkip = (model: ParameterModel) => {
@@ -383,7 +408,7 @@ const getModelMaxClipSkip = (model: ParameterModel) => {
     return 0;
   }
 
-  return CLIP_SKIP_MAP[model.base].maxClip;
+  return CLIP_SKIP_MAP[model.base]?.maxClip;
 };
 
 const resetState = (state: ParamsState): ParamsState => {
@@ -477,7 +502,6 @@ export const selectIsSD3 = createParamsSelector((params) => params.model?.base =
 export const selectIsCogView4 = createParamsSelector((params) => params.model?.base === 'cogview4');
 export const selectIsImagen3 = createParamsSelector((params) => params.model?.base === 'imagen3');
 export const selectIsImagen4 = createParamsSelector((params) => params.model?.base === 'imagen4');
-export const selectIsFluxKontextApi = createParamsSelector((params) => params.model?.base === 'flux-kontext');
 export const selectIsFluxKontext = createParamsSelector((params) => {
   if (params.model?.base === 'flux-kontext') {
     return true;
@@ -488,6 +512,7 @@ export const selectIsFluxKontext = createParamsSelector((params) => {
   return false;
 });
 export const selectIsChatGPT4o = createParamsSelector((params) => params.model?.base === 'chatgpt-4o');
+export const selectIsGemini2_5 = createParamsSelector((params) => params.model?.base === 'gemini-2.5');
 
 export const selectModel = createParamsSelector((params) => params.model);
 export const selectModelKey = createParamsSelector((params) => params.model?.key);
@@ -523,8 +548,32 @@ export const selectNegativePrompt = createParamsSelector((params) => params.nega
 export const selectNegativePromptWithFallback = createParamsSelector((params) => params.negativePrompt ?? '');
 export const selectHasNegativePrompt = createParamsSelector((params) => params.negativePrompt !== null);
 export const selectModelSupportsNegativePrompt = createSelector(
-  [selectIsFLUX, selectIsChatGPT4o, selectIsFluxKontext],
-  (isFLUX, isChatGPT4o, isFluxKontext) => !isFLUX && !isChatGPT4o && !isFluxKontext
+  selectModel,
+  (model) => !!model && SUPPORTS_NEGATIVE_PROMPT_BASE_MODELS.includes(model.base)
+);
+export const selectModelSupportsSeed = createSelector(
+  selectModel,
+  (model) => !!model && SUPPORTS_SEED_BASE_MODELS.includes(model.base)
+);
+export const selectModelSupportsRefImages = createSelector(
+  selectModel,
+  (model) => !!model && SUPPORTS_REF_IMAGES_BASE_MODELS.includes(model.base)
+);
+export const selectModelSupportsAspectRatio = createSelector(
+  selectModel,
+  (model) => !!model && SUPPORTS_ASPECT_RATIO_BASE_MODELS.includes(model.base)
+);
+export const selectModelSupportsPixelDimensions = createSelector(
+  selectModel,
+  (model) => !!model && SUPPORTS_PIXEL_DIMENSIONS_BASE_MODELS.includes(model.base)
+);
+export const selectIsApiBaseModel = createSelector(
+  selectModel,
+  (model) => !!model && API_BASE_MODELS.includes(model.base)
+);
+export const selectModelSupportsOptimizedDenoising = createSelector(
+  selectModel,
+  (model) => !!model && SUPPORTS_OPTIMIZED_DENOISING_BASE_MODELS.includes(model.base)
 );
 export const selectScheduler = createParamsSelector((params) => params.scheduler);
 export const selectSeamlessXAxis = createParamsSelector((params) => params.seamlessXAxis);

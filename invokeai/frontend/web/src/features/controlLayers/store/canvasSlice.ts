@@ -72,12 +72,14 @@ import {
   CHATGPT_ASPECT_RATIOS,
   DEFAULT_ASPECT_RATIO_CONFIG,
   FLUX_KONTEXT_ASPECT_RATIOS,
+  GEMINI_2_5_ASPECT_RATIOS,
   getEntityIdentifier,
   getInitialCanvasState,
   IMAGEN_ASPECT_RATIOS,
   isChatGPT4oAspectRatioID,
   isFluxKontextAspectRatioID,
   isFLUXReduxConfig,
+  isGemini2_5AspectRatioID,
   isImagenAspectRatioID,
   isIPAdapterConfig,
   zCanvasState,
@@ -1144,6 +1146,12 @@ const slice = createSlice({
         state.bbox.rect.height = height;
         state.bbox.aspectRatio.value = state.bbox.rect.width / state.bbox.rect.height;
         state.bbox.aspectRatio.isLocked = true;
+      } else if (state.bbox.modelBase === 'gemini-2.5' && isGemini2_5AspectRatioID(id)) {
+        const { width, height } = GEMINI_2_5_ASPECT_RATIOS[id];
+        state.bbox.rect.width = width;
+        state.bbox.rect.height = height;
+        state.bbox.aspectRatio.value = state.bbox.rect.width / state.bbox.rect.height;
+        state.bbox.aspectRatio.isLocked = true;
       } else if (state.bbox.modelBase === 'flux-kontext' && isFluxKontextAspectRatioID(id)) {
         const { width, height } = FLUX_KONTEXT_ASPECT_RATIOS[id];
         state.bbox.rect.width = width;
@@ -1603,6 +1611,7 @@ const slice = createSlice({
           state.bbox.rect.width = 1024;
           state.bbox.rect.height = 1024;
         }
+
         syncScaledSize(state);
       }
     });
