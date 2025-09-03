@@ -589,9 +589,13 @@
                 "title": "Prev Layer",
                 "desc": "Select the previous layer in the list."
             },
-            "setFillToWhite": {
-                "title": "Set Color to White",
-                "desc": "Set the current tool color to white."
+            "setFillColorsToDefault": {
+                "title": "Set Colors to Default",
+                "desc": "Set the current tool colors to default."
+            },
+            "toggleFillColor": {
+                "title": "Toggle Fill Color",
+                "desc": "Toggle the current tool fill color."
             },
             "filterSelected": {
                 "title": "Filter",
@@ -787,6 +791,9 @@
                 "desc": "Star or unstar the selected image."
             }
         }
+    },
+    "lora": {
+        "weight": "Weight"
     },
     "metadata": {
         "allPrompts": "All Prompts",
@@ -2268,6 +2275,8 @@
         },
         "fill": {
             "fillColor": "Fill Color",
+            "bgFillColor": "Background Color",
+            "fgFillColor": "Foreground Color",
             "fillStyle": "Fill Style",
             "solid": "Solid",
             "grid": "Grid",
