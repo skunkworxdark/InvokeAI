@@ -36,9 +36,7 @@
     "build-storybook": "storybook build",
     "test": "vitest",
     "test:ui": "vitest --coverage --ui",
-    "test:no-watch": "vitest --no-watch",
-    "translations:check": "node scripts/clean-translations.js public/locales/en.json --mode check",
-    "translations:clean": "node scripts/clean-translations.js public/locales/en.json --mode clean"
+    "test:no-watch": "vitest --no-watch"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^1.7.4",
@@ -47,7 +45,7 @@
     "@dagrejs/dagre": "^1.1.5",
     "@dagrejs/graphlib": "^2.2.4",
     "@fontsource-variable/inter": "^5.2.6",
-    "@invoke-ai/ui-library": "^0.0.46",
+    "@invoke-ai/ui-library": "^0.0.47",
     "@nanostores/react": "^1.0.0",
     "@observ33r/object-equals": "^1.1.5",
     "@reduxjs/toolkit": "2.8.2",

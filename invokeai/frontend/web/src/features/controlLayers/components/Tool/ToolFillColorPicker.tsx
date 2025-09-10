@@ -71,7 +71,7 @@ export const ToolFillColorPicker = memo(() => {
   return (
     <Popover isLazy>
       <PopoverTrigger>
-        <Flex role="button" aria-label={t('controlLayers.fill.fillColor')} tabIndex={-1} w={8} h={8}>
+        <Flex role="button" aria-label={t('controlLayers.fill.fillColor')} tabIndex={-1} minW={8} w={8} h={8}>
           <Tooltip label={tooltip}>
             <Flex alignItems="center" justifyContent="center" position="relative" w="full" h="full">
               <Box
