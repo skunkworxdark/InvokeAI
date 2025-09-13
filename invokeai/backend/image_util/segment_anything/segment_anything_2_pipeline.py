@@ -2,31 +2,39 @@ from typing import Optional
 
 import torch
 from PIL import Image
-from transformers.models.sam import SamModel
-from transformers.models.sam.processing_sam import SamProcessor
+
+# Import SAM2 components - these should be available in transformers 4.56.0+
+from transformers.models.sam2 import Sam2Model
+from transformers.models.sam2.processing_sam2 import Sam2Processor
 
 from invokeai.backend.image_util.segment_anything.shared import SAMInput
 from invokeai.backend.raw_model import RawModel
 
 
-class SegmentAnythingPipeline(RawModel):
-    """A wrapper class for the transformers SAM model and processor that makes it compatible with the model manager."""
+class SegmentAnything2Pipeline(RawModel):
+    """A wrapper class for the transformers SAM2 model and processor that makes it compatible with the model manager."""
 
-    def __init__(self, sam_model: SamModel, sam_processor: SamProcessor):
-        self._sam_model = sam_model
-        self._sam_processor = sam_processor
+    def __init__(self, sam2_model: Sam2Model, sam2_processor: Sam2Processor):
+        """Initialize the SAM2 pipeline.
+
+        Args:
+            sam2_model: The SAM2 model
+            sam2_processor: The SAM2 processor (can be Sam2Processor or Sam2VideoProcessor)
+        """
+        self._sam2_model = sam2_model
+        self._sam2_processor = sam2_processor
 
     def to(self, device: Optional[torch.device] = None, dtype: Optional[torch.dtype] = None):
-        # HACK(ryand): The SAM pipeline does not work on MPS devices. We only allow it to be moved to CPU or CUDA.
+        # HACK: The SAM2 pipeline may not work on MPS devices. We only allow it to be moved to CPU or CUDA.
         if device is not None and device.type not in {"cpu", "cuda"}:
             device = None
-        self._sam_model.to(device=device, dtype=dtype)
+        self._sam2_model.to(device=device, dtype=dtype)
 
     def calc_size(self) -> int:
-        # HACK(ryand): Fix the circular import issue.
+        # HACK: Fix the circular import issue.
         from invokeai.backend.model_manager.load.model_util import calc_module_size
 
-        return calc_module_size(self._sam_model)
+        return calc_module_size(self._sam2_model)
 
     def segment(
         self,
@@ -75,18 +83,22 @@ class SegmentAnythingPipeline(RawModel):
                 input_labels.append(labels)
 
         batched_input_boxes = [input_boxes] if input_boxes else None
-        batched_input_points = input_points if input_points else None
-        batched_input_labels = input_labels if input_labels else None
+        batched_input_points = [input_points] if input_points else None
+        batched_input_labels = [input_labels] if input_labels else None
 
-        processed_inputs = self._sam_processor(
+        processed_inputs = self._sam2_processor(
             images=image,
             input_boxes=batched_input_boxes,
             input_points=batched_input_points,
             input_labels=batched_input_labels,
             return_tensors="pt",
-        ).to(self._sam_model.device)
-        outputs = self._sam_model(**processed_inputs)
-        masks = self._sam_processor.post_process_masks(
+        ).to(self._sam2_model.device)
+
+        # Generate masks using the SAM2 model
+        outputs = self._sam2_model(**processed_inputs)
+
+        # Post-process the masks to get the final segmentation
+        masks = self._sam2_processor.post_process_masks(
             masks=outputs.pred_masks,
             original_sizes=processed_inputs.original_sizes,
             reshaped_input_sizes=processed_inputs.reshaped_input_sizes,
