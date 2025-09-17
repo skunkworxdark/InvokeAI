@@ -104,6 +104,7 @@
         "copy": "Copy",
         "copyError": "$t(gallery.copy) Error",
         "clipboard": "Clipboard",
+        "crop": "Crop",
         "on": "On",
         "off": "Off",
         "or": "or",
@@ -242,7 +243,10 @@
         "resultSubtitle": "Choose how to handle the expanded prompt:",
         "replace": "Replace",
         "insert": "Insert",
-        "discard": "Discard"
+        "discard": "Discard",
+        "noPromptHistory": "No prompt history recorded.",
+        "noMatchingPrompts": "No matching prompts in history.",
+        "toSwitchBetweenPrompts": "to switch between prompts."
     },
     "queue": {
         "queue": "Queue",
@@ -479,6 +483,14 @@
             "focusPrompt": {
                 "title": "Focus Prompt",
                 "desc": "Move cursor focus to the positive prompt."
+            },
+            "promptHistoryPrev": {
+                "title": "Previous Prompt in History",
+                "desc": "When the prompt is focused, move to the previous (older) prompt in your history."
+            },
+            "promptHistoryNext": {
+                "title": "Next Prompt in History",
+                "desc": "When the prompt is focused, move to the next (newer) prompt in your history."
             },
             "toggleLeftPanel": {
                 "title": "Toggle Left Panel",
@@ -1258,6 +1270,7 @@
         "infillColorValue": "Fill Color",
         "info": "Info",
         "startingFrameImage": "Start Frame",
+        "startingFrameImageAspectRatioWarning": "Image aspect ratio does not match the video aspect ratio ({{videoAspectRatio}}). This could lead to unexpected cropping during video generation.",
         "invoke": {
             "addingImagesTo": "Adding images to",
             "modelDisabledForTrial": "Generating with {{modelName}} is not available on trial accounts. Visit your account settings to upgrade.",
@@ -2782,7 +2795,8 @@
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
             "Select Object v2: Improved object selection with point and box inputs or text prompts.",
-            "Raster Layer Adjustments: Easily adjust layer brightness, contrast, saturation, curves and more."
+            "Raster Layer Adjustments: Easily adjust layer brightness, contrast, saturation, curves and more.",
+            "Prompt History: Review and quickly recall your last 100 prompts."
         ],
         "readReleaseNotes": "Read Release Notes",
         "watchRecentReleaseVideos": "Watch Recent Release Videos",

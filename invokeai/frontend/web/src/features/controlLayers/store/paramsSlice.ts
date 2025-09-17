@@ -4,7 +4,7 @@ import type { RootState } from 'app/store/store';
 import type { SliceConfig } from 'app/store/types';
 import { deepClone } from 'common/util/deepClone';
 import { roundDownToMultiple, roundToMultiple } from 'common/util/roundDownToMultiple';
-import { isPlainObject, uniq } from 'es-toolkit';
+import { isPlainObject } from 'es-toolkit';
 import { clamp } from 'es-toolkit/compat';
 import type { AspectRatioID, ParamsState, RgbaColor } from 'features/controlLayers/store/types';
 import {
@@ -198,11 +198,8 @@ const slice = createSlice({
       if (prompt.length === 0) {
         return;
       }
-      // Remove if already exists
-      state.positivePromptHistory = uniq(state.positivePromptHistory);
 
-      // Add to front
-      state.positivePromptHistory.unshift(prompt);
+      state.positivePromptHistory = [prompt, ...state.positivePromptHistory.filter((p) => p !== prompt)];
 
       if (state.positivePromptHistory.length > MAX_POSITIVE_PROMPT_HISTORY) {
         state.positivePromptHistory = state.positivePromptHistory.slice(0, MAX_POSITIVE_PROMPT_HISTORY);
