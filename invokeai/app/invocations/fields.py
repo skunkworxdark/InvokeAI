@@ -7,6 +7,13 @@ from pydantic_core import PydanticUndefined
 
 from invokeai.app.util.metaenum import MetaEnum
 from invokeai.backend.image_util.segment_anything.shared import BoundingBox
+from invokeai.backend.model_manager.taxonomy import (
+    BaseModelType,
+    ClipVariantType,
+    ModelFormat,
+    ModelType,
+    ModelVariantType,
+)
 from invokeai.backend.util.logging import InvokeAILogger
 
 logger = InvokeAILogger.get_logger()
@@ -39,42 +46,9 @@ class UIType(str, Enum, metaclass=MetaEnum):
     used, and the type will be ignored. They are included here for backwards compatibility.
     """
 
-    # region Model Field Types
-    MainModel = "MainModelField"
-    CogView4MainModel = "CogView4MainModelField"
-    FluxMainModel = "FluxMainModelField"
-    SD3MainModel = "SD3MainModelField"
-    SDXLMainModel = "SDXLMainModelField"
-    SDXLRefinerModel = "SDXLRefinerModelField"
-    ONNXModel = "ONNXModelField"
-    VAEModel = "VAEModelField"
-    FluxVAEModel = "FluxVAEModelField"
-    LoRAModel = "LoRAModelField"
-    ControlNetModel = "ControlNetModelField"
-    IPAdapterModel = "IPAdapterModelField"
-    T2IAdapterModel = "T2IAdapterModelField"
-    T5EncoderModel = "T5EncoderModelField"
-    CLIPEmbedModel = "CLIPEmbedModelField"
-    CLIPLEmbedModel = "CLIPLEmbedModelField"
-    CLIPGEmbedModel = "CLIPGEmbedModelField"
-    SpandrelImageToImageModel = "SpandrelImageToImageModelField"
-    ControlLoRAModel = "ControlLoRAModelField"
-    SigLipModel = "SigLipModelField"
-    FluxReduxModel = "FluxReduxModelField"
-    LlavaOnevisionModel = "LLaVAModelField"
-    Imagen3Model = "Imagen3ModelField"
-    Imagen4Model = "Imagen4ModelField"
-    ChatGPT4oModel = "ChatGPT4oModelField"
-    Gemini2_5Model = "Gemini2_5ModelField"
-    FluxKontextModel = "FluxKontextModelField"
-    Veo3Model = "Veo3ModelField"
-    RunwayModel = "RunwayModelField"
-    # endregion
-
     # region Misc Field Types
     Scheduler = "SchedulerField"
     Any = "AnyField"
-    Video = "VideoField"
     # endregion
 
     # region Internal Field Types
@@ -123,6 +97,38 @@ class UIType(str, Enum, metaclass=MetaEnum):
     MetadataItemCollection = "DEPRECATED_MetadataItemCollection"
     MetadataItemPolymorphic = "DEPRECATED_MetadataItemPolymorphic"
     MetadataDict = "DEPRECATED_MetadataDict"
+
+    # Deprecated Model Field Types - use ui_model_[base|type|variant|format] instead
+    MainModel = "DEPRECATED_MainModelField"
+    CogView4MainModel = "DEPRECATED_CogView4MainModelField"
+    FluxMainModel = "DEPRECATED_FluxMainModelField"
+    SD3MainModel = "DEPRECATED_SD3MainModelField"
+    SDXLMainModel = "DEPRECATED_SDXLMainModelField"
+    SDXLRefinerModel = "DEPRECATED_SDXLRefinerModelField"
+    ONNXModel = "DEPRECATED_ONNXModelField"
+    VAEModel = "DEPRECATED_VAEModelField"
+    FluxVAEModel = "DEPRECATED_FluxVAEModelField"
+    LoRAModel = "DEPRECATED_LoRAModelField"
+    ControlNetModel = "DEPRECATED_ControlNetModelField"
+    IPAdapterModel = "DEPRECATED_IPAdapterModelField"
+    T2IAdapterModel = "DEPRECATED_T2IAdapterModelField"
+    T5EncoderModel = "DEPRECATED_T5EncoderModelField"
+    CLIPEmbedModel = "DEPRECATED_CLIPEmbedModelField"
+    CLIPLEmbedModel = "DEPRECATED_CLIPLEmbedModelField"
+    CLIPGEmbedModel = "DEPRECATED_CLIPGEmbedModelField"
+    SpandrelImageToImageModel = "DEPRECATED_SpandrelImageToImageModelField"
+    ControlLoRAModel = "DEPRECATED_ControlLoRAModelField"
+    SigLipModel = "DEPRECATED_SigLipModelField"
+    FluxReduxModel = "DEPRECATED_FluxReduxModelField"
+    LlavaOnevisionModel = "DEPRECATED_LLaVAModelField"
+    Imagen3Model = "DEPRECATED_Imagen3ModelField"
+    Imagen4Model = "DEPRECATED_Imagen4ModelField"
+    ChatGPT4oModel = "DEPRECATED_ChatGPT4oModelField"
+    Gemini2_5Model = "DEPRECATED_Gemini2_5ModelField"
+    FluxKontextModel = "DEPRECATED_FluxKontextModelField"
+    Veo3Model = "DEPRECATED_Veo3ModelField"
+    RunwayModel = "DEPRECATED_RunwayModelField"
+    # endregion
 
 
 class UIComponent(str, Enum, metaclass=MetaEnum):
@@ -409,6 +415,10 @@ class InputFieldJSONSchemaExtra(BaseModel):
     ui_component: Optional[UIComponent] = None
     ui_order: Optional[int] = None
     ui_choice_labels: Optional[dict[str, str]] = None
+    ui_model_base: Optional[list[BaseModelType]] = None
+    ui_model_type: Optional[list[ModelType]] = None
+    ui_model_variant: Optional[list[ClipVariantType | ModelVariantType]] = None
+    ui_model_format: Optional[list[ModelFormat]] = None
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -465,9 +475,9 @@ class OutputFieldJSONSchemaExtra(BaseModel):
     """
 
     field_kind: FieldKind
-    ui_hidden: bool
-    ui_type: Optional[UIType]
-    ui_order: Optional[int]
+    ui_hidden: bool = False
+    ui_order: Optional[int] = None
+    ui_type: Optional[UIType] = None
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -501,35 +511,63 @@ def InputField(
     ui_hidden: Optional[bool] = None,
     ui_order: Optional[int] = None,
     ui_choice_labels: Optional[dict[str, str]] = None,
+    ui_model_base: Optional[BaseModelType | list[BaseModelType]] = None,
+    ui_model_type: Optional[ModelType | list[ModelType]] = None,
+    ui_model_variant: Optional[ClipVariantType | ModelVariantType | list[ClipVariantType | ModelVariantType]] = None,
+    ui_model_format: Optional[ModelFormat | list[ModelFormat]] = None,
 ) -> Any:
     """
     Creates an input field for an invocation.
 
-    This is a wrapper for Pydantic's [Field](https://docs.pydantic.dev/latest/api/fields/#pydantic.fields.Field) \
+    This is a wrapper for Pydantic's [Field](https://docs.pydantic.dev/latest/api/fields/#pydantic.fields.Field)
     that adds a few extra parameters to support graph execution and the node editor UI.
 
-    :param Input input: [Input.Any] The kind of input this field requires. \
-      `Input.Direct` means a value must be provided on instantiation. \
-      `Input.Connection` means the value must be provided by a connection. \
-      `Input.Any` means either will do.
+    If the field is a `ModelIdentifierField`, use the `ui_model_[base|type|variant|format]` args to filter the model list
+    in the Workflow Editor. Otherwise, use `ui_type` to provide extra type hints for the UI.
 
-    :param UIType ui_type: [None] Optionally provides an extra type hint for the UI. \
-      In some situations, the field's type is not enough to infer the correct UI type. \
-      For example, model selection fields should render a dropdown UI component to select a model. \
-      Internally, there is no difference between SD-1, SD-2 and SDXL model fields, they all use \
-      `MainModelField`. So to ensure the base-model-specific UI is rendered, you can use \
-      `UIType.SDXLMainModelField` to indicate that the field is an SDXL main model field.
+    Don't use both `ui_type` and `ui_model_[base|type|variant|format]` - if both are provided, a warning will be
+    logged and `ui_type` will be ignored.
 
-    :param UIComponent ui_component: [None] Optionally specifies a specific component to use in the UI. \
-      The UI will always render a suitable component, but sometimes you want something different than the default. \
-      For example, a `string` field will default to a single-line input, but you may want a multi-line textarea instead. \
-      For this case, you could provide `UIComponent.Textarea`.
+    Args:
+        input: The kind of input this field requires.
+        - `Input.Direct` means a value must be provided on instantiation.
+        - `Input.Connection` means the value must be provided by a connection.
+        - `Input.Any` means either will do.
 
-    :param bool ui_hidden: [False] Specifies whether or not this field should be hidden in the UI.
+        ui_type: Optionally provides an extra type hint for the UI. In some situations, the field's type is not enough
+        to infer the correct UI type. For example, Scheduler fields are enums, but we want to render a special scheduler
+        dropdown in the UI. Use `UIType.Scheduler` to indicate this.
 
-    :param int ui_order: [None] Specifies the order in which this field should be rendered in the UI.
+        ui_component: Optionally specifies a specific component to use in the UI. The UI will always render a suitable
+        component, but sometimes you want something different than the default. For example, a `string` field will
+        default to a single-line input, but you may want a multi-line textarea instead. In this case, you could use
+        `UIComponent.Textarea`.
 
-    :param dict[str, str] ui_choice_labels: [None] Specifies the labels to use for the choices in an enum field.
+        ui_hidden: Specifies whether or not this field should be hidden in the UI.
+
+        ui_order: Specifies the order in which this field should be rendered in the UI. If omitted, the field will be
+        rendered after all fields with an explicit order, in the order they are defined in the Invocation class.
+
+        ui_model_base: Specifies the base model architectures to filter the model list by in the Workflow Editor. For
+        example, `ui_model_base=BaseModelType.StableDiffusionXL` will show only SDXL architecture models. This arg is
+        only valid if this Input field is annotated as a `ModelIdentifierField`.
+
+        ui_model_type: Specifies the model type(s) to filter the model list by in the Workflow Editor. For example,
+        `ui_model_type=ModelType.VAE` will show only VAE models. This arg is only valid if this Input field is
+        annotated as a `ModelIdentifierField`.
+
+        ui_model_variant: Specifies the model variant(s) to filter the model list by in the Workflow Editor. For example,
+        `ui_model_variant=ModelVariantType.Inpainting` will show only inpainting models. This arg is only valid if this
+        Input field is annotated as a `ModelIdentifierField`.
+
+        ui_model_format: Specifies the model format(s) to filter the model list by in the Workflow Editor. For example,
+        `ui_model_format=ModelFormat.Diffusers` will show only models in the diffusers format. This arg is only valid
+        if this Input field is annotated as a `ModelIdentifierField`.
+
+        ui_choice_labels: Specifies the labels to use for the choices in an enum field. If omitted, the enum values
+        will be used. This arg is only valid if the field is annotated with as a `Literal`. For example,
+        `Literal["choice1", "choice2", "choice3"]` with `ui_choice_labels={"choice1": "Choice 1", "choice2": "Choice 2",
+        "choice3": "Choice 3"}` will render a dropdown with the labels "Choice 1", "Choice 2" and "Choice 3".
     """
 
     json_schema_extra_ = InputFieldJSONSchemaExtra(
@@ -538,7 +576,92 @@ def InputField(
     )
 
     if ui_type is not None:
-        json_schema_extra_.ui_type = ui_type
+        if (
+            ui_model_base is not None
+            or ui_model_type is not None
+            or ui_model_variant is not None
+            or ui_model_format is not None
+        ):
+            logger.warning("InputField: Use either ui_type or ui_model_[base|type|variant|format]. Ignoring ui_type.")
+        # Map old-style UIType to new-style ui_model_[base|type|variant|format]
+        elif ui_type is UIType.MainModel:
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.CogView4MainModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.CogView4]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.FluxMainModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.Flux]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.SD3MainModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.StableDiffusion3]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.SDXLMainModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.StableDiffusionXL]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.SDXLRefinerModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.StableDiffusionXLRefiner]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        # Think this UIType is unused...?
+        # elif ui_type is UIType.ONNXModel:
+        #     json_schema_extra_.ui_model_base =
+        #     json_schema_extra_.ui_model_type =
+        elif ui_type is UIType.VAEModel:
+            json_schema_extra_.ui_model_type = [ModelType.VAE]
+        elif ui_type is UIType.FluxVAEModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.Flux]
+            json_schema_extra_.ui_model_type = [ModelType.VAE]
+        elif ui_type is UIType.LoRAModel:
+            json_schema_extra_.ui_model_type = [ModelType.LoRA]
+        elif ui_type is UIType.ControlNetModel:
+            json_schema_extra_.ui_model_type = [ModelType.ControlNet]
+        elif ui_type is UIType.IPAdapterModel:
+            json_schema_extra_.ui_model_type = [ModelType.IPAdapter]
+        elif ui_type is UIType.T2IAdapterModel:
+            json_schema_extra_.ui_model_type = [ModelType.T2IAdapter]
+        elif ui_type is UIType.T5EncoderModel:
+            json_schema_extra_.ui_model_type = [ModelType.T5Encoder]
+        elif ui_type is UIType.CLIPEmbedModel:
+            json_schema_extra_.ui_model_type = [ModelType.CLIPEmbed]
+        elif ui_type is UIType.CLIPLEmbedModel:
+            json_schema_extra_.ui_model_type = [ModelType.CLIPEmbed]
+            json_schema_extra_.ui_model_variant = [ClipVariantType.L]
+        elif ui_type is UIType.CLIPGEmbedModel:
+            json_schema_extra_.ui_model_type = [ModelType.CLIPEmbed]
+            json_schema_extra_.ui_model_variant = [ClipVariantType.G]
+        elif ui_type is UIType.SpandrelImageToImageModel:
+            json_schema_extra_.ui_model_type = [ModelType.SpandrelImageToImage]
+        elif ui_type is UIType.ControlLoRAModel:
+            json_schema_extra_.ui_model_type = [ModelType.ControlLoRa]
+        elif ui_type is UIType.SigLipModel:
+            json_schema_extra_.ui_model_type = [ModelType.SigLIP]
+        elif ui_type is UIType.FluxReduxModel:
+            json_schema_extra_.ui_model_type = [ModelType.FluxRedux]
+        elif ui_type is UIType.LlavaOnevisionModel:
+            json_schema_extra_.ui_model_type = [ModelType.LlavaOnevision]
+        elif ui_type is UIType.Imagen3Model:
+            json_schema_extra_.ui_model_base = [BaseModelType.Imagen3]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.Imagen4Model:
+            json_schema_extra_.ui_model_base = [BaseModelType.Imagen4]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.ChatGPT4oModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.ChatGPT4o]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.Gemini2_5Model:
+            json_schema_extra_.ui_model_base = [BaseModelType.Gemini2_5]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.FluxKontextModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.FluxKontext]
+            json_schema_extra_.ui_model_type = [ModelType.Main]
+        elif ui_type is UIType.Veo3Model:
+            json_schema_extra_.ui_model_base = [BaseModelType.Veo3]
+            json_schema_extra_.ui_model_type = [ModelType.Video]
+        elif ui_type is UIType.RunwayModel:
+            json_schema_extra_.ui_model_base = [BaseModelType.Runway]
+            json_schema_extra_.ui_model_type = [ModelType.Video]
+        else:
+            json_schema_extra_.ui_type = ui_type
+
     if ui_component is not None:
         json_schema_extra_.ui_component = ui_component
     if ui_hidden is not None:
@@ -547,6 +670,26 @@ def InputField(
         json_schema_extra_.ui_order = ui_order
     if ui_choice_labels is not None:
         json_schema_extra_.ui_choice_labels = ui_choice_labels
+    if ui_model_base is not None:
+        if isinstance(ui_model_base, list):
+            json_schema_extra_.ui_model_base = ui_model_base
+        else:
+            json_schema_extra_.ui_model_base = [ui_model_base]
+    if ui_model_type is not None:
+        if isinstance(ui_model_type, list):
+            json_schema_extra_.ui_model_type = ui_model_type
+        else:
+            json_schema_extra_.ui_model_type = [ui_model_type]
+    if ui_model_variant is not None:
+        if isinstance(ui_model_variant, list):
+            json_schema_extra_.ui_model_variant = ui_model_variant
+        else:
+            json_schema_extra_.ui_model_variant = [ui_model_variant]
+    if ui_model_format is not None:
+        if isinstance(ui_model_format, list):
+            json_schema_extra_.ui_model_format = ui_model_format
+        else:
+            json_schema_extra_.ui_model_format = [ui_model_format]
 
     """
     There is a conflict between the typing of invocation definitions and the typing of an invocation's
@@ -648,20 +791,20 @@ def OutputField(
     """
     Creates an output field for an invocation output.
 
-    This is a wrapper for Pydantic's [Field](https://docs.pydantic.dev/1.10/usage/schema/#field-customization) \
+    This is a wrapper for Pydantic's [Field](https://docs.pydantic.dev/1.10/usage/schema/#field-customization)
     that adds a few extra parameters to support graph execution and the node editor UI.
 
-    :param UIType ui_type: [None] Optionally provides an extra type hint for the UI. \
-      In some situations, the field's type is not enough to infer the correct UI type. \
-      For example, model selection fields should render a dropdown UI component to select a model. \
-      Internally, there is no difference between SD-1, SD-2 and SDXL model fields, they all use \
-      `MainModelField`. So to ensure the base-model-specific UI is rendered, you can use \
-      `UIType.SDXLMainModelField` to indicate that the field is an SDXL main model field.
+    Args:
+        ui_type: Optionally provides an extra type hint for the UI. In some situations, the field's type is not enough
+        to infer the correct UI type. For example, Scheduler fields are enums, but we want to render a special scheduler
+        dropdown in the UI. Use `UIType.Scheduler` to indicate this.
 
-    :param bool ui_hidden: [False] Specifies whether or not this field should be hidden in the UI. \
+        ui_hidden: Specifies whether or not this field should be hidden in the UI.
 
-    :param int ui_order: [None] Specifies the order in which this field should be rendered in the UI. \
+        ui_order: Specifies the order in which this field should be rendered in the UI. If omitted, the field will be
+        rendered after all fields with an explicit order, in the order they are defined in the Invocation class.
     """
+
     return Field(
         default=default,
         title=title,
@@ -679,9 +822,9 @@ def OutputField(
         min_length=min_length,
         max_length=max_length,
         json_schema_extra=OutputFieldJSONSchemaExtra(
-            ui_type=ui_type,
             ui_hidden=ui_hidden,
             ui_order=ui_order,
+            ui_type=ui_type,
             field_kind=FieldKind.Output,
         ).model_dump(exclude_none=True),
     )
