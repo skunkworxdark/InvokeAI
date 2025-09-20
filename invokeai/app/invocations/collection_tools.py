@@ -269,7 +269,8 @@ class LoRACollectionLinkedInvocation(LoRACollectionInvocation):
     """Selects a LoRA model and weight."""
 
     lora: ModelIdentifierField = InputField(
-        description=FieldDescriptions.lora_model, title="LoRA", ui_type=UIType.LoRAModel
+        description=FieldDescriptions.lora_model,
+        title="LoRA",
     )
     weight: float = InputField(default=0.75, description=FieldDescriptions.lora_weight)
 
