@@ -13,6 +13,7 @@ import type { AnyModelConfig } from 'services/api/types';
 import { MainModelDefaultSettings } from './MainModelDefaultSettings/MainModelDefaultSettings';
 import { ModelAttrView } from './ModelAttrView';
 import { ModelFooter } from './ModelFooter';
+import { ModelReidentifyButton } from './ModelReidentifyButton';
 import { RelatedModels } from './RelatedModels';
 
 type Props = {
@@ -21,6 +22,7 @@ type Props = {
 
 export const ModelView = memo(({ modelConfig }: Props) => {
   const { t } = useTranslation();
+
   const withSettings = useMemo(() => {
     if (modelConfig.type === 'main' && modelConfig.base !== 'sdxl-refiner') {
       return true;
@@ -46,6 +48,7 @@ export const ModelView = memo(({ modelConfig }: Props) => {
           <ModelConvertButton modelConfig={modelConfig} />
         )}
         <ModelEditButton />
+        <ModelReidentifyButton modelConfig={modelConfig} />
       </ModelHeader>
       <Divider />
       <Flex flexDir="column" gap={4}>
@@ -53,21 +56,20 @@ export const ModelView = memo(({ modelConfig }: Props) => {
           <SimpleGrid columns={2} gap={4}>
             <ModelAttrView label={t('modelManager.baseModel')} value={modelConfig.base} />
             <ModelAttrView label={t('modelManager.modelType')} value={modelConfig.type} />
-            <ModelAttrView label={t('common.format')} value={modelConfig.format} />
+            <ModelAttrView label={t('modelManager.modelFormat')} value={modelConfig.format} />
             <ModelAttrView label={t('modelManager.path')} value={modelConfig.path} />
             <ModelAttrView label={t('modelManager.fileSize')} value={filesize(modelConfig.file_size)} />
-            {modelConfig.type === 'main' && (
+            {modelConfig.type === 'main' && 'variant' in modelConfig && (
               <ModelAttrView label={t('modelManager.variant')} value={modelConfig.variant} />
             )}
             {modelConfig.type === 'main' && modelConfig.format === 'diffusers' && modelConfig.repo_variant && (
               <ModelAttrView label={t('modelManager.repoVariant')} value={modelConfig.repo_variant} />
             )}
             {modelConfig.type === 'main' && modelConfig.format === 'checkpoint' && (
-              <>
-                <ModelAttrView label={t('modelManager.pathToConfig')} value={modelConfig.config_path} />
-                <ModelAttrView label={t('modelManager.predictionType')} value={modelConfig.prediction_type} />
-                <ModelAttrView label={t('modelManager.upcastAttention')} value={`${modelConfig.upcast_attention}`} />
-              </>
+              <ModelAttrView label={t('modelManager.pathToConfig')} value={modelConfig.config_path} />
+            )}
+            {modelConfig.type === 'main' && modelConfig.format === 'checkpoint' && 'prediction_type' in modelConfig && (
+              <ModelAttrView label={t('modelManager.predictionType')} value={modelConfig.prediction_type} />
             )}
             {modelConfig.type === 'ip_adapter' && modelConfig.format === 'invokeai' && (
               <ModelAttrView label={t('modelManager.imageEncoderModelId')} value={modelConfig.image_encoder_model_id} />
