@@ -51,7 +51,7 @@ from invokeai.backend.util.devices import TorchDevice
     title="FLUX2 Denoise",
     tags=["image", "flux", "flux2", "klein", "denoise"],
     category="image",
-    version="1.3.0",
+    version="1.4.0",
     classification=Classification.Prototype,
 )
 class Flux2DenoiseInvocation(BaseInvocation):
@@ -329,15 +329,29 @@ class Flux2DenoiseInvocation(BaseInvocation):
         noise_packed = pack_flux2(noise)
         x = pack_flux2(x)
 
-        # Apply BN normalization BEFORE denoising (as per diffusers Flux2KleinPipeline)
-        # BN normalization: y = (x - mean) / std
-        # This transforms latents to normalized space for the transformer
-        # IMPORTANT: Also normalize init_latents and noise for inpainting to maintain consistency
+        # BN normalization for img2img/inpainting:
+        # - The init_latents from VAE encode are NOT BN-normalized
+        # - The transformer operates in BN-normalized space
+        # - We must normalize x, init_latents, AND noise for InpaintExtension
+        # - Output MUST be denormalized after denoising before VAE decode
+        #
+        # This ensures that:
+        # 1. x starts in the correct normalized space for the transformer
+        # 2. When InpaintExtension merges intermediate_latents with noised_init_latents,
+        #    both are in the same scale/space (noise and init_latents must be in same space
+        #    for the linear interpolation: noised = noise * t + init * (1-t))
         if bn_mean is not None and bn_std is not None:
-            x = self._bn_normalize(x, bn_mean, bn_std)
             if init_latents_packed is not None:
                 init_latents_packed = self._bn_normalize(init_latents_packed, bn_mean, bn_std)
-            noise_packed = self._bn_normalize(noise_packed, bn_mean, bn_std)
+                # Also normalize noise for InpaintExtension - it's used to compute
+                # noised_init_latents = noise * t + init_latents * (1-t)
+                # Both operands must be in the same normalized space
+                noise_packed = self._bn_normalize(noise_packed, bn_mean, bn_std)
+            # For img2img/inpainting, x is computed from init_latents and must also be normalized
+            # For txt2img, x is pure noise (already N(0,1)) - normalizing it would be incorrect
+            # We detect img2img by checking if init_latents was provided
+            if init_latents is not None:
+                x = self._bn_normalize(x, bn_mean, bn_std)
 
         # Verify packed dimensions
         assert packed_h * packed_w == x.shape[1]
@@ -366,16 +380,24 @@ class Flux2DenoiseInvocation(BaseInvocation):
         if self.scheduler in FLUX_SCHEDULER_MAP and not is_inpainting:
             # Only use scheduler for txt2img - use manual Euler for inpainting to preserve exact timesteps
             scheduler_class = FLUX_SCHEDULER_MAP[self.scheduler]
-            scheduler = scheduler_class(
-                num_train_timesteps=1000,
-                shift=3.0,
-                use_dynamic_shifting=True,
-                base_shift=0.5,
-                max_shift=1.15,
-                base_image_seq_len=256,
-                max_image_seq_len=4096,
-                time_shift_type="exponential",
-            )
+            # FlowMatchHeunDiscreteScheduler only supports num_train_timesteps and shift parameters
+            # FlowMatchEulerDiscreteScheduler and FlowMatchLCMScheduler support dynamic shifting
+            if self.scheduler == "heun":
+                scheduler = scheduler_class(
+                    num_train_timesteps=1000,
+                    shift=3.0,
+                )
+            else:
+                scheduler = scheduler_class(
+                    num_train_timesteps=1000,
+                    shift=3.0,
+                    use_dynamic_shifting=True,
+                    base_shift=0.5,
+                    max_shift=1.15,
+                    base_image_seq_len=256,
+                    max_image_seq_len=4096,
+                    time_shift_type="exponential",
+                )
 
         # Prepare reference image extension for FLUX.2 Klein built-in editing
         ref_image_extension = None

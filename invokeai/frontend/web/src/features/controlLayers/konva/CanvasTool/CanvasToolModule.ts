@@ -4,8 +4,10 @@ import { CanvasBboxToolModule } from 'features/controlLayers/konva/CanvasTool/Ca
 import { CanvasBrushToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasBrushToolModule';
 import { CanvasColorPickerToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasColorPickerToolModule';
 import { CanvasEraserToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasEraserToolModule';
+import { CanvasGradientToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasGradientToolModule';
 import { CanvasMoveToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasMoveToolModule';
 import { CanvasRectToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasRectToolModule';
+import { CanvasTextToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasTextToolModule';
 import { CanvasViewToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasViewToolModule';
 import {
   calculateNewBrushSizeFromWheelDelta,
@@ -60,10 +62,12 @@ export class CanvasToolModule extends CanvasModuleBase {
     brush: CanvasBrushToolModule;
     eraser: CanvasEraserToolModule;
     rect: CanvasRectToolModule;
+    gradient: CanvasGradientToolModule;
     colorPicker: CanvasColorPickerToolModule;
     bbox: CanvasBboxToolModule;
     view: CanvasViewToolModule;
     move: CanvasMoveToolModule;
+    text: CanvasTextToolModule;
   };
 
   /**
@@ -117,8 +121,10 @@ export class CanvasToolModule extends CanvasModuleBase {
       brush: new CanvasBrushToolModule(this),
       eraser: new CanvasEraserToolModule(this),
       rect: new CanvasRectToolModule(this),
+      gradient: new CanvasGradientToolModule(this),
       colorPicker: new CanvasColorPickerToolModule(this),
       bbox: new CanvasBboxToolModule(this),
+      text: new CanvasTextToolModule(this),
       view: new CanvasViewToolModule(this),
       move: new CanvasMoveToolModule(this),
     };
@@ -131,6 +137,7 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.konva.group.add(this.tools.brush.konva.group);
     this.konva.group.add(this.tools.eraser.konva.group);
     this.konva.group.add(this.tools.colorPicker.konva.group);
+    this.konva.group.add(this.tools.text.konva.group);
     this.konva.group.add(this.tools.bbox.konva.group);
 
     this.subscriptions.add(this.manager.stage.$stageAttrs.listen(this.render));
@@ -141,6 +148,7 @@ export class CanvasToolModule extends CanvasModuleBase {
       this.$tool.listen(() => {
         // On tool switch, reset mouse state
         this.manager.tool.$isPrimaryPointerDown.set(false);
+        void this.tools.text.onToolChanged();
         this.render();
       })
     );
@@ -179,6 +187,8 @@ export class CanvasToolModule extends CanvasModuleBase {
       this.tools.bbox.syncCursorStyle();
     } else if (tool === 'colorPicker') {
       this.tools.colorPicker.syncCursorStyle();
+    } else if (tool === 'text') {
+      this.tools.text.syncCursorStyle();
     } else if (selectedEntityAdapter) {
       if (selectedEntityAdapter.$isDisabled.get()) {
         stage.setCursor('not-allowed');
@@ -194,6 +204,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         this.tools.move.syncCursorStyle();
       } else if (tool === 'rect') {
         this.tools.rect.syncCursorStyle();
+      } else if (tool === 'gradient') {
+        this.tools.gradient.syncCursorStyle();
       }
     } else if (this.manager.stateApi.getRenderedEntityCount() === 0) {
       stage.setCursor('not-allowed');
@@ -208,6 +220,7 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.tools.brush.render();
     this.tools.eraser.render();
     this.tools.colorPicker.render();
+    this.tools.text.render();
     this.tools.bbox.render();
   };
 
@@ -290,6 +303,19 @@ export class CanvasToolModule extends CanvasModuleBase {
    * @returns Whether the user is allowed to draw on the canvas.
    */
   getCanDraw = (): boolean => {
+    const tool = this.$tool.get();
+    if (tool === 'text') {
+      if (this.manager.$isBusy.get()) {
+        return false;
+      }
+
+      if (this.manager.stage.getIsDragging()) {
+        return false;
+      }
+
+      return true;
+    }
+
     if (this.manager.stateApi.getRenderedEntityCount() === 0) {
       return false;
     }
@@ -336,7 +362,11 @@ export class CanvasToolModule extends CanvasModuleBase {
       const tool = this.$tool.get();
       const selectedEntity = this.manager.stateApi.getSelectedEntityAdapter();
 
-      if (selectedEntity?.bufferRenderer.state?.type !== 'rect' && selectedEntity?.bufferRenderer.hasBuffer()) {
+      if (
+        selectedEntity?.bufferRenderer.state?.type !== 'rect' &&
+        selectedEntity?.bufferRenderer.state?.type !== 'gradient' &&
+        selectedEntity?.bufferRenderer.hasBuffer()
+      ) {
         selectedEntity.bufferRenderer.commitBuffer();
         return;
       }
@@ -345,6 +375,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         await this.tools.brush.onStagePointerEnter(e);
       } else if (tool === 'eraser') {
         await this.tools.eraser.onStagePointerEnter(e);
+      } else if (tool === 'text') {
+        await this.tools.text.onStagePointerEnter(e);
       }
     } finally {
       this.render();
@@ -375,6 +407,10 @@ export class CanvasToolModule extends CanvasModuleBase {
         await this.tools.eraser.onStagePointerDown(e);
       } else if (tool === 'rect') {
         await this.tools.rect.onStagePointerDown(e);
+      } else if (tool === 'gradient') {
+        await this.tools.gradient.onStagePointerDown(e);
+      } else if (tool === 'text') {
+        await this.tools.text.onStagePointerDown(e);
       }
     } finally {
       this.render();
@@ -405,6 +441,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         this.tools.eraser.onStagePointerUp(e);
       } else if (tool === 'rect') {
         this.tools.rect.onStagePointerUp(e);
+      } else if (tool === 'gradient') {
+        this.tools.gradient.onStagePointerUp(e);
       }
     } finally {
       this.render();
@@ -424,6 +462,8 @@ export class CanvasToolModule extends CanvasModuleBase {
 
       if (tool === 'colorPicker') {
         this.tools.colorPicker.onStagePointerMove(e);
+      } else if (tool === 'text') {
+        this.tools.text.onStagePointerMove(e);
       }
 
       if (!this.getCanDraw()) {
@@ -436,6 +476,10 @@ export class CanvasToolModule extends CanvasModuleBase {
         await this.tools.eraser.onStagePointerMove(e);
       } else if (tool === 'rect') {
         await this.tools.rect.onStagePointerMove(e);
+      } else if (tool === 'gradient') {
+        await this.tools.gradient.onStagePointerMove(e);
+      } else if (tool === 'text') {
+        // Already handled above
       } else {
         this.manager.stateApi.getSelectedEntityAdapter()?.bufferRenderer.clearBuffer();
       }
@@ -462,6 +506,7 @@ export class CanvasToolModule extends CanvasModuleBase {
       if (
         selectedEntity &&
         selectedEntity.bufferRenderer.state?.type !== 'rect' &&
+        selectedEntity.bufferRenderer.state?.type !== 'gradient' &&
         selectedEntity.bufferRenderer.hasBuffer()
       ) {
         selectedEntity.bufferRenderer.commitBuffer();
@@ -537,6 +582,11 @@ export class CanvasToolModule extends CanvasModuleBase {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
       return;
     }
+    // Suppress canvas key handlers while an uncommitted text session is active.
+    const hasActiveTextSession = this.tools.text.$session.get() !== null;
+    if (hasActiveTextSession) {
+      return;
+    }
 
     // Handle nudging - must be before repeat, as we may want to catch repeating keys
     if (this.tools.move.isNudgeKey(e.key)) {
@@ -588,6 +638,11 @@ export class CanvasToolModule extends CanvasModuleBase {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
       return;
     }
+    // Suppress canvas key handlers while an uncommitted text session is active.
+    const hasActiveTextSession = this.tools.text.$session.get() !== null;
+    if (hasActiveTextSession) {
+      return;
+    }
 
     if (e.key === KEY_SPACE) {
       // Revert the tool to the previous tool on space key up
@@ -629,6 +684,7 @@ export class CanvasToolModule extends CanvasModuleBase {
         eraser: this.tools.eraser.repr(),
         colorPicker: this.tools.colorPicker.repr(),
         rect: this.tools.rect.repr(),
+        gradient: this.tools.gradient.repr(),
         bbox: this.tools.bbox.repr(),
         view: this.tools.view.repr(),
         move: this.tools.move.repr(),

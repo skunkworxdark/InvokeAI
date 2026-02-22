@@ -22,15 +22,15 @@ import {
 } from 'services/api/types';
 import { objectEntries } from 'tsafe';
 
-import type { FilterableModelType } from './store/modelManagerV2Slice';
+import type { ModelCategoryType } from './store/modelManagerV2Slice';
 
 export type ModelCategoryData = {
-  category: FilterableModelType;
+  category: ModelCategoryType;
   i18nKey: string;
   filter: (config: AnyModelConfig) => boolean;
 };
 
-export const MODEL_CATEGORIES: Record<FilterableModelType, ModelCategoryData> = {
+export const MODEL_CATEGORIES: Record<ModelCategoryType, ModelCategoryData> = {
   unknown: {
     category: 'unknown',
     i18nKey: 'common.unknown',
@@ -214,6 +214,8 @@ export const MODEL_VARIANT_TO_LONG_NAME: Record<AnyModelVariant, string> = {
   klein_4b: 'FLUX.2 Klein 4B',
   klein_9b: 'FLUX.2 Klein 9B',
   klein_9b_base: 'FLUX.2 Klein 9B Base',
+  turbo: 'Z-Image Turbo',
+  zbase: 'Z-Image Base',
   large: 'CLIP L',
   gigantic: 'CLIP G',
   qwen3_4b: 'Qwen3 4B',

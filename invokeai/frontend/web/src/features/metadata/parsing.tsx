@@ -467,7 +467,7 @@ const Scheduler: SingleMetadataHandler<ParameterScheduler> = {
         store.dispatch(setFluxScheduler(value));
       }
     } else if (base === 'z-image') {
-      // Z-Image only supports euler, heun, lcm
+      // Z-Image supports euler, heun, lcm (but LCM only works well with Turbo, not Base)
       if (value === 'euler' || value === 'heun' || value === 'lcm') {
         store.dispatch(setZImageScheduler(value));
       }
@@ -623,9 +623,14 @@ const ZImageSeedVarianceEnabled: SingleMetadataHandler<boolean> = {
   [SingleMetadataKey]: true,
   type: 'ZImageSeedVarianceEnabled',
   parse: (metadata, _store) => {
-    const raw = getProperty(metadata, 'z_image_seed_variance_enabled');
-    const parsed = z.boolean().parse(raw);
-    return Promise.resolve(parsed);
+    try {
+      const raw = getProperty(metadata, 'z_image_seed_variance_enabled');
+      const parsed = z.boolean().parse(raw);
+      return Promise.resolve(parsed);
+    } catch {
+      // Default to false when metadata doesn't contain this field (e.g. older images)
+      return Promise.resolve(false);
+    }
   },
   recall: (value, store) => {
     store.dispatch(setZImageSeedVarianceEnabled(value));
