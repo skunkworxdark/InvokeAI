@@ -1,0 +1,3653 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+        <meta name="author" content="mauwii">
+      
+      
+        <link rel="canonical" href="https://invoke-ai.github.io/InvokeAI/multiuser/user_guide/">
+      
+      
+        <link rel="prev" href="../../features/hotkeys/">
+      
+      
+        <link rel="next" href="../admin_guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../img/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
+    
+    
+      
+        <title>User Guide - Invoke</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+  
+
+
+  
+  
+
+<script id="__analytics">function __md_analytics(){function e(){dataLayer.push(arguments)}window.dataLayer=window.dataLayer||[],e("js",new Date),e("config","G-2X4JR4S4FB"),document.addEventListener("DOMContentLoaded",(function(){document.forms.search&&document.forms.search.query.addEventListener("blur",(function(){this.value&&e("event","search",{search_term:this.value})}));document$.subscribe((function(){var t=document.forms.feedback;if(void 0!==t)for(var a of t.querySelectorAll("[type=submit]"))a.addEventListener("click",(function(a){a.preventDefault();var n=document.location.pathname,d=this.getAttribute("data-md-value");e("event","feedback",{page:n,data:d}),t.firstElementChild.disabled=!0;var r=t.querySelector(".md-feedback__note [data-md-value='"+d+"']");r&&(r.hidden=!1)})),t.hidden=!1})),location$.subscribe((function(t){e("config","G-2X4JR4S4FB",{page_path:t.pathname})}))}));var t=document.createElement("script");t.async=!0,t.src="https://www.googletagmanager.com/gtag/js?id=G-2X4JR4S4FB",document.getElementById("__analytics").insertAdjacentElement("afterEnd",t)}</script>
+  
+    <script>"undefined"!=typeof __md_analytics&&__md_analytics()</script>
+  
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#invokeai-multi-user-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Invoke" class="md-header__button md-logo" aria-label="Invoke" data-md-component="logo">
+      
+  <img src="../../img/invoke-symbol-wht-lrg.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Invoke
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              User Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/invoke-ai/InvokeAI" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    invoke-ai/InvokeAI
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../installation/quick_start/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Installation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../nodes/overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Workflows & Nodes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../configuration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Configuration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../help/gettingStartedWithAI/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Features
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Multi-User Mode
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../help/gettingStartedWithAI/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Help
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../faq/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Invoke" class="md-nav__button md-logo" aria-label="Invoke" data-md-component="logo">
+      
+  <img src="../../img/invoke-symbol-wht-lrg.svg" alt="logo">
+
+    </a>
+    Invoke
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/invoke-ai/InvokeAI" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    invoke-ai/InvokeAI
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Installation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/quick_start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/requirements/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detailed Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/manual/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manual Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/docker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/patchmatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PatchMatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows & Nodes
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflows & Nodes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nodes Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/NODES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow Editor Basics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/defaultNodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    List of Default Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/communityNodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Community Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/comfyToInvoke/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ComfyUI to InvokeAI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/detailedNodes/faceTools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Facetool Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/contributingNodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/NODES_MIGRATION_V3_V4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migrating from v3 to v4
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nodes/invocation-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invocation API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Features
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help/gettingStartedWithAI/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    New to InvokeAI?
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../features/low-vram/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Low VRAM mode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../features/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../features/gallery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gallery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../features/hotkeys/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hot Keys
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-User Mode
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Multi-User Mode
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-user-vs-multi-user-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single-User vs Multi-User Mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting Started
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Getting Started">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#initial-setup-first-time-in-multi-user-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Initial Setup (First Time in Multi-User Mode)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accessing-invokeai" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessing InvokeAI
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#understanding-user-roles-multi-user-mode-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Understanding User Roles (Multi-User Mode Only)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Understanding User Roles (Multi-User Mode Only)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#regular-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Regular User
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#administrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Administrator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-your-content" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with Your Content
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Working with Your Content">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#image-boards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image Boards
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflows
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#your-generation-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Your Generation Queue
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-shared-boards-future-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using Shared Boards (FUTURE FEATURE)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using Shared Boards (FUTURE FEATURE)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#accessing-shared-boards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessing Shared Boards
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#permission-levels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Permission Levels
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#viewing-models-read-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewing Models (Read-Only)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#customizing-your-experience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Customizing Your Experience
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Customizing Your Experience">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#personal-preferences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Personal Preferences
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#profile-settings-multi-user-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profile Settings (Multi-User Mode)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Best Practices
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Best Practices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#password-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Password Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-privacy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Privacy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cannot-log-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cannot Log In
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-expired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Expired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cannot-access-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cannot Access Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#missing-boards-or-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Missing Boards or Images
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slow-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slow Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#generation-stuck-in-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generation Stuck in Queue
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Tasks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Tasks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#changing-your-password" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing Your Password
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-a-new-board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating a New Board
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#saving-a-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving a Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#finding-a-public-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding a Public Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logging-out" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logging Out
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#frequently-asked-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frequently Asked Questions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Frequently Asked Questions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#can-other-users-see-my-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can other users see my images?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-share-my-workflows-with-others" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I share my workflows with others?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-long-do-sessions-last" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How long do sessions last?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-use-the-api-with-multi-user-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I use the API with multi-user mode?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-happens-if-i-forget-my-password" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What happens if I forget my password?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-have-multiple-sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I have multiple sessions?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-cant-i-see-the-model-manager-add-models-tab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why can't I see the Model Manager "Add Models" tab?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-do-i-know-if-im-an-administrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How do I know if I'm an administrator?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-request-admin-privileges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I request admin privileges?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting Help
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Getting Help">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#support-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Support Channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reporting-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reporting Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional Resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../admin_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Administrator Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../specification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../contributing/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CODE_OF_CONDUCT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code of Conduct
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/dev-environment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Environment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_4" id="__nav_7_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/contribution_guides/development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/contribution_guides/newContributorChecklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    New Contributors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/MODEL_MANAGER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model Manager v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../specification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/LOCAL_DEVELOPMENT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/ARCHITECTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/HOTKEYS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hotkeys
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/TESTS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../contributing/frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7_5" id="__nav_7_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/frontend/state-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/frontend/workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows - Design and Implementation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/contribution_guides/documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/INVOCATIONS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/MODEL_MANAGER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model Manager v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/DOWNLOAD_QUEUE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Download Queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/contribution_guides/translation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Translation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/contribution_guides/tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Help
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Help
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help/gettingStartedWithAI/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    New to InvokeAI?
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help/diffusion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diffusion Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../help/SAMPLER_CONVERGENCE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sampler Convergence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="./" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Multi-User Mode
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="invokeai-multi-user-guide">InvokeAI Multi-User Guide<a class="headerlink" href="#invokeai-multi-user-guide" title="Permanent link">#</a></h1>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">#</a></h2>
+<p>InvokeAI supports both single-user and multi-user modes. In
+single-user mode, no login is required and you have access to all
+features. In multi-user mode, multiple people can use the same
+InvokeAI instance while keeping their work private and organized.</p>
+<h3 id="single-user-vs-multi-user-mode">Single-User vs Multi-User Mode<a class="headerlink" href="#single-user-vs-multi-user-mode" title="Permanent link">#</a></h3>
+<p><strong>Single-User Mode:</strong></p>
+<ul>
+<li>No login required - direct access to InvokeAI</li>
+<li>All functionality enabled by default</li>
+<li>All boards and images visible in a unified view</li>
+<li>Ideal for personal use or trusted environments</li>
+<li>Enabled when <code>multiuser: false</code> in config or option is absent</li>
+</ul>
+<p><strong>Multi-User Mode:</strong></p>
+<ul>
+<li>Secure login required for access</li>
+<li>User isolation for boards, images, and workflows</li>
+<li>Role-based permissions (Administrator vs Regular User)</li>
+<li>Ideal for shared servers or team environments</li>
+<li>Enabled when <code>multiuser: true</code> in config</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Mode Switching</p>
+<p>If you switch from multi-user mode to single-user mode, 
+all boards and images from different users will be combined 
+into a single unified view. When switching back to multi-user
+mode, they will be separated again by user ownership.</p>
+</div>
+<h2 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">#</a></h2>
+<h3 id="initial-setup-first-time-in-multi-user-mode">Initial Setup (First Time in Multi-User Mode)<a class="headerlink" href="#initial-setup-first-time-in-multi-user-mode" title="Permanent link">#</a></h3>
+<p>If you're the first person to access a fresh InvokeAI installation in multi-user mode, you'll see the <strong>Administrator Setup</strong> dialog:</p>
+<ol>
+<li>Enter your email address (this will be your username)</li>
+<li>Create a display name</li>
+<li>Choose a strong password that meets the requirements:</li>
+<li>At least 8 characters long</li>
+<li>Contains uppercase letters</li>
+<li>Contains lowercase letters</li>
+<li>Contains numbers</li>
+<li>Confirm your password</li>
+<li>Click <strong>Create Administrator Account</strong></li>
+</ol>
+<p>You'll now be taken to a login screen and can enter the credentials
+you just created.</p>
+<h3 id="accessing-invokeai">Accessing InvokeAI<a class="headerlink" href="#accessing-invokeai" title="Permanent link">#</a></h3>
+<p><strong>In Single-User Mode:</strong></p>
+<ol>
+<li>Navigate to your InvokeAI URL (e.g., <code>http://localhost:9090</code>)</li>
+<li>You'll go directly to the InvokeAI interface</li>
+<li>No login required - start creating immediately!</li>
+</ol>
+<p><strong>In Multi-User Mode:</strong></p>
+<ol>
+<li>Navigate to your InvokeAI URL (e.g., <code>http://localhost:9090</code>)</li>
+<li>You'll see the login screen</li>
+<li>Enter your email address and password provided by your administrator</li>
+<li>Click <strong>Sign In</strong></li>
+</ol>
+<div class="admonition tip">
+<p class="admonition-title">Remember Me</p>
+<p>In multi-user mode, check the "Remember me" box to stay logged in for 7 days. Otherwise, your session will expire after 24 hours.</p>
+</div>
+<h2 id="understanding-user-roles-multi-user-mode-only">Understanding User Roles (Multi-User Mode Only)<a class="headerlink" href="#understanding-user-roles-multi-user-mode-only" title="Permanent link">#</a></h2>
+<p>In single-user mode, you have access to all features without restrictions. In multi-user mode, InvokeAI has two user roles:</p>
+<h3 id="regular-user">Regular User<a class="headerlink" href="#regular-user" title="Permanent link">#</a></h3>
+<p>As a regular user, you can:</p>
+<ul>
+<li>✅ Create and manage your own image boards</li>
+<li>✅ Generate images using all AI tools (Linear, Canvas, Upscale, Workflows)</li>
+<li>✅ Create, save, and load your own workflows</li>
+<li>✅ Access workflows marked as public</li>
+<li>✅ View your own generation queue</li>
+<li>✅ Customize your UI preferences (theme, hotkeys, etc.)</li>
+<li>✅ Access shared boards (based on permissions granted to you) (FUTURE FEATURE)</li>
+<li>✅ <strong>View available models</strong> (read-only access to Model Manager)</li>
+</ul>
+<p>You cannot:</p>
+<ul>
+<li>❌ Add, delete, or modify models</li>
+<li>❌ View or modify other users' boards, images, or workflows</li>
+<li>❌ Manage user accounts</li>
+<li>❌ Access system configuration</li>
+<li>❌ View or cancel other users' generation tasks</li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">The generation queue</p>
+<p>When two or more users are accessing InvokeAI at the same time,
+their image generation jobs will be placed on the session queue on
+a first-come, first-serve basis. This means that you will have to
+wait for other users' image rendering jobs to complete before
+yours will start.</p>
+<p>When another user's job is running, you will see the image
+generation progress bar and a queue badge that reads <code>X/Y</code>, where
+"X" is the number of jobs you have queued and "Y" is the total
+number of jobs queued, including your own and others.</p>
+<p>You can also pull up the Queue tab in order to see where your job
+is in relationship to other queued tasks.</p>
+</div>
+<h3 id="administrator">Administrator<a class="headerlink" href="#administrator" title="Permanent link">#</a></h3>
+<p>Administrators have all regular user capabilities, plus:</p>
+<ul>
+<li>✅ Full model management (add, delete, configure models)</li>
+<li>✅ Create and manage user accounts</li>
+<li>✅ View and manage all users' generation queues</li>
+<li>✅ Create and manage shared boards (FUTURE FEATURE)</li>
+<li>✅ Access system configuration</li>
+<li>✅ Grant or revoke admin privileges</li>
+</ul>
+<h2 id="working-with-your-content">Working with Your Content<a class="headerlink" href="#working-with-your-content" title="Permanent link">#</a></h2>
+<h3 id="image-boards">Image Boards<a class="headerlink" href="#image-boards" title="Permanent link">#</a></h3>
+<p>Image boards help organize your generated images. Each user has their own private boards.</p>
+<p><strong>Creating a Board:</strong></p>
+<ol>
+<li>Click the <strong>+</strong> button in the Boards panel</li>
+<li>Enter a board name</li>
+<li>Press Enter or click Create</li>
+</ol>
+<p><strong>Managing Boards:</strong></p>
+<ul>
+<li>Click a board to select it</li>
+<li>Generated images will automatically be added to the selected board</li>
+<li>Right-click a board for options (rename, delete, archive)</li>
+<li>Drag images between boards to reorganize</li>
+</ul>
+<p><strong>Board Visibility:</strong></p>
+<ul>
+<li>Your boards are private by default</li>
+<li>Only administrators can create shared boards (FUTURE FEATURE)</li>
+<li>You'll see shared boards you have access to in a separate section</li>
+</ul>
+<h3 id="workflows">Workflows<a class="headerlink" href="#workflows" title="Permanent link">#</a></h3>
+<p>Workflows are reusable generation templates that you create in the Workflow Editor.</p>
+<p><strong>Creating a Workflow:</strong></p>
+<ol>
+<li>Go to the <strong>Workflows</strong> tab</li>
+<li>Build your workflow using nodes</li>
+<li>Click <strong>Save</strong> and give it a name</li>
+<li>Your workflow is saved to your personal library</li>
+</ol>
+<p><strong>Workflow Privacy:</strong></p>
+<ul>
+<li>Your workflows are private by default</li>
+<li>Only you can see and edit your workflows</li>
+<li>Administrators can mark workflows as "public" for all users to access</li>
+<li>Public workflows appear in everyone's workflow library but remain read-only</li>
+</ul>
+<h3 id="your-generation-queue">Your Generation Queue<a class="headerlink" href="#your-generation-queue" title="Permanent link">#</a></h3>
+<p>The queue shows your pending and running generation tasks.</p>
+<p><strong>Queue Features:</strong></p>
+<ul>
+<li>View your current and completed generations</li>
+<li>Cancel pending tasks</li>
+<li>Re-run previous generations</li>
+<li>Monitor progress in real-time</li>
+</ul>
+<p><strong>Queue Isolation:</strong></p>
+<ul>
+<li>You will see your own queue items, as well as the items generated by
+  either users, but the generation parameters (e.g. prompts) for other
+  users' are hidden for privacy reasons.</li>
+<li>Administrators can view all queues for troubleshooting</li>
+<li>Your generations won't interfere with other users' tasks</li>
+</ul>
+<h2 id="using-shared-boards-future-feature">Using Shared Boards (FUTURE FEATURE)<a class="headerlink" href="#using-shared-boards-future-feature" title="Permanent link">#</a></h2>
+<p>Shared boards are a feature that will be added in a future
+release. Administrators will able to designate certain boards as being
+accessible to multiple users, allowing for collaboration among users
+while maintaining security.</p>
+<h3 id="accessing-shared-boards">Accessing Shared Boards<a class="headerlink" href="#accessing-shared-boards" title="Permanent link">#</a></h3>
+<p>Shared boards appear in your Boards panel marked with a sharing icon. You can:</p>
+<ul>
+<li>View images on shared boards (if you have read access)</li>
+<li>Add images to shared boards (if you have write access)</li>
+<li>Use shared boards like your personal boards</li>
+</ul>
+<h3 id="permission-levels">Permission Levels<a class="headerlink" href="#permission-levels" title="Permanent link">#</a></h3>
+<p>Shared boards have three permission levels:</p>
+<table>
+<thead>
+<tr>
+<th>Permission</th>
+<th>View Images</th>
+<th>Add Images</th>
+<th>Edit/Delete</th>
+<th>Manage Sharing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Read</strong></td>
+<td>✅</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><strong>Write</strong></td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><strong>Admin</strong></td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Shared boards</p>
+<p>Only administrators will be able to create shared boards and
+assign initial permissions.</p>
+</div>
+<h2 id="viewing-models-read-only">Viewing Models (Read-Only)<a class="headerlink" href="#viewing-models-read-only" title="Permanent link">#</a></h2>
+<p>Regular users have read-only access to the Model Manager, allowing you to:</p>
+<p><strong>What You Can View:</strong></p>
+<ul>
+<li>✅ Browse all available models</li>
+<li>✅ See model details and configurations</li>
+<li>✅ View default settings for each model</li>
+<li>✅ Check model metadata and descriptions</li>
+<li>✅ See which models are installed</li>
+</ul>
+<p><strong>What You Cannot Do:</strong></p>
+<ul>
+<li>❌ Install new models</li>
+<li>❌ Delete or modify existing models</li>
+<li>❌ Change model configurations</li>
+<li>❌ Upload or change model images</li>
+<li>❌ Convert models between formats</li>
+</ul>
+<p><strong>Accessing the Model Manager:</strong></p>
+<ol>
+<li>Click on the <strong>Models</strong> tab in the navigation</li>
+<li>Browse available models</li>
+<li>Click on any model to view its details</li>
+</ol>
+<div class="admonition tip">
+<p class="admonition-title">Need a New Model?</p>
+<p>If you need a model that isn't installed, ask your administrator to add it.</p>
+</div>
+<h2 id="customizing-your-experience">Customizing Your Experience<a class="headerlink" href="#customizing-your-experience" title="Permanent link">#</a></h2>
+<h3 id="personal-preferences">Personal Preferences<a class="headerlink" href="#personal-preferences" title="Permanent link">#</a></h3>
+<p>Your UI preferences are saved to your account:</p>
+<ul>
+<li><strong>Theme</strong>: Choose between light and dark modes</li>
+<li><strong>Hotkeys</strong>: Customize keyboard shortcuts</li>
+<li><strong>Canvas Settings</strong>: Default zoom, grid visibility, etc.</li>
+<li><strong>Generation Defaults</strong>: Default values for width, height, steps, etc.</li>
+</ul>
+<p>These settings are stored per-user and won't affect other users.</p>
+<h3 id="profile-settings-multi-user-mode">Profile Settings (Multi-User Mode)<a class="headerlink" href="#profile-settings-multi-user-mode" title="Permanent link">#</a></h3>
+<p>In multi-user mode, access your profile by clicking your name in the top-right corner:</p>
+<p><strong>Display Name:</strong> Update how your name appears throughout the UI</p>
+<p><strong>Change Password:</strong></p>
+<div class="admonition info">
+<p class="admonition-title">Password Changes</p>
+<p>A web-based interface for users to change their own passwords is coming in a future release. Until then, contact your administrator to reset your password if needed.</p>
+</div>
+<h2 id="security-best-practices">Security Best Practices<a class="headerlink" href="#security-best-practices" title="Permanent link">#</a></h2>
+<h3 id="password-security">Password Security<a class="headerlink" href="#password-security" title="Permanent link">#</a></h3>
+<ul>
+<li>Use a strong, unique password</li>
+<li>Don't share your password with others</li>
+<li>Change your password regularly</li>
+<li>Use a password manager to store complex passwords</li>
+</ul>
+<h3 id="session-security">Session Security<a class="headerlink" href="#session-security" title="Permanent link">#</a></h3>
+<ul>
+<li>Log out when using a shared computer</li>
+<li>Be aware of your session timeout (24 hours or 7 days with "remember me")</li>
+<li>Your session will automatically expire for security</li>
+<li>You'll need to log in again after the session expires</li>
+</ul>
+<h3 id="data-privacy">Data Privacy<a class="headerlink" href="#data-privacy" title="Permanent link">#</a></h3>
+<ul>
+<li>Your boards, images, and workflows are private by default</li>
+<li>Other users cannot access your content unless explicitly shared</li>
+<li>Only administrators can see all users' content for management purposes</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">#</a></h2>
+<h3 id="cannot-log-in">Cannot Log In<a class="headerlink" href="#cannot-log-in" title="Permanent link">#</a></h3>
+<p><strong>Issue:</strong> Login fails with "Incorrect email or password"</p>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Verify you're entering the correct email address</li>
+<li>Check that Caps Lock is off</li>
+<li>Try typing the password slowly to avoid mistakes</li>
+<li>Contact your administrator if you've forgotten your password</li>
+</ul>
+<p><strong>Issue:</strong> Login fails with "Account is disabled"</p>
+<p><strong>Solution:</strong> Contact your administrator to reactivate your account</p>
+<h3 id="session-expired">Session Expired<a class="headerlink" href="#session-expired" title="Permanent link">#</a></h3>
+<p><strong>Issue:</strong> You're suddenly logged out and see "Session expired"</p>
+<p><strong>Explanation:</strong> Sessions expire after 24 hours (or 7 days with "remember me")</p>
+<p><strong>Solution:</strong> Simply log in again with your credentials</p>
+<h3 id="cannot-access-features">Cannot Access Features<a class="headerlink" href="#cannot-access-features" title="Permanent link">#</a></h3>
+<p><strong>Issue:</strong> Features like Model Manager show "Admin privileges required"</p>
+<p><strong>Explanation:</strong> Some features are restricted to administrators</p>
+<p><strong>Solution:</strong> </p>
+<ul>
+<li>For model viewing: You can view but not modify models</li>
+<li>For user management: Contact an administrator</li>
+<li>For system configuration: Contact an administrator</li>
+</ul>
+<h3 id="missing-boards-or-images">Missing Boards or Images<a class="headerlink" href="#missing-boards-or-images" title="Permanent link">#</a></h3>
+<p><strong>Issue:</strong> Boards or images you created are not visible</p>
+<p><strong>Possible Causes:</strong></p>
+<ol>
+<li><strong>Filter Applied:</strong> Check if a filter is hiding content</li>
+<li><strong>Wrong User:</strong> Ensure you're logged in with the correct account</li>
+<li><strong>Archived Board:</strong> Check the "Show Archived" option</li>
+</ol>
+<p><strong>Solution:</strong> </p>
+<ul>
+<li>Clear any active filters</li>
+<li>Verify you're logged in as the right user</li>
+<li>Check archived items</li>
+</ul>
+<h3 id="slow-performance">Slow Performance<a class="headerlink" href="#slow-performance" title="Permanent link">#</a></h3>
+<p><strong>Issue:</strong> Generation or UI feels slower than expected</p>
+<p><strong>Possible Causes:</strong></p>
+<ul>
+<li>Other users generating images simultaneously</li>
+<li>Server resource limits</li>
+<li>Network latency</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Check the queue to see if others are generating</li>
+<li>Wait for current generations to complete</li>
+<li>Contact administrator if persistent</li>
+</ul>
+<h3 id="generation-stuck-in-queue">Generation Stuck in Queue<a class="headerlink" href="#generation-stuck-in-queue" title="Permanent link">#</a></h3>
+<p><strong>Issue:</strong> Your generation is queued but not starting</p>
+<p><strong>Possible Causes:</strong></p>
+<ul>
+<li>Server is processing other users' generations</li>
+<li>Server resources are fully utilized</li>
+<li>Technical issue with the server</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Wait for your turn in the queue</li>
+<li>Check if your generation is paused</li>
+<li>Contact administrator if stuck for extended period</li>
+</ul>
+<h2 id="common-tasks">Common Tasks<a class="headerlink" href="#common-tasks" title="Permanent link">#</a></h2>
+<h3 id="changing-your-password">Changing Your Password<a class="headerlink" href="#changing-your-password" title="Permanent link">#</a></h3>
+<p>!!! note This is a FUTURE FEATURE. For now, the Administrator must change/reset a user's password using command-line tools.</p>
+<ol>
+<li>Click your display name (top-right corner)</li>
+<li>Select <strong>Change Password</strong></li>
+<li>Enter current password</li>
+<li>Enter new password (8+ characters, mixed case, numbers)</li>
+<li>Confirm new password</li>
+<li>Click <strong>Update Password</strong></li>
+</ol>
+<h3 id="creating-a-new-board">Creating a New Board<a class="headerlink" href="#creating-a-new-board" title="Permanent link">#</a></h3>
+<ol>
+<li>Navigate to the Gallery or Canvas tab</li>
+<li>Find the Boards panel (usually on the left)</li>
+<li>Click the <strong>+ New Board</strong> button</li>
+<li>Type a descriptive name</li>
+<li>Press Enter</li>
+</ol>
+<h3 id="saving-a-workflow">Saving a Workflow<a class="headerlink" href="#saving-a-workflow" title="Permanent link">#</a></h3>
+<ol>
+<li>Create or edit a workflow in the Workflows tab</li>
+<li>Click <strong>Save</strong> in the top bar</li>
+<li>Enter a workflow name</li>
+<li>Optionally add a description</li>
+<li>Click <strong>Save Workflow</strong></li>
+</ol>
+<h3 id="finding-a-public-workflow">Finding a Public Workflow<a class="headerlink" href="#finding-a-public-workflow" title="Permanent link">#</a></h3>
+<p>!!! note Sharing of workflows is a FUTURE FEATURE, not yet implemented</p>
+<ol>
+<li>Go to the <strong>Workflows</strong> tab</li>
+<li>Open the workflow library</li>
+<li>Public workflows are marked with a 🌐 icon</li>
+<li>Click to load and use the workflow</li>
+</ol>
+<h3 id="logging-out">Logging Out<a class="headerlink" href="#logging-out" title="Permanent link">#</a></h3>
+<ol>
+<li>Click your display name (top-right corner)</li>
+<li>Select <strong>Logout</strong></li>
+<li>You'll be redirected to the login screen</li>
+</ol>
+<h2 id="frequently-asked-questions">Frequently Asked Questions<a class="headerlink" href="#frequently-asked-questions" title="Permanent link">#</a></h2>
+<h3 id="can-other-users-see-my-images">Can other users see my images?<a class="headerlink" href="#can-other-users-see-my-images" title="Permanent link">#</a></h3>
+<p>No, unless you add them to a shared board (FUTURE FEATURE). All your personal boards and images are private.</p>
+<h3 id="can-i-share-my-workflows-with-others">Can I share my workflows with others?<a class="headerlink" href="#can-i-share-my-workflows-with-others" title="Permanent link">#</a></h3>
+<p>Not directly. Ask your administrator to mark workflows as public if you want to share them.</p>
+<h3 id="how-long-do-sessions-last">How long do sessions last?<a class="headerlink" href="#how-long-do-sessions-last" title="Permanent link">#</a></h3>
+<ul>
+<li>24 hours by default</li>
+<li>7 days if you check "Remember me" during login</li>
+</ul>
+<h3 id="can-i-use-the-api-with-multi-user-mode">Can I use the API with multi-user mode?<a class="headerlink" href="#can-i-use-the-api-with-multi-user-mode" title="Permanent link">#</a></h3>
+<p>Yes, but you'll need to authenticate with a JWT token. See the <a href="../api_guide/">API Guide</a> for details.</p>
+<h3 id="what-happens-if-i-forget-my-password">What happens if I forget my password?<a class="headerlink" href="#what-happens-if-i-forget-my-password" title="Permanent link">#</a></h3>
+<p>Contact your administrator. They can reset your password for you.</p>
+<h3 id="can-i-have-multiple-sessions">Can I have multiple sessions?<a class="headerlink" href="#can-i-have-multiple-sessions" title="Permanent link">#</a></h3>
+<p>Yes, you can log in from multiple devices or browsers simultaneously. All sessions will use the same account and see the same content.</p>
+<h3 id="why-cant-i-see-the-model-manager-add-models-tab">Why can't I see the Model Manager "Add Models" tab?<a class="headerlink" href="#why-cant-i-see-the-model-manager-add-models-tab" title="Permanent link">#</a></h3>
+<p>Regular users can see the Models tab but with read-only access. Check that you're logged in and try refreshing the page.</p>
+<h3 id="how-do-i-know-if-im-an-administrator">How do I know if I'm an administrator?<a class="headerlink" href="#how-do-i-know-if-im-an-administrator" title="Permanent link">#</a></h3>
+<p>Administrators see an "Admin" badge next to their name in the top-right corner and have access to additional features like User Management.</p>
+<h3 id="can-i-request-admin-privileges">Can I request admin privileges?<a class="headerlink" href="#can-i-request-admin-privileges" title="Permanent link">#</a></h3>
+<p>Yes, ask your current administrator to grant you admin
+privileges. Admin privileges will give you the ability to see all
+other user's boards and images, as well as to add models and change
+various server-wide settings.</p>
+<h2 id="getting-help">Getting Help<a class="headerlink" href="#getting-help" title="Permanent link">#</a></h2>
+<h3 id="support-channels">Support Channels<a class="headerlink" href="#support-channels" title="Permanent link">#</a></h3>
+<ul>
+<li><strong>Administrator:</strong> Contact your system administrator for account issues</li>
+<li><strong>Documentation:</strong> Check the <a href="../../faq/">FAQ</a> for common issues</li>
+<li><strong>Community:</strong> Join the <a href="https://discord.gg/ZmtBAhwWhy">Discord</a> for help</li>
+<li><strong>Bug Reports:</strong> File issues on <a href="https://github.com/invoke-ai/InvokeAI/issues">GitHub</a></li>
+</ul>
+<h3 id="reporting-issues">Reporting Issues<a class="headerlink" href="#reporting-issues" title="Permanent link">#</a></h3>
+<p>When reporting an issue, include:</p>
+<ul>
+<li>Your role (regular user or administrator)</li>
+<li>What you were trying to do</li>
+<li>What happened instead</li>
+<li>Any error messages you saw</li>
+<li>Your browser and operating system</li>
+</ul>
+<h2 id="additional-resources">Additional Resources<a class="headerlink" href="#additional-resources" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="../admin_guide/">Administrator Guide</a> - For administrators managing users and the system</li>
+<li><a href="../api_guide/">API Guide</a> - For developers using the InvokeAI API</li>
+<li><a href="../specification/">Multiuser Specification</a> - Technical details about the feature</li>
+<li><a href="../../">InvokeAI Documentation</a> - Main documentation hub</li>
+</ul>
+<hr />
+<p><strong>Need more help?</strong> Contact your administrator or visit the <a href="https://discord.gg/ZmtBAhwWhy">InvokeAI Discord</a>.</p>
+
+
+
+
+
+
+
+  
+    
+  
+  
+    
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="February 27, 2026 04:47:25 UTC">February 27, 2026</span>
+  </span>
+
+    
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Created">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="February 27, 2026 04:47:25 UTC">February 27, 2026</span>
+  </span>
+
+    
+    
+    
+  </aside>
+
+
+  
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2022-2024 InvokeAI Team
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.indexes", "navigation.path", "search.highlight", "search.suggest", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
