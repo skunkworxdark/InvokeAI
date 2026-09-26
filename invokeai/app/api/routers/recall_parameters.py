@@ -3,12 +3,13 @@
 import json
 from typing import Any, Literal, Optional
 
-from fastapi import Body, HTTPException, Path
+from fastapi import Body, HTTPException, Path, Query
 from fastapi.routing import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
 from invokeai.app.api.auth_dependencies import CurrentUserOrDefault
 from invokeai.app.api.dependencies import ApiDependencies
+from invokeai.app.api.routers.image_move_maintenance import assert_image_move_maintenance_inactive
 from invokeai.backend.image_util.controlnet_processor import process_controlnet_image
 from invokeai.backend.model_manager.taxonomy import ModelType
 
@@ -58,6 +59,20 @@ class IPAdapterRecallParameter(BaseModel):
     )
 
 
+class ReferenceImageRecallParameter(BaseModel):
+    """Global reference-image configuration for recall.
+
+    Used for reference images that feed directly into the main model rather
+    than through a separate IP-Adapter / ControlNet model — for example
+    FLUX.2 Klein, FLUX Kontext, and Qwen Image Edit. The receiving frontend
+    picks the correct config type (``flux2_reference_image`` /
+    ``qwen_image_reference_image`` / ``flux_kontext_reference_image``) based
+    on the currently-selected main model.
+    """
+
+    image_name: str = Field(description="The filename of the reference image in outputs/images")
+
+
 class RecallParameter(BaseModel):
     """Request model for updating recallable parameters."""
 
@@ -105,6 +120,14 @@ class RecallParameter(BaseModel):
     ip_adapters: Optional[list[IPAdapterRecallParameter]] = Field(
         None, description="List of IP Adapters with their settings"
     )
+    reference_images: Optional[list[ReferenceImageRecallParameter]] = Field(
+        None,
+        description=(
+            "List of model-free reference images for architectures that consume reference "
+            "images directly (FLUX.2 Klein, FLUX Kontext, Qwen Image Edit). The frontend "
+            "picks the correct config type based on the currently-selected main model."
+        ),
+    )
 
 
 def resolve_model_name_to_key(model_name: str, model_type: ModelType = ModelType.Main) -> Optional[str]:
@@ -147,17 +170,15 @@ def load_image_file(image_name: str) -> Optional[dict[str, Any]]:
     """
     logger = ApiDependencies.invoker.services.logger
     try:
-        # Prefer using the image_files service to validate & open images
-        image_files = ApiDependencies.invoker.services.image_files
-        # Resolve a safe path inside outputs
-        image_path = image_files.get_path(image_name)
+        images_service = ApiDependencies.invoker.services.images
+        # Use images service which handles subfolder resolution via DB record
+        path = images_service.get_path(image_name)
 
-        if not image_files.validate_path(str(image_path)):
-            logger.warning(f"Image file not found: {image_name} (searched in {image_path.parent})")
+        if not images_service.validate_path(path):
+            logger.warning(f"Image file not found: {image_name}")
             return None
 
-        # Open the image via service to leverage caching
-        pil_image = image_files.get(image_name)
+        pil_image = images_service.get_pil_image(image_name)
         width, height = pil_image.size
         logger.info(f"Found image file: {image_name} ({width}x{height})")
         return {"image_name": image_name, "width": width, "height": height}
@@ -292,11 +313,43 @@ def resolve_ip_adapter_models(ip_adapters: list[IPAdapterRecallParameter]) -> li
     return resolved_adapters
 
 
+def resolve_reference_images(
+    reference_images: list[ReferenceImageRecallParameter],
+) -> list[dict[str, Any]]:
+    """
+    Validate model-free reference images and build the configuration list.
+
+    Unlike IP Adapters and ControlNets, these reference images are consumed
+    directly by the main model (FLUX.2 Klein, FLUX Kontext, Qwen Image Edit),
+    so there is no adapter-model name to resolve. We simply verify that each
+    referenced file exists in ``outputs/images`` and pass the image metadata
+    through to the frontend.
+
+    Args:
+        reference_images: List of reference-image recall parameters
+
+    Returns:
+        List of reference-image configurations with resolved image metadata.
+        Entries whose image file cannot be loaded are dropped with a warning.
+    """
+    logger = ApiDependencies.invoker.services.logger
+    resolved: list[dict[str, Any]] = []
+
+    for ref in reference_images:
+        image_data = load_image_file(ref.image_name)
+        if image_data is None:
+            logger.warning(f"Skipping reference image '{ref.image_name}' - file not found")
+            continue
+        resolved.append({"image": image_data})
+
+    return resolved
+
+
 def _assert_recall_image_access(parameters: "RecallParameter", current_user: CurrentUserOrDefault) -> None:
     """Validate that the caller can read every image referenced in the recall parameters.
 
-    Control layers and IP adapters may reference image_name fields.  Without this
-    check an attacker who knows another user's image UUID could use the recall
+    Control layers, IP adapters, and reference images may reference image_name fields.
+    Without this check an attacker who knows another user's image UUID could use the recall
     endpoint to extract image dimensions and — for ControlNet preprocessors — mint
     a derived processed image they can then fetch.
     """
@@ -311,6 +364,10 @@ def _assert_recall_image_access(parameters: "RecallParameter", current_user: Cur
         for adapter in parameters.ip_adapters:
             if adapter.image_name is not None:
                 image_names.append(adapter.image_name)
+    if parameters.reference_images:
+        for ref in parameters.reference_images:
+            if ref.image_name is not None:
+                image_names.append(ref.image_name)
 
     if not image_names:
         return
@@ -342,10 +399,22 @@ def _assert_recall_image_access(parameters: "RecallParameter", current_user: Cur
     operation_id="update_recall_parameters",
     response_model=dict[str, Any],
 )
-async def update_recall_parameters(
+def update_recall_parameters(
     current_user: CurrentUserOrDefault,
     queue_id: str = Path(..., description="The queue id to perform this operation on"),
     parameters: RecallParameter = Body(..., description="Recall parameters to update"),
+    strict: bool = Query(
+        default=False,
+        description="When true, parameters not included in the request are reset to their defaults (cleared).",
+    ),
+    append: bool = Query(
+        default=False,
+        description=(
+            "When true, recalled reference images (ip_adapters and reference_images) are "
+            "appended to the frontend's existing reference-image list instead of replacing it. "
+            "Mutually exclusive with strict."
+        ),
+    ),
 ) -> dict[str, Any]:
     """
     Update recallable parameters that can be recalled on the frontend.
@@ -357,31 +426,54 @@ async def update_recall_parameters(
     Args:
         queue_id: The queue ID to associate these parameters with
         parameters: The RecallParameter object containing the parameters to update
+        strict: When true, parameters not included in the request body are reset
+            to their defaults (cleared on the frontend).  Defaults to false,
+            which preserves the existing behaviour of only updating the
+            parameters that are explicitly provided.
+        append: When true, recalled reference images (``ip_adapters`` and
+            ``reference_images``) are appended to whatever reference images the
+            frontend already has, instead of replacing the whole list.  Mutually
+            exclusive with ``strict`` (which clears omitted parameters).
 
     Returns:
         A dictionary containing the updated parameters and status
 
     Example:
-        POST /api/v1/recall/{queue_id}
+        POST /api/v1/recall/{queue_id}?strict=true
         {
             "positive_prompt": "a beautiful landscape",
             "model": "sd-1.5",
-            "steps": 20,
-            "cfg_scale": 7.5,
-            "width": 512,
-            "height": 512,
-            "seed": 12345
+            "steps": 20
         }
+        # In strict mode, all other parameters (reference_images, loras, etc.)
+        # are cleared.  In non-strict mode (default) they would be left as-is.
     """
     logger = ApiDependencies.invoker.services.logger
+
+    if strict and append:
+        raise HTTPException(
+            status_code=400,
+            detail="The 'strict' and 'append' query parameters are mutually exclusive",
+        )
 
     # Validate image access before processing — prevents information leakage
     # (dimensions) and derived-image minting via ControlNet preprocessors.
     _assert_recall_image_access(parameters, current_user)
+    assert_image_move_maintenance_inactive()
 
     try:
-        # Get only the parameters that were actually provided (non-None values)
-        provided_params = {k: v for k, v in parameters.model_dump().items() if v is not None}
+        # In strict mode, include all parameters so the frontend clears anything
+        # not explicitly provided.  List-typed fields use [] instead of None so
+        # the frontend sees an empty collection rather than a null it might skip.
+        if strict:
+            _list_fields = {
+                name for name, field in RecallParameter.model_fields.items() if "list" in str(field.annotation).lower()
+            }
+            provided_params = {
+                k: ([] if v is None and k in _list_fields else v) for k, v in parameters.model_dump().items()
+            }
+        else:
+            provided_params = {k: v for k, v in parameters.model_dump().items() if v is not None}
 
         if not provided_params:
             return {"status": "no_parameters_provided", "updated_count": 0}
@@ -442,6 +534,22 @@ async def update_recall_parameters(
                 provided_params["ip_adapters"] = resolved_adapters
                 logger.info(f"Resolved {len(resolved_adapters)} IP adapter(s)")
 
+        # Process model-free reference images if provided
+        if "reference_images" in provided_params:
+            reference_images_param = parameters.reference_images
+            if reference_images_param is not None:
+                resolved_refs = resolve_reference_images(reference_images_param)
+                provided_params["reference_images"] = resolved_refs
+                logger.info(f"Resolved {len(resolved_refs)} reference image(s)")
+
+        # Append mode rides along inside the event's parameters dict rather
+        # than as a new event field so the generated client schema (which
+        # types parameters as a free-form object) doesn't need regenerating.
+        # Added after the persistence loop above, so the flag itself is never
+        # stored as a recall parameter.
+        if append:
+            provided_params["append"] = True
+
         # Emit event to notify frontend of parameter updates
         try:
             logger.info(
@@ -477,7 +585,7 @@ async def update_recall_parameters(
     operation_id="get_recall_parameters",
     response_model=dict[str, Any],
 )
-async def get_recall_parameters(
+def get_recall_parameters(
     current_user: CurrentUserOrDefault,
     queue_id: str = Path(..., description="The queue id to retrieve parameters for"),
 ) -> dict[str, Any]:

@@ -19,27 +19,36 @@ from invokeai.app.services.image_records.image_records_common import (
 from invokeai.app.services.shared.pagination import OffsetPaginatedResults
 from invokeai.app.services.shared.sqlite.sqlite_common import SQLiteDirection
 from invokeai.app.services.shared.sqlite.sqlite_database import SqliteDatabase
+from invokeai.app.services.virtual_boards.virtual_boards_common import VirtualSubBoardDTO
 
 
 class SqliteImageRecordStorage(ImageRecordStorageBase):
+    # Conservative bound on bound parameters per statement. SQLITE_MAX_VARIABLE_NUMBER defaults to
+    # 999 on SQLite builds older than 3.32, and an image library can hold far more intermediates.
+    _MAX_SQL_VARIABLES = 500
+
     def __init__(self, db: SqliteDatabase) -> None:
         super().__init__()
         self._db = db
 
     def get(self, image_name: str) -> ImageRecord:
+        # A sqlite3.Error is deliberately NOT translated into ImageRecordNotFoundException.
+        # This used to be caught and re-raised as not-found, which made the exception mean
+        # "the row is absent, OR the database is locked/corrupt/unreadable". Callers that
+        # treat not-found as a benign outcome — the concurrent-deletion skips in the images
+        # and board_images batch routes — would then swallow a disk I/O error as a routine
+        # race and answer 200 with the name in no result list at all. Let the storage error
+        # propagate: ImageService logs it and the route reports it as a real failure.
         with self._db.transaction() as cursor:
-            try:
-                cursor.execute(
-                    f"""--sql
-                    SELECT {IMAGE_DTO_COLS} FROM images
-                    WHERE image_name = ?;
-                    """,
-                    (image_name,),
-                )
+            cursor.execute(
+                f"""--sql
+                SELECT {IMAGE_DTO_COLS} FROM images
+                WHERE image_name = ?;
+                """,
+                (image_name,),
+            )
 
-                result = cast(Optional[sqlite3.Row], cursor.fetchone())
-            except sqlite3.Error as e:
-                raise ImageRecordNotFoundException from e
+            result = cast(Optional[sqlite3.Row], cursor.fetchone())
 
         if not result:
             raise ImageRecordNotFoundException
@@ -60,21 +69,29 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                 return None
             return cast(Optional[str], dict(result).get("user_id"))
 
-    def get_metadata(self, image_name: str) -> Optional[MetadataField]:
+    def exists(self, image_name: str) -> bool:
         with self._db.transaction() as cursor:
-            try:
-                cursor.execute(
-                    """--sql
-                    SELECT metadata FROM images
-                    WHERE image_name = ?;
-                    """,
-                    (image_name,),
-                )
+            cursor.execute(
+                """--sql
+                SELECT 1 FROM images
+                WHERE image_name = ?;
+                """,
+                (image_name,),
+            )
+            return cursor.fetchone() is not None
 
-                result = cast(Optional[sqlite3.Row], cursor.fetchone())
+    def get_metadata(self, image_name: str) -> Optional[MetadataField]:
+        # See get(): a storage error must not masquerade as a missing row.
+        with self._db.transaction() as cursor:
+            cursor.execute(
+                """--sql
+                SELECT metadata FROM images
+                WHERE image_name = ?;
+                """,
+                (image_name,),
+            )
 
-            except sqlite3.Error as e:
-                raise ImageRecordNotFoundException from e
+            result = cast(Optional[sqlite3.Row], cursor.fetchone())
 
             if not result:
                 raise ImageRecordNotFoundException
@@ -214,6 +231,13 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                 AND board_images.board_id = ?
                 """
                 query_params.append(board_id)
+            elif user_id is not None and not is_admin:
+                # No board_id supplied — still enforce per-user isolation so
+                # non-admins cannot enumerate other users' images
+                query_conditions += """--sql
+                AND images.user_id = ?
+                """
+                query_params.append(user_id)
 
             # Search term condition
             if search_term:
@@ -294,26 +318,57 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
             count = cast(int, cursor.fetchone()[0])
         return count
 
-    def delete_intermediates(self) -> list[str]:
+    def get_intermediates(self) -> list[tuple[str, str]]:
+        """Gets all intermediate image records without deleting them.
+
+        Returns a list of (image_name, image_subfolder) tuples for staged file deletion.
+        """
         with self._db.transaction() as cursor:
-            try:
-                cursor.execute(
-                    """--sql
-                    SELECT image_name FROM images
-                    WHERE is_intermediate = TRUE;
-                    """
-                )
-                result = cast(list[sqlite3.Row], cursor.fetchall())
-                image_names = [r[0] for r in result]
-                cursor.execute(
-                    """--sql
-                    DELETE FROM images
-                    WHERE is_intermediate = TRUE;
-                    """
-                )
-            except sqlite3.Error as e:
-                raise ImageRecordDeleteException from e
-        return image_names
+            cursor.execute(
+                """--sql
+                SELECT image_name, image_subfolder FROM images
+                WHERE is_intermediate = TRUE;
+                """
+            )
+            result = cast(list[sqlite3.Row], cursor.fetchall())
+        return [(r[0], r[1]) for r in result]
+
+    def delete_intermediates_by_names(self, image_names: list[str]) -> list[str]:
+        """Deletes the named image records, skipping any that are no longer intermediates.
+
+        The ``is_intermediate`` predicate rides on the DELETE itself rather than on a preceding
+        SELECT, so an image promoted out of intermediate status keeps its record however the
+        promotion interleaves with this call. (Python's legacy sqlite3 transaction control opens a
+        transaction only before a write, so a SELECT here holds no read lock to rely on.)
+
+        Returns the names whose records this call actually removed. Names that were already gone, and
+        names whose records survive because they are no longer intermediates, are both excluded — the
+        caller purges the files of exactly the returned names and touches nothing else.
+        """
+        deleted: list[str] = []
+        try:
+            with self._db.transaction() as cursor:
+                # Chunked to stay under SQLITE_MAX_VARIABLE_NUMBER; every chunk runs inside the one
+                # transaction above.
+                for start in range(0, len(image_names), self._MAX_SQL_VARIABLES):
+                    chunk = image_names[start : start + self._MAX_SQL_VARIABLES]
+                    placeholders = ",".join("?" for _ in chunk)
+                    select_query = f"SELECT image_name FROM images WHERE image_name IN ({placeholders})"
+
+                    cursor.execute(select_query, chunk)
+                    present_before = {cast(str, r[0]) for r in cursor.fetchall()}
+                    cursor.execute(
+                        f"DELETE FROM images WHERE image_name IN ({placeholders}) AND is_intermediate = TRUE",
+                        chunk,
+                    )
+                    cursor.execute(select_query, chunk)
+                    present_after = {cast(str, r[0]) for r in cursor.fetchall()}
+
+                    deleted.extend(name for name in chunk if name in present_before and name not in present_after)
+        except sqlite3.Error as e:
+            # The try wraps the context manager so a failure in its commit is reported too.
+            raise ImageRecordDeleteException from e
+        return deleted
 
     def save(
         self,
@@ -329,6 +384,7 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
         node_id: Optional[str] = None,
         metadata: Optional[str] = None,
         user_id: Optional[str] = None,
+        image_subfolder: str = "",
     ) -> datetime:
         with self._db.transaction() as cursor:
             try:
@@ -346,9 +402,10 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                         is_intermediate,
                         starred,
                         has_workflow,
-                        user_id
+                        user_id,
+                        image_subfolder
                         )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         image_name,
@@ -363,6 +420,7 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                         starred,
                         has_workflow,
                         user_id or "system",
+                        image_subfolder,
                     ),
                 )
 
@@ -443,7 +501,11 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
 
             if board_id == "none":
                 query_conditions += """--sql
-                AND board_images.board_id IS NULL
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM board_images
+                    WHERE board_images.image_name = images.image_name
+                )
                 """
                 # For uncategorized images, filter by user_id to ensure per-user isolation
                 # Admin users can see all uncategorized images from all users
@@ -454,9 +516,21 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                     query_params.append(user_id)
             elif board_id is not None:
                 query_conditions += """--sql
-                AND board_images.board_id = ?
+                AND EXISTS (
+                    SELECT 1
+                    FROM board_images
+                    WHERE board_images.image_name = images.image_name
+                    AND board_images.board_id = ?
+                )
                 """
                 query_params.append(board_id)
+            elif user_id is not None and not is_admin:
+                # No board_id supplied — still enforce per-user isolation so
+                # non-admins cannot enumerate other users' images
+                query_conditions += """--sql
+                AND images.user_id = ?
+                """
+                query_params.append(user_id)
 
             if search_term:
                 query_conditions += """--sql
@@ -474,7 +548,6 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                 starred_count_query = f"""--sql
                 SELECT COUNT(*)
                 FROM images
-                LEFT JOIN board_images ON board_images.image_name = images.image_name
                 WHERE images.starred = TRUE AND (1=1{query_conditions})
                 """
                 cursor.execute(starred_count_query, query_params)
@@ -485,7 +558,6 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                 names_query = f"""--sql
                 SELECT images.image_name
                 FROM images
-                LEFT JOIN board_images ON board_images.image_name = images.image_name
                 WHERE 1=1{query_conditions}
                 ORDER BY images.starred DESC, images.created_at {order_dir.value}
                 """
@@ -493,7 +565,144 @@ class SqliteImageRecordStorage(ImageRecordStorageBase):
                 names_query = f"""--sql
                 SELECT images.image_name
                 FROM images
-                LEFT JOIN board_images ON board_images.image_name = images.image_name
+                WHERE 1=1{query_conditions}
+                ORDER BY images.created_at {order_dir.value}
+                """
+
+            cursor.execute(names_query, query_params)
+            result = cast(list[sqlite3.Row], cursor.fetchall())
+        image_names = [row[0] for row in result]
+
+        return ImageNamesResult(image_names=image_names, starred_count=starred_count, total_count=len(image_names))
+
+    def get_image_dates(
+        self,
+        user_id: Optional[str] = None,
+        is_admin: bool = False,
+    ) -> list[VirtualSubBoardDTO]:
+        with self._db.transaction() as cursor:
+            query_conditions = ""
+            query_params: list[Union[int, str, bool]] = []
+
+            # Only non-intermediate images
+            query_conditions += """--sql
+            AND images.is_intermediate = 0
+            """
+
+            # User isolation for non-admin users
+            if user_id is not None and not is_admin:
+                query_conditions += """--sql
+                AND images.user_id = ?
+                """
+                query_params.append(user_id)
+
+            query = f"""--sql
+            SELECT
+                DATE(images.created_at) as date,
+                SUM(CASE WHEN images.image_category = 'general' THEN 1 ELSE 0 END) as image_count,
+                SUM(CASE WHEN images.image_category != 'general' THEN 1 ELSE 0 END) as asset_count,
+                (
+                    SELECT i2.image_name FROM images i2
+                    WHERE DATE(i2.created_at) = DATE(images.created_at)
+                    AND i2.is_intermediate = 0
+                    ORDER BY i2.created_at DESC LIMIT 1
+                ) as cover_image_name
+            FROM images
+            WHERE 1=1
+            {query_conditions}
+            GROUP BY DATE(images.created_at)
+            ORDER BY date DESC;
+            """
+
+            cursor.execute(query, query_params)
+            result = cast(list[sqlite3.Row], cursor.fetchall())
+
+        return [
+            VirtualSubBoardDTO(
+                virtual_board_id=f"by_date:{dict(row)['date']}",
+                board_name=dict(row)["date"],
+                date=dict(row)["date"],
+                image_count=dict(row)["image_count"],
+                asset_count=dict(row)["asset_count"],
+                cover_image_name=dict(row)["cover_image_name"],
+            )
+            for row in result
+        ]
+
+    def get_image_names_by_date(
+        self,
+        date: str,
+        starred_first: bool = True,
+        order_dir: SQLiteDirection = SQLiteDirection.Descending,
+        categories: Optional[list[ImageCategory]] = None,
+        search_term: Optional[str] = None,
+        user_id: Optional[str] = None,
+        is_admin: bool = False,
+    ) -> ImageNamesResult:
+        with self._db.transaction() as cursor:
+            query_conditions = ""
+            query_params: list[Union[int, str, bool]] = []
+
+            # Filter by date
+            query_conditions += """--sql
+            AND DATE(images.created_at) = ?
+            """
+            query_params.append(date)
+
+            # Only non-intermediate images
+            query_conditions += """--sql
+            AND images.is_intermediate = 0
+            """
+
+            if categories is not None:
+                category_strings = [c.value for c in set(categories)]
+                placeholders = ",".join("?" * len(category_strings))
+                query_conditions += f"""--sql
+                AND images.image_category IN ( {placeholders} )
+                """
+                for c in category_strings:
+                    query_params.append(c)
+
+            # User isolation for non-admin users
+            if user_id is not None and not is_admin:
+                query_conditions += """--sql
+                AND images.user_id = ?
+                """
+                query_params.append(user_id)
+
+            if search_term:
+                query_conditions += """--sql
+                AND (
+                    images.metadata LIKE ?
+                    OR images.created_at LIKE ?
+                )
+                """
+                query_params.append(f"%{search_term.lower()}%")
+                query_params.append(f"%{search_term.lower()}%")
+
+            # Get starred count if starred_first is enabled
+            starred_count = 0
+            if starred_first:
+                starred_count_query = f"""--sql
+                SELECT COUNT(*)
+                FROM images
+                WHERE images.starred = TRUE AND (1=1{query_conditions})
+                """
+                cursor.execute(starred_count_query, query_params)
+                starred_count = cast(int, cursor.fetchone()[0])
+
+            # Get all image names with proper ordering
+            if starred_first:
+                names_query = f"""--sql
+                SELECT images.image_name
+                FROM images
+                WHERE 1=1{query_conditions}
+                ORDER BY images.starred DESC, images.created_at {order_dir.value}
+                """
+            else:
+                names_query = f"""--sql
+                SELECT images.image_name
+                FROM images
                 WHERE 1=1{query_conditions}
                 ORDER BY images.created_at {order_dir.value}
                 """

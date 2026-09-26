@@ -18,7 +18,7 @@ from invokeai.backend.model_manager.load import (
     ModelLoaderRegistry,
     ModelLoaderRegistryBase,
 )
-from invokeai.backend.model_manager.load.model_cache.model_cache import ModelCache
+from invokeai.backend.model_manager.load.model_cache.model_cache import MODEL_LOAD_LOCK, ModelCache
 from invokeai.backend.model_manager.load.model_loaders.generic_diffusers import GenericDiffusersLoader
 from invokeai.backend.model_manager.taxonomy import AnyModel, SubModelType
 from invokeai.backend.util.devices import TorchDevice
@@ -33,13 +33,25 @@ class ModelLoadService(ModelLoadServiceBase):
         app_config: InvokeAIAppConfig,
         ram_cache: ModelCache,
         registry: Optional[Type[ModelLoaderRegistryBase]] = ModelLoaderRegistry,
+        ram_caches: Optional[dict[str, ModelCache]] = None,
     ):
-        """Initialize the model load service."""
+        """Initialize the model load service.
+
+        Args:
+            ram_cache: The default RAM cache, used when no per-device cache matches the calling
+                thread (e.g. single-device installs, or API threads).
+            ram_caches: Optional map of normalized device string -> ModelCache for multi-GPU mode.
+                One cache per generation device. The default `ram_cache` is always included.
+        """
         logger = InvokeAILogger.get_logger(self.__class__.__name__)
         logger.setLevel(app_config.log_level.upper())
         self._logger = logger
         self._app_config = app_config
-        self._ram_cache = ram_cache
+        self._default_ram_cache = ram_cache
+        # Map normalized device string -> cache. Always includes the default cache so that callers
+        # without a pinned device (API threads) resolve to a valid cache.
+        self._ram_caches: dict[str, ModelCache] = dict(ram_caches) if ram_caches else {}
+        self._ram_caches.setdefault(str(TorchDevice.normalize(ram_cache.execution_device)), ram_cache)
         self._registry = registry
 
     def start(self, invoker: Invoker) -> None:
@@ -47,40 +59,62 @@ class ModelLoadService(ModelLoadServiceBase):
 
     @property
     def ram_cache(self) -> ModelCache:
-        """Return the RAM cache used by this loader."""
-        return self._ram_cache
+        """Return the RAM cache for the calling thread's execution device.
 
-    def load_model(self, model_config: AnyModelConfig, submodel_type: Optional[SubModelType] = None) -> LoadedModel:
+        `choose_torch_device()` is thread-local-aware: a session-processor worker pinned to a GPU
+        gets that GPU's cache; everything else falls back to the default cache.
+        """
+        key = str(TorchDevice.choose_torch_device())
+        return self._ram_caches.get(key, self._default_ram_cache)
+
+    @property
+    def ram_caches(self) -> dict[str, ModelCache]:
+        """Return all per-device RAM caches, keyed by normalized device string."""
+        return dict(self._ram_caches)
+
+    def load_model(
+        self,
+        model_config: AnyModelConfig,
+        submodel_type: Optional[SubModelType] = None,
+        user_id: Optional[str] = None,
+    ) -> LoadedModel:
         """
         Given a model's configuration, load it and return the LoadedModel object.
 
         :param model_config: Model configuration record (as returned by ModelRecordBase.get_model())
         :param submodel: For main (pipeline models), the submodel to fetch.
+        :param user_id: The user whose action triggered the load, threaded into the model load
+            events so they can be routed to that user's UI (defaults to the system user).
         """
 
         # We don't have an invoker during testing
         # TODO(psyche): Mock this method on the invoker in the tests
         if hasattr(self, "_invoker"):
-            self._invoker.services.events.emit_model_load_started(model_config, submodel_type)
+            self._invoker.services.events.emit_model_load_started(model_config, submodel_type, user_id or "system")
 
         implementation, model_config, submodel_type = self._registry.get_implementation(model_config, submodel_type)  # type: ignore
         loaded_model: LoadedModel = implementation(
             app_config=self._app_config,
             logger=self._logger,
-            ram_cache=self._ram_cache,
+            ram_cache=self.ram_cache,
         ).load_model(model_config, submodel_type)
 
         if hasattr(self, "_invoker"):
-            self._invoker.services.events.emit_model_load_complete(model_config, submodel_type)
+            self._invoker.services.events.emit_model_load_complete(model_config, submodel_type, user_id or "system")
 
         return loaded_model
 
     def load_model_from_path(
         self, model_path: Path, loader: Optional[Callable[[Path], AnyModel]] = None
     ) -> LoadedModelWithoutConfig:
+        # Resolve the calling thread's cache once so the whole load uses a single device's cache.
+        ram_cache = self.ram_cache
         cache_key = str(model_path)
         try:
-            return LoadedModelWithoutConfig(cache_record=self._ram_cache.get(key=cache_key), cache=self._ram_cache)
+            # Retrieve with a first-use claim so the record cannot be evicted between the lookup
+            # and the wrapper's first lock (see ModelCache.get_with_first_use_claim).
+            cache_record, first_use_claim = ram_cache.get_with_first_use_claim(key=cache_key)
+            return LoadedModelWithoutConfig(cache_record=cache_record, cache=ram_cache, first_use_claim=first_use_claim)
         except IndexError:
             pass
 
@@ -110,7 +144,7 @@ class ModelLoadService(ModelLoadServiceBase):
             load_class = GenericDiffusersLoader(
                 app_config=self._app_config,
                 logger=self._logger,
-                ram_cache=self._ram_cache,
+                ram_cache=ram_cache,
                 convert_cache=self.convert_cache,
             ).get_hf_load_class(directory)
             return load_class.from_pretrained(model_path, torch_dtype=TorchDevice.choose_torch_dtype())
@@ -123,6 +157,23 @@ class ModelLoadService(ModelLoadServiceBase):
             else lambda path: safetensors_load_file(path, device="cpu")
         )
         assert loader is not None
-        raw_model = loader(model_path)
-        self._ram_cache.put(key=cache_key, model=raw_model)
-        return LoadedModelWithoutConfig(cache_record=self._ram_cache.get(key=cache_key), cache=self._ram_cache)
+        # Serialize construction (see MODEL_LOAD_LOCK): the diffusers loader path uses the same
+        # process-global, non-thread-safe monkey-patches as the main loader, so it takes the write
+        # lock to exclude concurrent VRAM moves. Re-check the cache after acquiring the lock in case
+        # a worker sharing this cache built it while we waited.
+        with MODEL_LOAD_LOCK.write_lock():
+            try:
+                cache_record, first_use_claim = ram_cache.get_with_first_use_claim(key=cache_key)
+                return LoadedModelWithoutConfig(
+                    cache_record=cache_record, cache=ram_cache, first_use_claim=first_use_claim
+                )
+            except IndexError:
+                pass
+            raw_model = loader(model_path)
+            # The admission claim shields the record until this retrieval's own claim takes over
+            # (see ModelCache.put), so nothing can evict the model still held in raw_model here.
+            admission_claim = ram_cache.put(key=cache_key, model=raw_model, claim_admission=True)
+            cache_record, first_use_claim = ram_cache.get_with_first_use_claim(key=cache_key)
+            if admission_claim is not None:
+                admission_claim.release()
+            return LoadedModelWithoutConfig(cache_record=cache_record, cache=ram_cache, first_use_claim=first_use_claim)

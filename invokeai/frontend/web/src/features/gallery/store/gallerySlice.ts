@@ -12,6 +12,8 @@ import {
   type ComparisonMode,
   type GalleryState,
   type GalleryView,
+  isVideoName,
+  isVirtualBoardId,
   type OrderDir,
   zGalleryState,
 } from './types';
@@ -33,6 +35,8 @@ const getInitialState = (): GalleryState => ({
   comparisonMode: 'slider',
   comparisonFit: 'fill',
   shouldShowArchivedBoards: false,
+  showVirtualBoards: false,
+  virtualBoardsSectionOpen: true,
   boardsListOrderBy: 'created_at',
   boardsListOrderDir: 'DESC',
 });
@@ -49,12 +53,19 @@ const slice = createSlice({
       } else {
         state.selection = [selectedItem];
       }
+      if (selectedItem && isVideoName(selectedItem)) {
+        state.imageToCompare = null;
+      }
     },
     selectionChanged: (state, action: PayloadAction<string[]>) => {
       state.selection = uniq(action.payload);
+      const activeItem = action.payload.at(-1);
+      if (activeItem && isVideoName(activeItem)) {
+        state.imageToCompare = null;
+      }
     },
     imageToCompareChanged: (state, action: PayloadAction<string | null>) => {
-      state.imageToCompare = action.payload;
+      state.imageToCompare = action.payload && !isVideoName(action.payload) ? action.payload : null;
     },
     comparisonModeChanged: (state, action: PayloadAction<ComparisonMode>) => {
       state.comparisonMode = action.payload;
@@ -103,6 +114,10 @@ const slice = createSlice({
         state.autoAddBoardId = 'none';
         return;
       }
+      // Virtual boards cannot be auto-add targets
+      if (isVirtualBoardId(action.payload)) {
+        return;
+      }
       state.autoAddBoardId = action.payload;
     },
     galleryViewChanged: (state, action: PayloadAction<GalleryView>) => {
@@ -127,6 +142,17 @@ const slice = createSlice({
     shouldShowArchivedBoardsChanged: (state, action: PayloadAction<boolean>) => {
       state.shouldShowArchivedBoards = action.payload;
     },
+    showVirtualBoardsChanged: (state, action: PayloadAction<boolean>) => {
+      state.showVirtualBoards = action.payload;
+      // If virtual boards are hidden and a virtual board is selected, reset to 'none'
+      if (!action.payload && isVirtualBoardId(state.selectedBoardId)) {
+        state.selectedBoardId = 'none';
+        state.selection = [];
+      }
+    },
+    virtualBoardsSectionOpenChanged: (state, action: PayloadAction<boolean>) => {
+      state.virtualBoardsSectionOpen = action.payload;
+    },
     starredFirstChanged: (state, action: PayloadAction<boolean>) => {
       state.starredFirst = action.payload;
     },
@@ -144,11 +170,15 @@ const slice = createSlice({
     },
   },
   extraReducers(builder) {
-    // Clear board-related state on logout to prevent stale data when switching users
+    // Clear board-related state on logout to prevent stale data when switching users.
+    // `selection` holds only item-name strings (never persisted, and the DTOs behind
+    // them are wiped by the store-level resetApiState on logout), but clear it anyway
+    // so the next user never sees the previous user's selection highlighted.
     builder.addCase(logout, (state) => {
       state.selectedBoardId = 'none';
       state.autoAddBoardId = 'none';
       state.boardSearchText = '';
+      state.selection = [];
     });
   },
 });
@@ -172,6 +202,8 @@ export const {
   orderDirChanged,
   starredFirstChanged,
   shouldShowArchivedBoardsChanged,
+  showVirtualBoardsChanged,
+  virtualBoardsSectionOpenChanged,
   searchTermChanged,
   boardsListOrderByChanged,
   boardsListOrderDirChanged,
@@ -188,6 +220,13 @@ export const gallerySliceConfig: SliceConfig<typeof slice> = {
       assert(isPlainObject(state));
       if (!('_version' in state)) {
         state._version = 1;
+      }
+      // Add virtual boards fields if missing (added in virtual boards feature)
+      if (!('showVirtualBoards' in state)) {
+        state.showVirtualBoards = false;
+      }
+      if (!('virtualBoardsSectionOpen' in state)) {
+        state.virtualBoardsSectionOpen = true;
       }
       return zGalleryState.parse(state);
     },

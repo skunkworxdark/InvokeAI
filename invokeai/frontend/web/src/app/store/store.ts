@@ -1,5 +1,12 @@
 import type { ThunkDispatch, TypedStartListening, UnknownAction } from '@reduxjs/toolkit';
-import { addListener, combineReducers, configureStore, createAction, createListenerMiddleware } from '@reduxjs/toolkit';
+import {
+  addListener,
+  combineReducers,
+  configureStore,
+  createAction,
+  createListenerMiddleware,
+  isAnyOf,
+} from '@reduxjs/toolkit';
 import { logger } from 'app/logging/logger';
 import { errorHandler } from 'app/store/enhancers/reduxRemember/errors';
 import { addAdHocPostProcessingRequestedListener } from 'app/store/middleware/listenerMiddleware/listeners/addAdHocPostProcessingRequestedListener';
@@ -9,6 +16,7 @@ import { addBatchEnqueuedListener } from 'app/store/middleware/listenerMiddlewar
 import { addDeleteBoardAndImagesFulfilledListener } from 'app/store/middleware/listenerMiddleware/listeners/boardAndImagesDeleted';
 import { addBoardIdSelectedListener } from 'app/store/middleware/listenerMiddleware/listeners/boardIdSelected';
 import { addBulkDownloadListeners } from 'app/store/middleware/listenerMiddleware/listeners/bulkDownload';
+import { addGallerySelectionSourceListener } from 'app/store/middleware/listenerMiddleware/listeners/gallerySelectionSource';
 import { addGetOpenAPISchemaListener } from 'app/store/middleware/listenerMiddleware/listeners/getOpenAPISchema';
 import { addImageAddedToBoardFulfilledListener } from 'app/store/middleware/listenerMiddleware/listeners/imageAddedToBoard';
 import { addImageRemovedFromBoardFulfilledListener } from 'app/store/middleware/listenerMiddleware/listeners/imageRemovedFromBoard';
@@ -19,16 +27,24 @@ import { addSocketConnectedEventListener } from 'app/store/middleware/listenerMi
 import { deepClone } from 'common/util/deepClone';
 import { merge } from 'es-toolkit';
 import { omit, pick } from 'es-toolkit/compat';
-import { authSliceConfig } from 'features/auth/store/authSlice';
-import { changeBoardModalSliceConfig } from 'features/changeBoardModal/store/slice';
+import {
+  authSliceConfig,
+  externalTokenAdopted,
+  logout,
+  sessionExpiredLogout,
+  staleCredentialsDiscarded,
+  tokensBelongToSameUser,
+} from 'features/auth/store/authSlice';
+import { changeBoardModalSliceConfig, changeBoardOperationInvalidated } from 'features/changeBoardModal/store/slice';
 import { canvasSettingsSliceConfig } from 'features/controlLayers/store/canvasSettingsSlice';
-import { canvasSliceConfig } from 'features/controlLayers/store/canvasSlice';
+import { canvasClearHistory, canvasSliceConfig } from 'features/controlLayers/store/canvasSlice';
 import { canvasSessionSliceConfig } from 'features/controlLayers/store/canvasStagingAreaSlice';
 import { canvasTextSliceConfig } from 'features/controlLayers/store/canvasTextSlice';
 import { canvasWorkflowIntegrationSliceConfig } from 'features/controlLayers/store/canvasWorkflowIntegrationSlice';
 import { lorasSliceConfig } from 'features/controlLayers/store/lorasSlice';
 import { paramsSliceConfig } from 'features/controlLayers/store/paramsSlice';
 import { refImagesSliceConfig } from 'features/controlLayers/store/refImagesSlice';
+import { cancelDeletion } from 'features/deleteVideoModal/store/state';
 import { dynamicPromptsSliceConfig } from 'features/dynamicPrompts/store/dynamicPromptsSlice';
 import { gallerySliceConfig } from 'features/gallery/store/gallerySlice';
 import { modelManagerSliceConfig } from 'features/modelManagerV2/store/modelManagerV2Slice';
@@ -36,6 +52,7 @@ import { nodesSliceConfig } from 'features/nodes/store/nodesSlice';
 import { workflowLibrarySliceConfig } from 'features/nodes/store/workflowLibrarySlice';
 import { workflowSettingsSliceConfig } from 'features/nodes/store/workflowSettingsSlice';
 import { upscaleSliceConfig } from 'features/parameters/store/upscaleSlice';
+import { expandPromptSliceConfig } from 'features/prompt/store/expandPromptSlice';
 import { queueSliceConfig } from 'features/queue/store/queueSlice';
 import { stylePresetSliceConfig } from 'features/stylePresets/store/stylePresetSlice';
 import { hotkeysSliceConfig } from 'features/system/store/hotkeysSlice';
@@ -44,7 +61,7 @@ import { uiSliceConfig } from 'features/ui/store/uiSlice';
 import { diff } from 'jsondiffpatch';
 import type { SerializeFunction, UnserializeFunction } from 'redux-remember';
 import { REMEMBER_REHYDRATED, rememberEnhancer, rememberReducer } from 'redux-remember';
-import undoable, { newHistory } from 'redux-undo';
+import undoable, { ActionCreators, newHistory } from 'redux-undo';
 import { serializeError } from 'serialize-error';
 import { api } from 'services/api';
 import type { JsonObject } from 'type-fest';
@@ -56,6 +73,7 @@ import { stateSanitizer } from './middleware/devtools/stateSanitizer';
 import { addArchivedOrDeletedBoardListener } from './middleware/listenerMiddleware/listeners/addArchivedOrDeletedBoardListener';
 import { addPBRFilterListener } from './middleware/listenerMiddleware/listeners/addPBRFilterListener';
 import { addImageUploadedFulfilledListener } from './middleware/listenerMiddleware/listeners/imageUploaded';
+import { addVideoUploadedListeners } from './middleware/listenerMiddleware/listeners/videoUploaded';
 
 const listenerMiddleware = createListenerMiddleware();
 
@@ -71,6 +89,7 @@ const SLICE_CONFIGS = {
   [canvasWorkflowIntegrationSliceConfig.slice.reducerPath]: canvasWorkflowIntegrationSliceConfig,
   [changeBoardModalSliceConfig.slice.reducerPath]: changeBoardModalSliceConfig,
   [dynamicPromptsSliceConfig.slice.reducerPath]: dynamicPromptsSliceConfig,
+  [expandPromptSliceConfig.slice.reducerPath]: expandPromptSliceConfig,
   [gallerySliceConfig.slice.reducerPath]: gallerySliceConfig,
   [hotkeysSliceConfig.slice.reducerPath]: hotkeysSliceConfig,
   [lorasSliceConfig.slice.reducerPath]: lorasSliceConfig,
@@ -103,6 +122,7 @@ const ALL_REDUCERS = {
   [canvasWorkflowIntegrationSliceConfig.slice.reducerPath]: canvasWorkflowIntegrationSliceConfig.slice.reducer,
   [changeBoardModalSliceConfig.slice.reducerPath]: changeBoardModalSliceConfig.slice.reducer,
   [dynamicPromptsSliceConfig.slice.reducerPath]: dynamicPromptsSliceConfig.slice.reducer,
+  [expandPromptSliceConfig.slice.reducerPath]: expandPromptSliceConfig.slice.reducer,
   [gallerySliceConfig.slice.reducerPath]: gallerySliceConfig.slice.reducer,
   [hotkeysSliceConfig.slice.reducerPath]: hotkeysSliceConfig.slice.reducer,
   [lorasSliceConfig.slice.reducerPath]: lorasSliceConfig.slice.reducer,
@@ -125,7 +145,30 @@ const ALL_REDUCERS = {
 
 const rootReducer = combineReducers(ALL_REDUCERS);
 
-const rememberedRootReducer = rememberReducer(rootReducer);
+type RootReducerState = ReturnType<typeof rootReducer>;
+
+const accountAwareRootReducer = (state: RootReducerState | undefined, action: UnknownAction): RootReducerState => {
+  const isForeignAdoption =
+    !!state && externalTokenAdopted.match(action) && !tokensBelongToSameUser(state.auth.token, action.payload);
+  if (isForeignAdoption) {
+    state = rootReducer(state, logout());
+  }
+  state = rootReducer(state, action);
+  // A logout pass resets each workspace slice's *present* through its own `logout` case, but
+  // both undoable slices filter cross-slice actions out of history without emptying it — the
+  // stacks keep the previous account's states, and ctrl+Z would walk the next account straight
+  // back into them. The clears ride the same reducer call rather than the logout listener
+  // because the synthetic pass above (cross-tab adoption) never reaches listeners; this is the
+  // only spot both paths share. Two actions because canvas overrides `clearHistoryType` while
+  // nodes uses redux-undo's default — which also covers any undoable slice added later.
+  if (isForeignAdoption || logout.match(action)) {
+    state = rootReducer(state, canvasClearHistory());
+    state = rootReducer(state, ActionCreators.clearHistory());
+  }
+  return state;
+};
+
+const rememberedRootReducer = rememberReducer(accountAwareRootReducer);
 
 const unserialize: UnserializeFunction = (data, key) => {
   const sliceConfig = SLICE_CONFIGS[key as keyof typeof SLICE_CONFIGS];
@@ -256,7 +299,30 @@ export const addAppListener = addListener.withTypes<RootState, AppDispatch>();
 
 // To avoid circular dependencies, all listener middleware listeners are added here in the main store setup file.
 const startAppListening = listenerMiddleware.startListening as AppStartListening;
+
+startAppListening({
+  matcher: isAnyOf(logout, sessionExpiredLogout, staleCredentialsDiscarded),
+  effect: (_action, { dispatch }) => {
+    dispatch(api.util.resetApiState());
+    dispatch(changeBoardOperationInvalidated());
+    cancelDeletion();
+  },
+});
+
+startAppListening({
+  actionCreator: externalTokenAdopted,
+  effect: (action, { dispatch, getOriginalState }) => {
+    if (tokensBelongToSameUser(getOriginalState().auth.token, action.payload)) {
+      return;
+    }
+    dispatch(api.util.resetApiState());
+    dispatch(changeBoardOperationInvalidated());
+    cancelDeletion();
+  },
+});
+
 addImageUploadedFulfilledListener(startAppListening);
+addVideoUploadedListeners(startAppListening);
 
 // Image deleted
 addDeleteBoardAndImagesFulfilledListener(startAppListening);
@@ -276,6 +342,7 @@ addImageAddedToBoardFulfilledListener(startAppListening);
 addImageRemovedFromBoardFulfilledListener(startAppListening);
 addBoardIdSelectedListener(startAppListening);
 addArchivedOrDeletedBoardListener(startAppListening);
+addGallerySelectionSourceListener(startAppListening);
 
 // Node schemas
 addGetOpenAPISchemaListener(startAppListening);

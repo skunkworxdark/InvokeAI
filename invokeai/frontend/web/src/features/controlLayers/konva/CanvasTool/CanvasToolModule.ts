@@ -1,5 +1,6 @@
 import type { CanvasManager } from 'features/controlLayers/konva/CanvasManager';
 import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase';
+import type { AnyObjectState } from 'features/controlLayers/konva/CanvasObject/types';
 import { CanvasBboxToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasBboxToolModule';
 import { CanvasBrushToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasBrushToolModule';
 import { CanvasColorPickerToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasColorPickerToolModule';
@@ -7,9 +8,27 @@ import { CanvasEraserToolModule } from 'features/controlLayers/konva/CanvasTool/
 import { CanvasGradientToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasGradientToolModule';
 import { CanvasLassoToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasLassoToolModule';
 import { CanvasMoveToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasMoveToolModule';
-import { CanvasRectToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasRectToolModule';
+import { CanvasShapeToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasShapeToolModule';
 import { CanvasTextToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasTextToolModule';
 import { CanvasViewToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasViewToolModule';
+import {
+  type BboxToolHotkeyPressedState,
+  beginBboxToolHotkeyPress,
+  type CanvasToolHotkeyState,
+  clearTemporaryToolHotkeysInState,
+  endBboxToolHotkeyPress,
+  getActiveToolFromState,
+  getToolToCancelOnEscape,
+  pressAltInState,
+  pressSpaceInState,
+  releaseAltInState,
+  releaseSpaceInState,
+  setBaseToolInState,
+  shouldPreserveSuspendableShapesSession,
+  shouldQuickSwitchToColorPickerOnAlt,
+  shouldTranslateShapeDragOnSpace,
+} from 'features/controlLayers/konva/CanvasTool/toolHotkeys';
+import { ZOOM_DRAG_CURSOR } from 'features/controlLayers/konva/cursors/zoomDragCursor';
 import {
   calculateNewBrushSizeFromWheelDelta,
   getIsPrimaryMouseDown,
@@ -43,10 +62,12 @@ const CODE_SPACE = 'Space';
 
 type CanvasToolModuleConfig = {
   BRUSH_SPACING_TARGET_SCALE: number;
+  PRESSURE_OPACITY_BRUSH_SPACING_TARGET_SCALE: number;
 };
 
 const DEFAULT_CONFIG: CanvasToolModuleConfig = {
   BRUSH_SPACING_TARGET_SCALE: 0.1,
+  PRESSURE_OPACITY_BRUSH_SPACING_TARGET_SCALE: 0.05,
 };
 
 export class CanvasToolModule extends CanvasModuleBase {
@@ -63,7 +84,7 @@ export class CanvasToolModule extends CanvasModuleBase {
   tools: {
     brush: CanvasBrushToolModule;
     eraser: CanvasEraserToolModule;
-    rect: CanvasRectToolModule;
+    rect: CanvasShapeToolModule;
     lasso: CanvasLassoToolModule;
     gradient: CanvasGradientToolModule;
     colorPicker: CanvasColorPickerToolModule;
@@ -74,14 +95,16 @@ export class CanvasToolModule extends CanvasModuleBase {
   };
 
   /**
-   * The currently selected tool.
+   * The currently active tool, including temporary overrides like Space, Alt, and bbox hold.
    */
   $tool = atom<Tool>('move');
   /**
-   * A buffer for the currently selected tool. This is used to temporarily store the tool while the user is using any
-   * hold-to-activate tools, like the view or color picker tools.
+   * The user's persistent tool selection. Temporary overrides resolve on top of this.
    */
-  $toolBuffer = atom<Tool | null>(null);
+  $baseTool = atom<Tool>('move');
+  $isSpacePressed = atom<boolean>(false);
+  $isAltPressed = atom<boolean>(false);
+  $bboxToolHotkeyPressedState = atom<BboxToolHotkeyPressedState | null>(null);
   /**
    * Whether the primary pointer (left mouse, pen, first touch) is currently down on the stage.
    *
@@ -123,7 +146,7 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.tools = {
       brush: new CanvasBrushToolModule(this),
       eraser: new CanvasEraserToolModule(this),
-      rect: new CanvasRectToolModule(this),
+      rect: new CanvasShapeToolModule(this),
       lasso: new CanvasLassoToolModule(this),
       gradient: new CanvasGradientToolModule(this),
       colorPicker: new CanvasColorPickerToolModule(this),
@@ -140,6 +163,7 @@ export class CanvasToolModule extends CanvasModuleBase {
 
     this.konva.group.add(this.tools.brush.konva.group);
     this.konva.group.add(this.tools.eraser.konva.group);
+    this.konva.group.add(this.tools.rect.konva.group);
     this.konva.group.add(this.tools.colorPicker.konva.group);
     this.konva.group.add(this.tools.text.konva.group);
     this.konva.group.add(this.tools.bbox.konva.group);
@@ -151,17 +175,26 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.subscriptions.add(this.manager.stateApi.createStoreSubscription(selectCanvasSlice, this.render));
     this.subscriptions.add(
       this.$tool.listen((tool, previousTool) => {
-        // Preserve pointer state during temporary view switching so lasso sessions can freeze/resume on space.
-        const shouldPreservePointerState =
-          this.$toolBuffer.get() === 'lasso' &&
+        // Preserve pointer state across temporary hotkey overrides so lasso and suspendable shape sessions can
+        // freeze/resume cleanly when Space/Alt are pressed and released.
+        const shouldPreserveLassoPointerState =
+          this.$baseTool.get() === 'lasso' &&
           this.tools.lasso.hasActiveSession() &&
-          ((previousTool === 'lasso' && tool === 'view') || (previousTool === 'view' && tool === 'lasso'));
+          (previousTool === 'lasso' || previousTool === 'view') &&
+          (tool === 'lasso' || tool === 'view');
+        const shouldPreserveShapesPointerState =
+          this.$baseTool.get() === 'rect' &&
+          this.tools.rect.hasSuspendableSession() &&
+          (previousTool === 'rect' || previousTool === 'view' || previousTool === 'colorPicker') &&
+          (tool === 'rect' || tool === 'view' || tool === 'colorPicker');
+        const shouldPreservePointerState = shouldPreserveLassoPointerState || shouldPreserveShapesPointerState;
 
         if (!shouldPreservePointerState) {
           // On tool switch, reset mouse state
           this.manager.tool.$isPrimaryPointerDown.set(false);
         }
 
+        this.tools.rect.onToolChanged();
         this.tools.lasso.onToolChanged();
         void this.tools.text.onToolChanged();
         this.render();
@@ -179,6 +212,90 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.syncCursorStyle();
   };
 
+  getToolHotkeyState = (): CanvasToolHotkeyState => {
+    return {
+      baseTool: this.$baseTool.get(),
+      isSpacePressed: this.$isSpacePressed.get(),
+      isAltPressed: this.$isAltPressed.get(),
+      bboxToolHotkeyPressedState: this.$bboxToolHotkeyPressedState.get(),
+    };
+  };
+
+  applyToolHotkeyState = (state: CanvasToolHotkeyState) => {
+    const previousActiveTool = this.$tool.get();
+
+    this.$baseTool.set(state.baseTool);
+    this.$isSpacePressed.set(state.isSpacePressed);
+    this.manager.stateApi.$spaceKey.set(state.isSpacePressed);
+    this.$isAltPressed.set(state.isAltPressed);
+    if (this.$bboxToolHotkeyPressedState.get() !== state.bboxToolHotkeyPressedState) {
+      this.$bboxToolHotkeyPressedState.set(state.bboxToolHotkeyPressedState);
+    }
+
+    const nextActiveTool = getActiveToolFromState(state);
+    if (previousActiveTool !== nextActiveTool) {
+      this.$tool.set(nextActiveTool);
+    }
+  };
+
+  setBaseTool = (tool: Tool) => {
+    this.applyToolHotkeyState(setBaseToolInState(this.getToolHotkeyState(), tool));
+  };
+
+  pressSpaceKey = () => {
+    this.applyToolHotkeyState(pressSpaceInState(this.getToolHotkeyState()));
+  };
+
+  releaseSpaceKey = () => {
+    this.applyToolHotkeyState(releaseSpaceInState(this.getToolHotkeyState()));
+  };
+
+  pressAltKey = () => {
+    this.applyToolHotkeyState(pressAltInState(this.getToolHotkeyState()));
+  };
+
+  releaseAltKey = () => {
+    this.applyToolHotkeyState(releaseAltInState(this.getToolHotkeyState()));
+  };
+
+  getHotkeyBindingId = (event: KeyboardEvent) => {
+    return event.code || event.key.toLowerCase();
+  };
+
+  onBboxToolHotkeyDown = (event: KeyboardEvent) => {
+    this.applyToolHotkeyState(
+      beginBboxToolHotkeyPress(this.getToolHotkeyState(), {
+        bindingId: this.getHotkeyBindingId(event),
+        pressedAt: Date.now(),
+      })
+    );
+  };
+
+  onBboxToolHotkeyUp = (event: KeyboardEvent) => {
+    this.applyToolHotkeyState(
+      endBboxToolHotkeyPress({
+        state: this.getToolHotkeyState(),
+        bindingId: this.getHotkeyBindingId(event),
+        releasedAt: Date.now(),
+      })
+    );
+  };
+
+  clearBboxToolHotkey = () => {
+    const state = this.getToolHotkeyState();
+    if (!state.bboxToolHotkeyPressedState) {
+      return;
+    }
+    this.applyToolHotkeyState({
+      ...state,
+      bboxToolHotkeyPressedState: null,
+    });
+  };
+
+  clearTemporaryToolHotkeys = () => {
+    this.applyToolHotkeyState(clearTemporaryToolHotkeysInState(this.getToolHotkeyState()));
+  };
+
   syncCursorStyle = () => {
     const stage = this.manager.stage;
     const tool = this.$tool.get();
@@ -186,7 +303,9 @@ export class CanvasToolModule extends CanvasModuleBase {
     const transformingAdapter = this.manager.stateApi.$transformingAdapter.get();
     const selectedEntityAdapter = this.manager.stateApi.getSelectedEntityAdapter();
 
-    if (this.manager.stage.getIsDragging()) {
+    if (this.manager.stage.getIsZoomDragging()) {
+      stage.setCursor(ZOOM_DRAG_CURSOR);
+    } else if (this.manager.stage.getIsDragging()) {
       stage.setCursor('grabbing');
     } else if (tool === 'view') {
       this.tools.view.syncCursorStyle();
@@ -236,6 +355,7 @@ export class CanvasToolModule extends CanvasModuleBase {
 
     this.tools.brush.render();
     this.tools.eraser.render();
+    this.tools.rect.render();
     this.tools.colorPicker.render();
     this.tools.text.render();
     this.tools.bbox.render();
@@ -408,9 +528,8 @@ export class CanvasToolModule extends CanvasModuleBase {
       const selectedEntity = this.manager.stateApi.getSelectedEntityAdapter();
 
       if (
-        selectedEntity?.bufferRenderer.state?.type !== 'rect' &&
-        selectedEntity?.bufferRenderer.state?.type !== 'gradient' &&
-        selectedEntity?.bufferRenderer.hasBuffer()
+        selectedEntity?.bufferRenderer.hasBuffer() &&
+        !this.shouldDeferEnterLeaveCommit(selectedEntity.bufferRenderer.state)
       ) {
         selectedEntity.bufferRenderer.commitBuffer();
         return;
@@ -464,7 +583,7 @@ export class CanvasToolModule extends CanvasModuleBase {
     }
   };
 
-  onStagePointerUp = (e: KonvaEventObject<PointerEvent>) => {
+  onStagePointerUp = async (e: KonvaEventObject<PointerEvent>) => {
     if (e.target !== this.konva.stage) {
       return;
     }
@@ -487,7 +606,7 @@ export class CanvasToolModule extends CanvasModuleBase {
       } else if (tool === 'eraser') {
         this.tools.eraser.onStagePointerUp(e);
       } else if (tool === 'rect') {
-        this.tools.rect.onStagePointerUp(e);
+        await this.tools.rect.onStagePointerUp(e);
       } else if (tool === 'lasso') {
         void this.tools.lasso.onStagePointerUp(e);
       } else if (tool === 'gradient') {
@@ -531,6 +650,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         await this.tools.gradient.onStagePointerMove(e);
       } else if (tool === 'text') {
         // Already handled above
+      } else if (this.isTemporaryShapesToolSwitch()) {
+        // Preserve in-progress polygon/freehand shapes while temporarily switching to view or color picker.
       } else {
         this.manager.stateApi.getSelectedEntityAdapter()?.bufferRenderer.clearBuffer();
       }
@@ -556,9 +677,8 @@ export class CanvasToolModule extends CanvasModuleBase {
 
       if (
         selectedEntity &&
-        selectedEntity.bufferRenderer.state?.type !== 'rect' &&
-        selectedEntity.bufferRenderer.state?.type !== 'gradient' &&
-        selectedEntity.bufferRenderer.hasBuffer()
+        selectedEntity.bufferRenderer.hasBuffer() &&
+        !this.shouldDeferEnterLeaveCommit(selectedEntity.bufferRenderer.state)
       ) {
         selectedEntity.bufferRenderer.commitBuffer();
       }
@@ -601,20 +721,19 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.render();
   };
 
-  /**
-   * Commit the buffer on window pointer up.
-   *
-   * The user may start drawing inside the stage and then release the mouse button outside of the stage. To prevent
-   * whatever the user was drawing from being lost, or ending up with stale state, we need to commit the buffer
-   * on window pointer up.
-   */
-  onWindowPointerUp = (_: PointerEvent) => {
+  onWindowPointerUp = async (_: PointerEvent) => {
     try {
       this.$isPrimaryPointerDown.set(false);
       void this.tools.lasso.onWindowPointerUp();
+      await this.tools.rect.onWindowPointerUp();
       const selectedEntity = this.manager.stateApi.getSelectedEntityAdapter();
 
-      if (selectedEntity && selectedEntity.bufferRenderer.hasBuffer() && !this.manager.$isBusy.get()) {
+      if (
+        selectedEntity &&
+        selectedEntity.bufferRenderer.hasBuffer() &&
+        !this.manager.$isBusy.get() &&
+        !this.shouldSkipWindowPointerUpCommit(selectedEntity.bufferRenderer.state)
+      ) {
         selectedEntity.bufferRenderer.commitBuffer();
       }
     } finally {
@@ -622,36 +741,38 @@ export class CanvasToolModule extends CanvasModuleBase {
     }
   };
 
-  onWindowPointerMove = (e: PointerEvent) => {
+  onWindowPointerMove = async (e: PointerEvent) => {
     const target = e.target;
     if (target instanceof Node && this.manager.stage.container.contains(target)) {
-      return;
-    }
-
-    if (this.$tool.get() !== 'lasso') {
-      return;
-    }
-
-    if (!this.getCanDraw()) {
-      return;
-    }
-
-    if (!this.$isPrimaryPointerDown.get()) {
-      return;
-    }
-
-    if (!this.tools.lasso.hasActiveSession()) {
       return;
     }
 
     try {
       this.$lastPointerType.set(e.pointerType);
 
+      if (!this.getCanDraw()) {
+        return;
+      }
+
+      if (!this.$isPrimaryPointerDown.get()) {
+        return;
+      }
+
       if (!this.syncCursorPositionsFromWindowEvent(e)) {
         return;
       }
 
-      this.tools.lasso.onWindowPointerMove(e);
+      if (this.$tool.get() === 'rect') {
+        if (!this.tools.rect.hasActiveDragSession()) {
+          return;
+        }
+        await this.tools.rect.onWindowPointerMove();
+      } else if (this.$tool.get() === 'lasso') {
+        if (!this.tools.lasso.hasActiveSession()) {
+          return;
+        }
+        this.tools.lasso.onWindowPointerMove(e);
+      }
     } finally {
       this.render();
     }
@@ -660,9 +781,16 @@ export class CanvasToolModule extends CanvasModuleBase {
   /**
    * We want to reset any "quick-switch" tool selection on window blur. Fixes an issue where you alt-tab out of the app
    * and the color picker tool is still active when you come back.
+   *
+   * Bbox hold is also a temporary override, but unlike view/color-picker it may have an active Konva drag/transform in
+   * flight. Stop that interaction before clearing temporary hotkeys so the bbox cannot get stuck half-active after
+   * focus returns.
    */
   onWindowBlur = () => {
-    this.revertToolBuffer();
+    this.tools.bbox.stopInteraction();
+    this.clearTemporaryToolHotkeys();
+    this.manager.stateApi.$spaceKey.set(false);
+    this.tools.rect.stopDragTranslation();
   };
 
   onKeyDown = (e: KeyboardEvent) => {
@@ -688,8 +816,24 @@ export class CanvasToolModule extends CanvasModuleBase {
     if (e.key === KEY_ESCAPE) {
       // Cancel shape drawing on escape
       e.preventDefault();
-      if (this.$tool.get() === 'lasso') {
+      const tool = this.$tool.get();
+      const toolToCancel = getToolToCancelOnEscape(
+        tool,
+        this.$baseTool.get(),
+        this.tools.lasso.hasActiveSession(),
+        this.tools.rect.hasSuspendableSession()
+      );
+
+      this.manager.stateApi.$spaceKey.set(false);
+      this.tools.rect.stopDragTranslation();
+      if (toolToCancel === 'rect') {
+        this.tools.rect.cancel();
+      }
+      if (toolToCancel === 'lasso') {
         this.tools.lasso.reset();
+      }
+      if (toolToCancel && tool !== toolToCancel) {
+        this.clearTemporaryToolHotkeys();
       }
       const selectedEntity = this.manager.stateApi.getSelectedEntityAdapter();
       if (
@@ -704,15 +848,37 @@ export class CanvasToolModule extends CanvasModuleBase {
     }
 
     if (isSpaceKey) {
-      // Select the view tool on space key down
       e.preventDefault();
       e.stopPropagation();
       const currentTool = this.$tool.get();
-      this.$toolBuffer.set(currentTool);
-      this.manager.stateApi.$spaceKey.set(true);
-      this.$tool.set('view');
+      const shapeType = this.manager.stateApi.getSettings().shapeType;
+      const hasActiveShapeDragSession = this.tools.rect.hasActiveDragSession();
+      const isPrimaryPointerDown = this.$isPrimaryPointerDown.get();
+
+      if (shouldTranslateShapeDragOnSpace(currentTool, shapeType, hasActiveShapeDragSession, isPrimaryPointerDown)) {
+        this.manager.stateApi.$spaceKey.set(true);
+        this.tools.rect.startDragTranslation();
+        return;
+      }
+
+      if (currentTool === 'rect' && this.tools.rect.hasActivePolygonSession()) {
+        void this.tools.rect.freezePolygonPreview();
+      }
+
+      this.pressSpaceKey();
       if (currentTool === 'lasso' && this.tools.lasso.hasActiveSession() && this.$isPrimaryPointerDown.get()) {
         // Start panning immediately if user is already drawing with freehand lasso.
+        this.manager.stage.startDragging();
+      } else if (
+        currentTool === 'rect' &&
+        this.tools.rect.hasSuspendableSession() &&
+        this.$isPrimaryPointerDown.get()
+      ) {
+        // Match lasso: allow an in-progress freehand shapes session to freeze and pan immediately on space.
+        this.manager.stage.startDragging();
+      } else if (currentTool === 'rect' && this.tools.rect.hasActivePolygonSession()) {
+        // Match polygon lasso: when a polygon session is active, Space should immediately enter panning without
+        // requiring an extra click on the canvas.
         this.manager.stage.startDragging();
       } else {
         this.$cursorPos.set(null);
@@ -721,11 +887,17 @@ export class CanvasToolModule extends CanvasModuleBase {
     }
 
     if (e.key === KEY_ALT) {
+      const tool = this.$tool.get();
+      const shapeType = this.manager.stateApi.getSettings().shapeType;
+      const hasActiveShapeDragSession = this.tools.rect.hasActiveDragSession();
+      if (!shouldQuickSwitchToColorPickerOnAlt(tool, shapeType, hasActiveShapeDragSession)) {
+        e.preventDefault();
+        return;
+      }
       // Select the color picker on alt key down
       e.preventDefault();
       e.stopPropagation();
-      this.$toolBuffer.set(this.$tool.get());
-      this.$tool.set('colorPicker');
+      this.pressAltKey();
     }
   };
 
@@ -744,11 +916,14 @@ export class CanvasToolModule extends CanvasModuleBase {
     }
 
     if (e.key === KEY_SPACE || e.code === CODE_SPACE) {
-      // Revert the tool to the previous tool on space key up
       e.preventDefault();
       e.stopPropagation();
-      this.revertToolBuffer();
       this.manager.stateApi.$spaceKey.set(false);
+      if (this.tools.rect.isTranslatingDragSession()) {
+        this.tools.rect.stopDragTranslation();
+        return;
+      }
+      this.releaseSpaceKey();
       return;
     }
 
@@ -756,16 +931,8 @@ export class CanvasToolModule extends CanvasModuleBase {
       // Revert the tool to the previous tool on alt key up
       e.preventDefault();
       e.stopPropagation();
-      this.revertToolBuffer();
+      this.releaseAltKey();
       return;
-    }
-  };
-
-  revertToolBuffer = () => {
-    const toolBuffer = this.$toolBuffer.get();
-    if (toolBuffer) {
-      this.$tool.set(toolBuffer);
-      this.$toolBuffer.set(null);
     }
   };
 
@@ -776,7 +943,10 @@ export class CanvasToolModule extends CanvasModuleBase {
       path: this.path,
       config: this.config,
       $tool: this.$tool.get(),
-      $toolBuffer: this.$toolBuffer.get(),
+      $baseTool: this.$baseTool.get(),
+      $isSpacePressed: this.$isSpacePressed.get(),
+      $isAltPressed: this.$isAltPressed.get(),
+      $bboxToolHotkeyPressedState: this.$bboxToolHotkeyPressedState.get(),
       $isPrimaryPointerDown: this.$isPrimaryPointerDown.get(),
       $cursorPos: this.$cursorPos.get(),
       $lastPointerType: this.$lastPointerType.get(),
@@ -802,5 +972,29 @@ export class CanvasToolModule extends CanvasModuleBase {
       tool.destroy();
     }
     this.konva.group.destroy();
+  };
+
+  private shouldDeferEnterLeaveCommit = (state: AnyObjectState | null) => {
+    if (!state) {
+      return false;
+    }
+
+    if (state.type === 'rect' || state.type === 'oval' || state.type === 'gradient') {
+      return true;
+    }
+
+    return state.type === 'polygon';
+  };
+
+  private shouldSkipWindowPointerUpCommit = (state: AnyObjectState | null) => {
+    return Boolean(state?.type === 'polygon' && state.previewPoint);
+  };
+
+  private isTemporaryShapesToolSwitch = () => {
+    return shouldPreserveSuspendableShapesSession(
+      this.$tool.get(),
+      this.$baseTool.get(),
+      this.tools.rect.hasSuspendableSession()
+    );
   };
 }

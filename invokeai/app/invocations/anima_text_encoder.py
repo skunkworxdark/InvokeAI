@@ -14,7 +14,7 @@ Key differences from Z-Image text encoder:
 """
 
 from contextlib import ExitStack
-from typing import Iterator, Tuple
+from typing import Iterator
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
@@ -28,16 +28,17 @@ from invokeai.app.invocations.fields import (
     TensorField,
     UIComponent,
 )
-from invokeai.app.invocations.model import Qwen3EncoderField, T5EncoderField
+from invokeai.app.invocations.model import Qwen3EncoderField
 from invokeai.app.invocations.primitives import AnimaConditioningOutput
 from invokeai.app.services.shared.invocation_context import InvocationContext
-from invokeai.backend.patches.layer_patcher import LayerPatcher
+from invokeai.backend.patches.layer_patcher import LayerPatcher, PatchSpec
 from invokeai.backend.patches.lora_conversions.anima_lora_constants import ANIMA_LORA_QWEN3_PREFIX
 from invokeai.backend.patches.model_patch_raw import ModelPatchRaw
 from invokeai.backend.stable_diffusion.diffusion.conditioning_data import (
     AnimaConditioningInfo,
     ConditioningFieldData,
 )
+from invokeai.backend.t5.t5_tokenizer import load_bundled_t5_tokenizer
 from invokeai.backend.util.devices import TorchDevice
 from invokeai.backend.util.logging import InvokeAILogger
 
@@ -56,13 +57,14 @@ QWEN3_MAX_SEQ_LEN = 8192
     title="Prompt - Anima",
     tags=["prompt", "conditioning", "anima"],
     category="conditioning",
-    version="1.3.0",
+    version="1.4.0",
     classification=Classification.Prototype,
+    idle_gpu_offloadable=True,
 )
 class AnimaTextEncoderInvocation(BaseInvocation):
     """Encodes and preps a prompt for an Anima image.
 
-    Uses Qwen3 0.6B for hidden state extraction and T5-XXL tokenizer for
+    Uses Qwen3 0.6B for hidden state extraction and a bundled T5-XXL tokenizer for
     token IDs (no T5 model weights needed). Both are combined by the
     LLM Adapter inside the Anima transformer during denoising.
     """
@@ -71,11 +73,6 @@ class AnimaTextEncoderInvocation(BaseInvocation):
     qwen3_encoder: Qwen3EncoderField = InputField(
         title="Qwen3 Encoder",
         description=FieldDescriptions.qwen3_encoder,
-        input=Input.Connection,
-    )
-    t5_encoder: T5EncoderField = InputField(
-        title="T5 Encoder",
-        description=FieldDescriptions.t5_encoder,
         input=Input.Connection,
     )
     mask: TensorField | None = InputField(
@@ -129,10 +126,13 @@ class AnimaTextEncoderInvocation(BaseInvocation):
             (_, text_encoder) = exit_stack.enter_context(text_encoder_info.model_on_device())
             (_, tokenizer) = exit_stack.enter_context(tokenizer_info.model_on_device())
 
-            device = text_encoder.device
+            # Use the encoder's intended compute device, not its current parameter residency: partial loading may
+            # have temporarily offloaded all weights to RAM, which would wrongly run the whole encode on the CPU (see
+            # #9373). Qwen3 is fully autocast-capable, so nothing pins it to the compute device otherwise.
+            device = text_encoder_info.compute_device
 
             # Apply LoRA models to the text encoder
-            lora_dtype = TorchDevice.choose_bfloat16_safe_dtype(device)
+            lora_dtype = TorchDevice.choose_anima_inference_dtype(device)
             exit_stack.enter_context(
                 LayerPatcher.apply_smart_model_patches(
                     model=text_encoder,
@@ -193,22 +193,21 @@ class AnimaTextEncoderInvocation(BaseInvocation):
             # Use last hidden state — only real tokens, no padding
             qwen3_embeds = outputs.hidden_states[-1][0]  # Shape: (seq_len, 1024)
 
-        # --- Step 2: Tokenize with T5-XXL tokenizer (IDs only, no model) ---
+        # --- Step 2: Tokenize with bundled T5-XXL tokenizer (IDs only, no model) ---
         context.util.signal_progress("Tokenizing with T5-XXL")
-        t5_tokenizer_info = context.models.load(self.t5_encoder.tokenizer)
-        with t5_tokenizer_info.model_on_device() as (_, t5_tokenizer):
-            t5_tokens = t5_tokenizer(
-                prompt,
-                padding=False,
-                truncation=True,
-                max_length=T5_MAX_SEQ_LEN,
-                return_tensors="pt",
-            )
-            t5xxl_ids = t5_tokens.input_ids[0]  # Shape: (seq_len,)
+        t5_tokenizer = load_bundled_t5_tokenizer()
+        t5_tokens = t5_tokenizer(
+            prompt,
+            padding=False,
+            truncation=True,
+            max_length=T5_MAX_SEQ_LEN,
+            return_tensors="pt",
+        )
+        t5xxl_ids = t5_tokens.input_ids[0]  # Shape: (seq_len,)
 
         return qwen3_embeds, t5xxl_ids, None
 
-    def _lora_iterator(self, context: InvocationContext) -> Iterator[Tuple[ModelPatchRaw, float]]:
+    def _lora_iterator(self, context: InvocationContext) -> Iterator[PatchSpec]:
         """Iterate over LoRA models to apply to the Qwen3 text encoder."""
         for lora in self.qwen3_encoder.loras:
             lora_info = context.models.load(lora.lora)
@@ -217,5 +216,4 @@ class AnimaTextEncoderInvocation(BaseInvocation):
                     f"Expected ModelPatchRaw for LoRA '{lora.lora.key}', got {type(lora_info.model).__name__}. "
                     "The LoRA model may be corrupted or incompatible."
                 )
-            yield (lora_info.model, lora.weight)
-            del lora_info
+            yield (lora_info.model, lora.weight, lora_info.model_in_ram())

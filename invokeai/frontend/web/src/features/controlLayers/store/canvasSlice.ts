@@ -5,9 +5,10 @@ import { moveOneToEnd, moveOneToStart, moveToEnd, moveToStart } from 'common/uti
 import { deepClone } from 'common/util/deepClone';
 import { roundDownToMultiple, roundToMultiple } from 'common/util/roundDownToMultiple';
 import { merge } from 'es-toolkit/compat';
+import { logout } from 'features/auth/store/authSlice';
 import { getPrefixedId } from 'features/controlLayers/konva/util';
 import { canvasReset } from 'features/controlLayers/store/actions';
-import { modelChanged } from 'features/controlLayers/store/paramsSlice';
+import { aspectRatioIdChanged, modelChanged, resolutionPresetSelected } from 'features/controlLayers/store/paramsSlice';
 import {
   selectAllEntities,
   selectAllEntitiesOfType,
@@ -31,6 +32,7 @@ import type {
   RgbColor,
   SimpleAdjustmentsConfig,
 } from 'features/controlLayers/store/types';
+import { isAspectRatioID } from 'features/controlLayers/store/types';
 import {
   calculateNewSize,
   getScaledBoundingBoxDimensions,
@@ -52,6 +54,7 @@ import {
 } from 'services/api/types';
 
 import type {
+  AnimaLLLiteConfig,
   AspectRatioID,
   BoundingBoxScaleMethod,
   CanvasControlLayerState,
@@ -69,7 +72,7 @@ import type {
   EntityLassoAddedPayload,
   EntityMovedToPayload,
   EntityRasterizedPayload,
-  EntityRectAddedPayload,
+  EntityShapeAddedPayload,
   IPMethodV2,
   T2IAdapterConfig,
   ZImageControlConfig,
@@ -90,6 +93,7 @@ import {
   getRasterLayerState,
   getRegionalGuidanceState,
   imageDTOToImageWithDims,
+  initialAnimaLLLite,
   initialControlLoRA,
   initialControlNet,
   initialFLUXRedux,
@@ -216,6 +220,17 @@ const slice = createSlice({
       } else {
         layer.globalCompositeOperation = globalCompositeOperation;
       }
+    },
+    rasterLayerIsTransparencyLockedToggled: (
+      state,
+      action: PayloadAction<EntityIdentifierPayload<void, 'raster_layer'>>
+    ) => {
+      const { entityIdentifier } = action.payload;
+      const layer = selectEntity(state, entityIdentifier);
+      if (!layer) {
+        return;
+      }
+      layer.isTransparencyLocked = !layer.isTransparencyLocked;
     },
     rasterLayerAdded: {
       reducer: (
@@ -624,6 +639,8 @@ const slice = createSlice({
         case 'controlnet': {
           // Check if this is a Z-Image ControlNet (base === 'z-image')
           const isZImageControl = layer.controlAdapter.model?.base === 'z-image';
+          // Check if this is an Anima ControlNet-LLLite (base === 'anima')
+          const isAnimaLLLite = layer.controlAdapter.model?.base === 'anima';
 
           if (isZImageControl) {
             // Convert to Z-Image Control adapter
@@ -634,6 +651,15 @@ const slice = createSlice({
                 weight: layer.controlAdapter.weight,
               };
               layer.controlAdapter = zImageControlConfig;
+            }
+          } else if (isAnimaLLLite) {
+            // Convert to Anima ControlNet-LLLite adapter
+            if (layer.controlAdapter.type !== 'anima_lllite') {
+              const animaLLLiteConfig: AnimaLLLiteConfig = {
+                ...initialAnimaLLLite,
+                model: layer.controlAdapter.model,
+              };
+              layer.controlAdapter = animaLLLiteConfig;
             }
           } else {
             // Regular SD/SDXL/Flux ControlNet
@@ -653,8 +679,11 @@ const slice = createSlice({
                 type: 'controlnet',
               };
               layer.controlAdapter = controlNetConfig;
-            } else if (layer.controlAdapter.type === 'z_image_control') {
-              // Converting from Z-Image Control to regular ControlNet
+            } else if (
+              layer.controlAdapter.type === 'z_image_control' ||
+              layer.controlAdapter.type === 'anima_lllite'
+            ) {
+              // Converting from Z-Image Control or Anima ControlNet-LLLite to regular ControlNet
               const controlNetConfig: ControlNetConfig = {
                 ...initialControlNet,
                 model: layer.controlAdapter.model,
@@ -1288,21 +1317,31 @@ const slice = createSlice({
       state.bbox.aspectRatio.isLocked = !state.bbox.aspectRatio.isLocked;
       syncScaledSize(state);
     },
-    bboxAspectRatioIdChanged: (state, action: PayloadAction<{ id: AspectRatioID }>) => {
-      const { id } = action.payload;
+    bboxAspectRatioIdChanged: (
+      state,
+      action: PayloadAction<{ id: AspectRatioID; fixedSize?: { width: number; height: number } }>
+    ) => {
+      const { id, fixedSize } = action.payload;
       state.bbox.aspectRatio.id = id;
       if (id === 'Free') {
         state.bbox.aspectRatio.isLocked = false;
       } else {
         state.bbox.aspectRatio.isLocked = true;
-        state.bbox.aspectRatio.value = ASPECT_RATIO_MAP[id].ratio;
-        const { width, height } = calculateNewSize(
-          state.bbox.aspectRatio.value,
-          state.bbox.rect.width * state.bbox.rect.height,
-          state.bbox.modelBase
-        );
-        state.bbox.rect.width = width;
-        state.bbox.rect.height = height;
+        if (fixedSize) {
+          // External models provide fixed dimensions for each aspect ratio
+          state.bbox.aspectRatio.value = fixedSize.width / fixedSize.height;
+          state.bbox.rect.width = fixedSize.width;
+          state.bbox.rect.height = fixedSize.height;
+        } else {
+          state.bbox.aspectRatio.value = ASPECT_RATIO_MAP[id].ratio;
+          const { width, height } = calculateNewSize(
+            state.bbox.aspectRatio.value,
+            state.bbox.rect.width * state.bbox.rect.height,
+            state.bbox.modelBase
+          );
+          state.bbox.rect.width = width;
+          state.bbox.rect.height = height;
+        }
       }
 
       syncScaledSize(state);
@@ -1546,8 +1585,8 @@ const slice = createSlice({
         points: eraserLine.type === 'eraser_line' ? simplifyFlatNumbersArray(eraserLine.points) : eraserLine.points,
       });
     },
-    entityRectAdded: (state, action: PayloadAction<EntityRectAddedPayload>) => {
-      const { entityIdentifier, rect } = action.payload;
+    entityShapeAdded: (state, action: PayloadAction<EntityShapeAddedPayload>) => {
+      const { entityIdentifier, shape } = action.payload;
       const entity = selectEntity(state, entityIdentifier);
       if (!entity) {
         return;
@@ -1555,7 +1594,7 @@ const slice = createSlice({
 
       // TODO(psyche): If we add the object without splatting, the renderer will see it as the same object and not
       // re-render it (reference equality check). I don't like this behaviour.
-      entity.objects.push({ ...rect });
+      entity.objects.push({ ...shape });
     },
     entityLassoAdded: (state, action: PayloadAction<EntityLassoAddedPayload>) => {
       const { entityIdentifier, lasso } = action.payload;
@@ -1761,9 +1800,30 @@ const slice = createSlice({
       state.controlLayers.entities = controlLayers;
       state.inpaintMasks.entities = inpaintMasks;
       state.regionalGuidance.entities = regionalGuidance;
+      // Preserve the current modelBase to avoid desync with the currently selected model
+      // (same pattern as canvasSnapshotRestored and resetState).
+      const currentModelBase = state.bbox.modelBase;
       state.bbox = bbox;
+      state.bbox.modelBase = currentModelBase;
+      syncScaledSize(state);
       state.selectedEntityIdentifier = selectedEntityIdentifier;
       state.bookmarkedEntityIdentifier = bookmarkedEntityIdentifier;
+      return state;
+    },
+    canvasSnapshotRestored: (state, action: PayloadAction<CanvasState>) => {
+      const snapshot = action.payload;
+      state.controlLayers = snapshot.controlLayers;
+      state.inpaintMasks = snapshot.inpaintMasks;
+      state.rasterLayers = snapshot.rasterLayers;
+      state.regionalGuidance = snapshot.regionalGuidance;
+      // Restore bbox from snapshot but preserve the current modelBase to avoid desync
+      // with the currently selected model (same pattern as resetState).
+      const currentModelBase = state.bbox.modelBase;
+      state.bbox = snapshot.bbox;
+      state.bbox.modelBase = currentModelBase;
+      syncScaledSize(state);
+      state.selectedEntityIdentifier = snapshot.selectedEntityIdentifier;
+      state.bookmarkedEntityIdentifier = snapshot.bookmarkedEntityIdentifier;
       return state;
     },
     canvasUndo: () => {},
@@ -1772,6 +1832,18 @@ const slice = createSlice({
   },
   extraReducers(builder) {
     builder.addCase(canvasReset, (state) => {
+      return resetState(state);
+    });
+    // A deliberate sign-out hands this browser to whoever comes next: the canvas is personal
+    // workspace state, and it is also where deleted-image references live (raster layers,
+    // control layers), so leaving it standing hands the next account both the previous user's
+    // work and, after an aborted cross-user batch delete, references to images that no longer
+    // exist. `sessionExpiredLogout` is deliberately NOT handled — a session timeout must not
+    // destroy work, and the same user's committed deletions are pruned by `handleDeletions`
+    // off the batch's partial result instead. The undo stack is cleared separately: this case
+    // is a cross-slice action the undoable filter keeps out of history without emptying it,
+    // and the store's account-change reducer chains `canvasClearHistory` for it.
+    builder.addCase(logout, (state) => {
       return resetState(state);
     });
     builder.addCase(modelChanged, (state, action) => {
@@ -1800,6 +1872,29 @@ const slice = createSlice({
         syncScaledSize(state);
       }
     });
+    // Sync bbox when external model resolution preset is selected (aspect_ratio_sizes)
+    builder.addCase(aspectRatioIdChanged, (state, action) => {
+      const { id, fixedSize } = action.payload;
+      // Only sync when fixedSize is provided (external models with aspect_ratio_sizes)
+      if (fixedSize) {
+        state.bbox.rect.width = fixedSize.width;
+        state.bbox.rect.height = fixedSize.height;
+        state.bbox.aspectRatio.value = fixedSize.width / fixedSize.height;
+        state.bbox.aspectRatio.id = id;
+        state.bbox.aspectRatio.isLocked = true;
+        syncScaledSize(state);
+      }
+    });
+    // Sync bbox when external model resolution preset is selected (resolution_presets)
+    builder.addCase(resolutionPresetSelected, (state, action) => {
+      const { width, height, aspectRatio } = action.payload;
+      state.bbox.rect.width = width;
+      state.bbox.rect.height = height;
+      state.bbox.aspectRatio.value = width / height;
+      state.bbox.aspectRatio.id = isAspectRatioID(aspectRatio) ? aspectRatio : 'Free';
+      state.bbox.aspectRatio.isLocked = true;
+      syncScaledSize(state);
+    });
   },
 });
 
@@ -1824,6 +1919,7 @@ const resetState = (state: CanvasState) => {
 
 export const {
   canvasMetadataRecalled,
+  canvasSnapshotRestored,
   canvasProjectRecalled,
   canvasUndo,
   canvasRedo,
@@ -1843,7 +1939,7 @@ export const {
   entityRasterized,
   entityBrushLineAdded,
   entityEraserLineAdded,
-  entityRectAdded,
+  entityShapeAdded,
   entityLassoAdded,
   entityGradientAdded,
   // Raster layer adjustments
@@ -1856,6 +1952,7 @@ export const {
   rasterLayerAdjustmentsSimpleUpdated,
   rasterLayerAdjustmentsCurvesUpdated,
   rasterLayerGlobalCompositeOperationChanged,
+  rasterLayerIsTransparencyLockedToggled,
   entityDeleted,
   entityArrangedForwardOne,
   entityArrangedToFront,
@@ -1951,6 +2048,10 @@ const canvasUndoableConfig: UndoableOptions<CanvasState, UnknownAction> = {
     if (!action.type.startsWith(slice.name)) {
       return false;
     }
+    // Snapshot restore and project load replace the canvas state and should not be undoable
+    if (action.type === canvasSnapshotRestored.type || action.type === canvasProjectRecalled.type) {
+      return false;
+    }
     // Throttle rapid actions of the same type
     filter = actionsThrottlingFilter(action);
     return filter;
@@ -1974,7 +2075,7 @@ export const canvasSliceConfig: SliceConfig<typeof slice> = {
 const doNotGroupMatcher = isAnyOf(
   entityBrushLineAdded,
   entityEraserLineAdded,
-  entityRectAdded,
+  entityShapeAdded,
   entityLassoAdded,
   entityGradientAdded
 );

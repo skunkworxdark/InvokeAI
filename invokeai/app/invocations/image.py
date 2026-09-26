@@ -1,9 +1,11 @@
 # Copyright (c) 2022 Kyle Schouviller (https://github.com/kyle0654)
 
+from pathlib import Path
 from typing import Literal, Optional
 
 import cv2
 import numpy
+import torch
 from PIL import Image, ImageChops, ImageFilter, ImageOps
 
 from invokeai.app.invocations.baseinvocation import (
@@ -25,8 +27,39 @@ from invokeai.app.invocations.primitives import ImageOutput, StringOutput
 from invokeai.app.services.image_records.image_records_common import ImageCategory
 from invokeai.app.services.shared.invocation_context import InvocationContext
 from invokeai.app.util.misc import SEED_MAX
+from invokeai.backend.image_util.color_conversion import (
+    linear_srgb_from_oklab,
+    linear_srgb_from_oklch,
+    linear_srgb_from_srgb,
+    oklab_from_linear_srgb,
+    oklch_from_oklab,
+    srgb_from_linear_srgb,
+)
 from invokeai.backend.image_util.invisible_watermark import InvisibleWatermark
 from invokeai.backend.image_util.safety_checker import SafetyChecker
+
+
+def _extract_alpha_channel(image: Image.Image) -> Image.Image | None:
+    if image.mode in ("RGBA", "LA", "PA"):
+        return image.getchannel("A")
+    return None
+
+
+def _restore_original_mode(image: Image.Image, mode: str, alpha_channel: Image.Image | None) -> Image.Image:
+    if alpha_channel is None:
+        return image.convert(mode)
+
+    if mode == "RGBA":
+        image = image.convert("RGB")
+    elif mode == "LA":
+        image = image.convert("L")
+    elif mode == "PA":
+        image = image.convert("P")
+    else:
+        return image.convert(mode)
+
+    image.putalpha(alpha_channel)
+    return image
 
 
 @invocation("show_image", title="Show Image", tags=["image"], category="image", version="1.0.1")
@@ -373,7 +406,7 @@ class UnsharpMaskInvocation(BaseInvocation, WithMetadata, WithBoard):
         image = context.images.get_pil(self.image.image_name)
         mode = image.mode
 
-        alpha_channel = image.getchannel("A") if mode == "RGBA" else None
+        alpha_channel = _extract_alpha_channel(image)
         image = image.convert("RGB")
         image_blurred = self.array_from_pil(image.filter(ImageFilter.GaussianBlur(radius=self.radius)))
 
@@ -395,6 +428,53 @@ class UnsharpMaskInvocation(BaseInvocation, WithMetadata, WithBoard):
             width=image.width,
             height=image.height,
         )
+
+
+@invocation(
+    "unsharp_mask_oklab",
+    title="Unsharp Mask (Oklab)",
+    tags=["image", "unsharp_mask", "oklab"],
+    category="image",
+    version="1.0.0",
+)
+class OklabUnsharpMaskInvocation(BaseInvocation, WithMetadata, WithBoard):
+    """Applies an unsharp mask filter to an image in the Oklab color space"""
+
+    image: ImageField = InputField(description="The image to use")
+    radius: float = InputField(gt=0, description="Unsharp mask radius", default=2)
+    strength: float = InputField(ge=0, description="Unsharp mask strength", default=50)
+
+    def pil_from_tensor(self, tensor: torch.Tensor) -> Image.Image:
+        array = torch.clamp(tensor, 0.0, 1.0).permute(1, 2, 0).cpu().numpy()
+        return Image.fromarray((array * 255).astype("uint8"))
+
+    def tensor_from_pil(self, img: Image.Image) -> torch.Tensor:
+        return torch.from_numpy(numpy.array(img, dtype=numpy.float32) / 255.0).permute(2, 0, 1)
+
+    def invoke(self, context: InvocationContext) -> ImageOutput:
+        image = context.images.get_pil(self.image.image_name)
+        mode = image.mode
+
+        alpha_channel = _extract_alpha_channel(image)
+        image = image.convert("RGB")
+
+        image_blurred = self.tensor_from_pil(image.filter(ImageFilter.GaussianBlur(radius=self.radius)))
+        image_tensor = self.tensor_from_pil(image)
+
+        image_oklab = oklab_from_linear_srgb(linear_srgb_from_srgb(image_tensor))
+        image_blurred_oklab = oklab_from_linear_srgb(linear_srgb_from_srgb(image_blurred))
+
+        image_oklab[0, ...] += (image_oklab[0, ...] - image_blurred_oklab[0, ...]) * (self.strength / 100.0)
+        image_oklab = torch.clamp(image_oklab, -1.0, 1.0)
+
+        image = _restore_original_mode(
+            self.pil_from_tensor(srgb_from_linear_srgb(linear_srgb_from_oklab(image_oklab))),
+            mode,
+            alpha_channel,
+        )
+
+        image_dto = context.images.save(image=image)
+        return ImageOutput.build(image_dto)
 
 
 PIL_RESAMPLING_MODES = Literal[
@@ -802,6 +882,47 @@ class ImageHueAdjustmentInvocation(BaseInvocation, WithMetadata, WithBoard):
         return ImageOutput.build(image_dto)
 
 
+@invocation(
+    "img_hue_adjust_oklch",
+    title="Adjust Image Hue (Oklch)",
+    tags=["image", "hue", "oklch"],
+    category="image",
+    version="1.0.0",
+)
+class OklchImageHueAdjustmentInvocation(BaseInvocation, WithMetadata, WithBoard):
+    """Adjusts the hue of an image in Oklch space."""
+
+    image: ImageField = InputField(description="The image to adjust")
+    hue: int = InputField(default=0, description="The degrees by which to rotate the hue, 0-360")
+
+    def invoke(self, context: InvocationContext) -> ImageOutput:
+        image = context.images.get_pil(self.image.image_name)
+        mode = image.mode
+        alpha_channel = _extract_alpha_channel(image)
+
+        rgb = torch.from_numpy(numpy.asarray(image.convert("RGB"), dtype=numpy.float32) / 255.0).permute(2, 0, 1)
+        oklch = oklch_from_oklab(oklab_from_linear_srgb(linear_srgb_from_srgb(rgb)))
+        oklch[2, ...] = (oklch[2, ...] + self.hue) % 360.0
+
+        image = _restore_original_mode(
+            Image.fromarray(
+                (
+                    torch.clamp(srgb_from_linear_srgb(linear_srgb_from_oklch(oklch)), 0.0, 1.0)
+                    .permute(1, 2, 0)
+                    .cpu()
+                    .numpy()
+                    * 255.0
+                ).astype(numpy.uint8),
+                mode="RGB",
+            ),
+            mode,
+            alpha_channel,
+        )
+
+        image_dto = context.images.save(image=image)
+        return ImageOutput.build(image_dto)
+
+
 COLOR_CHANNELS = Literal[
     "Red (RGBA)",
     "Green (RGBA)",
@@ -992,6 +1113,102 @@ class SaveImageInvocation(BaseInvocation, WithMetadata, WithBoard):
 
 
 @invocation(
+    "save_image_to_file",
+    title="Save Image (Gallery + File Export)",
+    tags=["image", "export", "file", "save"],
+    category="image",
+    version="1.0.0",
+    use_cache=False,
+)
+class SaveImageToFileInvocation(BaseInvocation, WithMetadata, WithBoard):
+    """Saves an image to the gallery (like the standard Save Image node) AND additionally exports a copy
+    to the filesystem with a custom filename.
+
+    Filename pattern: {prefix}{uuid}{suffix}.{file_format}
+    - The UUID is the same UUID used for the gallery entry, so the exported file can be matched to the gallery item.
+    - The gallery entry itself always uses the plain UUID (prefix/suffix apply only to the exported file on disk).
+    - Board and Metadata inputs behave exactly like the standard Save Image node.
+    - The export target is restricted to (subfolders of) the InvokeAI outputs folder — absolute paths are rejected.
+
+    Example: prefix="hero_", suffix="_final", file_format="png" → "hero_<uuid>_final.png"
+    """
+
+    image: ImageField = InputField(description="The image to save and export")
+    output_directory: str = InputField(
+        default="",
+        description=(
+            "Target subdirectory (relative to the configured InvokeAI outputs folder) for the exported file. "
+            "Leave empty to use the outputs folder directly. "
+            "Example: 'my-exports' → <outputs>/my-exports/. Nested paths like 'exports/2026' are allowed. "
+            "Absolute paths and path traversal ('..') are not allowed for security reasons. "
+            "The directory is created automatically if it doesn't exist."
+        ),
+    )
+    prefix: str = InputField(
+        default="",
+        description="Text prepended to the UUID in the exported filename. Example: 'portrait_' → 'portrait_<uuid>.png'",
+    )
+    suffix: str = InputField(
+        default="",
+        description="Text appended to the UUID (before the extension). Example: '_v2' → '<uuid>_v2.png'",
+    )
+    file_format: Literal["png", "jpg", "webp"] = InputField(
+        default="png",
+        description="File format for the exported file. PNG is lossless; JPG/WEBP are lossy and respect 'quality'.",
+    )
+    quality: int = InputField(
+        default=95,
+        ge=1,
+        le=100,
+        description="Compression quality for JPG and WEBP (1-100, higher = better quality, larger file). Ignored for PNG.",
+    )
+
+    def invoke(self, context: InvocationContext) -> ImageOutput:
+        image = context.images.get_pil(self.image.image_name)
+
+        image_dto = context.images.save(image=image)
+
+        uuid = Path(image_dto.image_name).stem
+
+        outputs_path = context.config.get().outputs_path
+        assert outputs_path is not None
+
+        if not self.output_directory:
+            target_dir = outputs_path
+        else:
+            raw_str = self.output_directory
+            raw = Path(raw_str)
+            has_windows_drive = len(raw_str) >= 2 and raw_str[0].isalpha() and raw_str[1] == ":"
+            starts_with_sep = raw_str.startswith("/") or raw_str.startswith("\\")
+            if raw.is_absolute() or raw.drive or has_windows_drive or starts_with_sep:
+                raise ValueError(
+                    f"Absolute paths are not allowed in output_directory: {raw_str!r}. "
+                    "Use a path relative to the InvokeAI outputs folder."
+                )
+            candidate = (outputs_path / raw).resolve()
+            outputs_resolved = outputs_path.resolve()
+            if outputs_resolved != candidate and outputs_resolved not in candidate.parents:
+                raise ValueError(f"output_directory must stay within the outputs folder: {raw_str!r}")
+            target_dir = candidate
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"{self.prefix}{uuid}{self.suffix}.{self.file_format}"
+        target_path = target_dir / filename
+
+        if self.file_format == "png":
+            image.save(target_path, format="PNG")
+        elif self.file_format == "jpg":
+            if image.mode in ("RGBA", "LA", "P"):
+                image = image.convert("RGB")
+            image.save(target_path, format="JPEG", quality=self.quality)
+        else:
+            image.save(target_path, format="WEBP", quality=self.quality)
+
+        return ImageOutput.build(image_dto)
+
+
+@invocation(
     "canvas_paste_back",
     title="Canvas Paste Back",
     tags=["image", "combine"],
@@ -1131,45 +1348,21 @@ class ExpandMaskWithFadeInvocation(BaseInvocation, WithMetadata, WithBoard):
             image_dto = context.images.save(image=pil_mask, image_category=ImageCategory.MASK)
             return ImageOutput.build(image_dto)
 
-        np_mask = numpy.array(pil_mask)
+        np_mask = numpy.asarray(pil_mask)
 
         # Threshold the mask to create a binary mask - 0 for black, 255 for white
         # If we don't threshold we can get some weird artifacts
-        np_mask = numpy.where(np_mask > self.threshold, 255, 0).astype(numpy.uint8)
+        _, np_result = cv2.threshold(np_mask, self.threshold, 255, cv2.THRESH_BINARY)
 
-        # Create a mask for the black region (1 where black, 0 otherwise)
-        black_mask = (np_mask == 0).astype(numpy.uint8)
+        # Create a distance transform of the thresholded mask. Distances are measured to the
+        # nearest black pixel, so the black region is exactly where dist == 0.
+        dist = cv2.distanceTransform(np_result, cv2.DIST_L2, 5)
 
-        # Invert the black region
-        bg_mask = 1 - black_mask
-
-        # Create a distance transform of the inverted mask
-        dist = cv2.distanceTransform(bg_mask, cv2.DIST_L2, 5)
-
-        # Normalize distances so that pixels <fade_size_px become a linear gradient (0 to 1)
-        d_norm = numpy.clip(dist / self.fade_size_px, 0, 1)
-
-        # Control points: x values (normalized distance) and corresponding fade pct y values.
-
-        # There are some magic numbers here that are used to create a smooth transition:
-        # - The first point is at 0% of fade size from edge of mask (meaning the edge of the mask), and is 0% fade (black)
-        # - The second point is 1px from the edge of the mask and also has 0% fade, effectively expanding the mask
-        #   by 1px. This fixes an issue where artifacts can occur at the edge of the mask
-        # - The third point is at 20% of the fade size from the edge of the mask and has 20% fade
-        # - The fourth point is at 80% of the fade size from the edge of the mask and has 90% fade
-        # - The last point is at 100% of the fade size from the edge of the mask and has 100% fade (white)
-
-        # x values: 0 = mask edge, 1 = fade_size_px from edge
-        x_control = numpy.array([0.0, 1.0 / self.fade_size_px, 0.2, 0.8, 1.0])
-        # y values: 0 = black, 1 = white
-        y_control = numpy.array([0.0, 0.0, 0.2, 0.9, 1.0])
-
-        # Fit a cubic polynomial that smoothly passes through the control points
-        coeffs = numpy.polyfit(x_control, y_control, 3)
-        poly = numpy.poly1d(coeffs)
-
-        # Evaluate the polynomial
-        feather = poly(d_norm)
+        # np_result is also the final image for everywhere except the fade band. The black
+        # region is already 0, and everything at or beyond the fade distance is already 255,
+        # which is what the forced 1.0 below works out to. Only the band still needs the
+        # polynomial, and for the default 16px fade on a 1024x1024 mask that is a few
+        # percent of the pixels rather than all of them.
 
         # The polynomial fit isn't perfect. Points beyond the fade distance are likely to be slightly less than 1.0,
         # even though the control points indicate that they should be exactly 1.0. This is due to the nature of the
@@ -1177,18 +1370,46 @@ class ExpandMaskWithFadeInvocation(BaseInvocation, WithMetadata, WithBoard):
 
         # When this occurs, the area outside the mask and fade-out will not be 100% transparent. For example, it may
         # have an alpha value of 1 instead of 0. So we must force pixels at or beyond the fade distance to exactly 1.0.
+        # That forced 1.0 is 255, which those pixels already hold, so they are left untouched.
 
-        # Force pixels at or beyond the fade distance to exactly 1.0
-        feather = numpy.where(d_norm >= 1.0, 1.0, feather)
+        # The fade band is the only part that still needs the polynomial. Building the mask
+        # in place avoids a second full-size temporary.
+        band = dist > 0
+        band &= dist < self.fade_size_px
 
-        # Clip any other values to ensure they're in the valid range [0,1]
-        feather = numpy.clip(feather, 0, 1)
+        if band.any():
+            # Control points: x values (normalized distance) and corresponding fade pct y values.
 
-        # Build final image.
-        np_result = numpy.where(black_mask == 1, 0, (feather * 255).astype(numpy.uint8))
+            # There are some magic numbers here that are used to create a smooth transition:
+            # - The first point is at 0% of fade size from edge of mask (meaning the edge of the mask), and is 0% fade (black)
+            # - The second point is 1px from the edge of the mask and also has 0% fade, effectively expanding the mask
+            #   by 1px. This fixes an issue where artifacts can occur at the edge of the mask
+            # - The third point is at 20% of the fade size from the edge of the mask and has 20% fade
+            # - The fourth point is at 80% of the fade size from the edge of the mask and has 90% fade
+            # - The last point is at 100% of the fade size from the edge of the mask and has 100% fade (white)
+
+            # x values: 0 = mask edge, 1 = fade_size_px from edge
+            x_control = numpy.array([0.0, 1.0 / self.fade_size_px, 0.2, 0.8, 1.0])
+            # y values: 0 = black, 1 = white
+            y_control = numpy.array([0.0, 0.0, 0.2, 0.9, 1.0])
+
+            # Fit a cubic polynomial that smoothly passes through the control points
+            coeffs = numpy.polyfit(x_control, y_control, 3)
+            poly = numpy.poly1d(coeffs)
+
+            # Evaluate the polynomial on the band only. Normalizing just those distances is
+            # the same as normalizing the whole image and clipping, because 0 < dist < fade_size_px
+            # there. Calling the same poly() keeps the arithmetic identical to before rather
+            # than depending on how a hand-written expression promotes dtypes.
+            feather = poly(dist[band] / self.fade_size_px)
+
+            # Clip any other values to ensure they're in the valid range [0,1]
+            numpy.clip(feather, 0, 1, out=feather)
+
+            np_result[band] = (feather * 255).astype(numpy.uint8)
 
         # Convert back to PIL, grayscale
-        pil_result = Image.fromarray(np_result.astype(numpy.uint8), mode="L")
+        pil_result = Image.fromarray(np_result, mode="L")
 
         image_dto = context.images.save(image=pil_result, image_category=ImageCategory.MASK)
 

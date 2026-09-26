@@ -15,6 +15,7 @@ from invokeai.backend.flux.extensions.xlabs_ip_adapter_extension import XLabsIPA
 from invokeai.backend.flux.model import Flux
 from invokeai.backend.rectified_flow.rectified_flow_inpaint_extension import RectifiedFlowInpaintExtension
 from invokeai.backend.stable_diffusion.diffusers_pipeline import PipelineIntermediateState
+from invokeai.backend.util.devices import TorchDevice
 
 
 def denoise(
@@ -58,7 +59,11 @@ def denoise(
             scheduler.set_timesteps(sigmas=timesteps, device=img.device)
         else:
             # LCM or scheduler doesn't support custom sigmas - use num_inference_steps
-            # The schedule will be computed by the scheduler itself
+            # The schedule will be computed by the scheduler itself.
+            #
+            # Important for img2img callers: if the initial latent/noise blend was
+            # computed from a separate pre-scheduler schedule, that preblend may not
+            # match this scheduler's true first step exactly.
             num_inference_steps = len(timesteps) - 1
             scheduler.set_timesteps(num_inference_steps=num_inference_steps, device=img.device)
 
@@ -91,20 +96,23 @@ def denoise(
             # Use diffusers scheduler for stepping
             # Use tqdm with total_steps (user-facing steps) not num_scheduler_steps (internal steps)
             # This ensures progress bar shows 1/8, 2/8, etc. even when scheduler uses more internal steps
-            pbar = tqdm(total=total_steps, desc="Denoising")
+            pbar = tqdm(total=total_steps, desc=f"Denoising{TorchDevice.get_session_device_label()}")
             for step_index in range(num_scheduler_steps):
                 timestep = scheduler.timesteps[step_index]
                 # Convert scheduler timestep (0-1000) to normalized (0-1) for the model
                 t_curr = timestep.item() / scheduler.config.num_train_timesteps
+                dype_sigma = DyPEExtension.resolve_step_sigma(
+                    fallback_sigma=t_curr,
+                    step_index=step_index,
+                    scheduler_sigmas=getattr(scheduler, "sigmas", None),
+                )
                 t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)
 
                 # DyPE: Update step state for timestep-dependent scaling
                 if dype_extension is not None and dype_embedder is not None:
                     dype_extension.update_step_state(
                         embedder=dype_embedder,
-                        timestep=t_curr,
-                        timestep_index=user_step,
-                        total_steps=total_steps,
+                        sigma=dype_sigma,
                     )
 
                 # For Heun scheduler, track if we're in first or second order step
@@ -259,14 +267,15 @@ def denoise(
             return img
 
         # Original Euler implementation (when scheduler is None)
-        for step_index, (t_curr, t_prev) in tqdm(list(enumerate(zip(timesteps[:-1], timesteps[1:], strict=True)))):
+        for step_index, (t_curr, t_prev) in tqdm(
+            list(enumerate(zip(timesteps[:-1], timesteps[1:], strict=True))),
+            desc=f"Denoising{TorchDevice.get_session_device_label()}",
+        ):
             # DyPE: Update step state for timestep-dependent scaling
             if dype_extension is not None and dype_embedder is not None:
                 dype_extension.update_step_state(
                     embedder=dype_embedder,
-                    timestep=t_curr,
-                    timestep_index=step_index,
-                    total_steps=total_steps,
+                    sigma=t_curr,
                 )
 
             t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)

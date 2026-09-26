@@ -16,7 +16,23 @@ from invokeai.app.invocations.baseinvocation import (
 from invokeai.app.invocations.fields import FieldDescriptions, Input, InputField, OutputField
 from invokeai.app.invocations.model import LoRAField, ModelIdentifierField, Qwen3EncoderField, TransformerField
 from invokeai.app.services.shared.invocation_context import InvocationContext
-from invokeai.backend.model_manager.taxonomy import BaseModelType, ModelType
+from invokeai.backend.model_manager.taxonomy import BaseModelType, Flux2VariantType, ModelType
+
+
+def _assert_not_dev_lora(context: InvocationContext, lora_config) -> None:
+    """Reject a FLUX.2 [dev] LoRA applied via the FLUX.2 Klein loaders.
+
+    A dev LoRA (hidden 5120/6144) on a Klein transformer/encoder (hidden 3072/4096) is
+    guaranteed to raise a shape-mismatch ``RuntimeError`` during denoise. Fail fast here,
+    independent of which input the LoRA is wired to. (The frontend filters these out before
+    they reach the graph; this is the backstop for hand-built workflow graphs.) Intra-Klein
+    4B-vs-9B mismatches remain a soft warning below.
+    """
+    if getattr(lora_config, "variant", None) == Flux2VariantType.Dev:
+        raise ValueError(
+            f"LoRA '{lora_config.name}' is a FLUX.2 [dev] LoRA and cannot be applied via the "
+            "FLUX.2 Klein LoRA loader. Use the FLUX.2 [dev] LoRA loader for dev LoRAs."
+        )
 
 
 @invocation_output("flux2_klein_lora_loader_output")
@@ -68,8 +84,11 @@ class Flux2KleinLoRALoaderInvocation(BaseInvocation):
         if not context.models.exists(lora_key):
             raise ValueError(f"Unknown lora: {lora_key}!")
 
-        # Warn if LoRA variant doesn't match transformer variant
         lora_config = context.models.get_config(lora_key)
+        # Reject cross-family (dev) LoRAs regardless of which input they're wired to.
+        _assert_not_dev_lora(context, lora_config)
+
+        # Warn if LoRA variant doesn't match transformer variant (intra-Klein 4B/9B).
         lora_variant = getattr(lora_config, "variant", None)
         if lora_variant and self.transformer is not None:
             transformer_config = context.models.get_config(self.transformer.transformer.key)
@@ -114,14 +133,18 @@ class Flux2KleinLoRALoaderInvocation(BaseInvocation):
     title="Apply LoRA Collection - Flux2 Klein",
     tags=["lora", "model", "flux", "klein", "flux2"],
     category="model",
-    version="1.0.0",
+    version="1.0.1",
     classification=Classification.Prototype,
 )
 class Flux2KleinLoRACollectionLoader(BaseInvocation):
     """Applies a collection of LoRAs to a FLUX.2 Klein transformer and/or Qwen3 text encoder."""
 
     loras: Optional[LoRAField | list[LoRAField]] = InputField(
-        default=None, description="LoRA models and weights. May be a single LoRA or collection.", title="LoRAs"
+        default=None,
+        description="LoRA models and weights. May be a single LoRA or collection.",
+        title="LoRAs",
+        ui_model_base=[BaseModelType.Flux2],
+        ui_model_type=ModelType.LoRA,
     )
 
     transformer: Optional[TransformerField] = InputField(
@@ -157,10 +180,17 @@ class Flux2KleinLoRACollectionLoader(BaseInvocation):
             if not context.models.exists(lora.lora.key):
                 raise Exception(f"Unknown lora: {lora.lora.key}!")
 
-            assert lora.lora.base in (BaseModelType.Flux, BaseModelType.Flux2)
+            if lora.lora.base is not BaseModelType.Flux2:
+                raise ValueError(
+                    f"LoRA '{lora.lora.key}' is for {lora.lora.base.value if lora.lora.base else 'unknown'} models, "
+                    "not FLUX.2 Klein models. Ensure you are using a FLUX.2 compatible LoRA."
+                )
 
-            # Warn if LoRA variant doesn't match transformer variant
             lora_config = context.models.get_config(lora.lora.key)
+            # Reject cross-family (dev) LoRAs, matching the single-LoRA loader above.
+            _assert_not_dev_lora(context, lora_config)
+
+            # Warn if LoRA variant doesn't match transformer variant (intra-Klein 4B/9B).
             lora_variant = getattr(lora_config, "variant", None)
             if lora_variant and self.transformer is not None:
                 transformer_config = context.models.get_config(self.transformer.transformer.key)

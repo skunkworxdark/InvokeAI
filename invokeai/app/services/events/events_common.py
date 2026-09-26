@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, ClassVar, Coroutine, Generic, Optional, Protocol, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Coroutine, Generic, Literal, Optional, Protocol, TypeAlias, TypeVar
 
 from fastapi_events.handlers.local import local_handler
 from fastapi_events.registry.payload_schema import registry as payload_schema
@@ -32,21 +32,29 @@ class EventBase(BaseModel):
     All other attributes should be defined as normal for a pydantic model.
 
     A timestamp is automatically added to the event when it is created.
+
+    Events that are dispatched only within the server and never reach clients should set
+    `__server_internal__ = True` to keep themselves out of the generated API schema.
     """
 
     __event_name__: ClassVar[str]
+    __server_internal__: ClassVar[bool] = False
     timestamp: int = Field(description="The timestamp of the event", default_factory=get_timestamp)
 
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     @classmethod
     def get_events(cls) -> set[type["EventBase"]]:
-        """Get a set of all event models."""
+        """Get a set of all client-facing event models.
+
+        Consumed by the OpenAPI generator, so server-internal events are excluded — they
+        are not part of the client API surface.
+        """
 
         event_subclasses: set[type["EventBase"]] = set()
         for subclass in cls.__subclasses__():
             # We only want to include subclasses that are event models, not intermediary classes
-            if hasattr(subclass, "__event_name__"):
+            if hasattr(subclass, "__event_name__") and not subclass.__server_internal__:
                 event_subclasses.add(subclass)
             event_subclasses.update(subclass.get_events())
 
@@ -138,6 +146,10 @@ class InvocationProgressEvent(InvocationEventBase):
     image: ProgressImage | None = Field(
         default=None, description="An image representing the current state of the progress"
     )
+    device: str | None = Field(
+        default=None,
+        description="The device processing this session, e.g. 'cuda:1' (set only when running on a GPU)",
+    )
 
     @classmethod
     def build(
@@ -148,6 +160,23 @@ class InvocationProgressEvent(InvocationEventBase):
         percentage: float | None = None,
         image: ProgressImage | None = None,
     ) -> "InvocationProgressEvent":
+        # Report the GPU executing the session. Prefer the queue item's persisted device: the
+        # thread-local session device is temporarily re-pinned to a borrowed idle GPU during
+        # offloaded encoder nodes, and using it here would make the UI's device badge jump to the
+        # borrowed GPU and back within a single queue item.
+        device: str | None = (
+            queue_item.device if queue_item.device and queue_item.device.startswith(("cuda", "xpu")) else None
+        )
+        if device is None:
+            # Legacy single-device mode tags queue items with device=None; fall back to the worker
+            # thread's pinned device (set via TorchDevice.set_session_device()).
+            from invokeai.backend.util.devices import TorchDevice
+
+            session_device = TorchDevice.get_session_device()
+            device = (
+                str(session_device) if session_device is not None and session_device.type in ("cuda", "xpu") else None
+            )
+
         return cls(
             queue_id=queue_item.queue_id,
             item_id=queue_item.item_id,
@@ -161,6 +190,7 @@ class InvocationProgressEvent(InvocationEventBase):
             percentage=percentage,
             image=image,
             message=message,
+            device=device,
         )
 
 
@@ -232,6 +262,10 @@ class QueueItemStatusChangedEvent(QueueItemEventBase):
     __event_name__ = "queue_item_status_changed"
 
     status: QUEUE_ITEM_STATUS = Field(description="The new status of the queue item")
+    status_sequence: int | None = Field(
+        default=None,
+        description="A monotonically increasing version for this queue item's visible status lifecycle",
+    )
     error_type: Optional[str] = Field(default=None, description="The error type, if any")
     error_message: Optional[str] = Field(default=None, description="The error message, if any")
     error_traceback: Optional[str] = Field(default=None, description="The error traceback, if any")
@@ -256,6 +290,7 @@ class QueueItemStatusChangedEvent(QueueItemEventBase):
             user_id=queue_item.user_id,
             session_id=queue_item.session_id,
             status=queue_item.status,
+            status_sequence=queue_item.status_sequence,
             error_type=queue_item.error_type,
             error_message=queue_item.error_message,
             error_traceback=queue_item.error_traceback,
@@ -303,12 +338,43 @@ class QueueItemsRetriedEvent(QueueEventBase):
     __event_name__ = "queue_items_retried"
 
     retried_item_ids: list[int] = Field(description="The IDs of the queue items that were retried")
+    user_ids: list[str] = Field(description="The IDs of the users who own the retried root queue items")
+    retried_item_ids_by_user: dict[str, list[int]] = Field(
+        description="The retried root queue item IDs keyed by owner user ID."
+    )
 
     @classmethod
-    def build(cls, retry_result: RetryItemsResult) -> "QueueItemsRetriedEvent":
+    def build(
+        cls, retry_result: RetryItemsResult, user_ids: list[str], retried_item_ids_by_user: dict[str, list[int]]
+    ) -> "QueueItemsRetriedEvent":
         return cls(
             queue_id=retry_result.queue_id,
             retried_item_ids=retry_result.retried_item_ids,
+            user_ids=user_ids,
+            retried_item_ids_by_user=retried_item_ids_by_user,
+        )
+
+
+@payload_schema.register
+class QueueItemsCanceledEvent(QueueEventBase):
+    """Event model for queue_items_canceled. Emitted when queue items are canceled or deleted in
+    bulk (e.g. cancel/delete-all-except-current) without per-item status change events."""
+
+    __event_name__ = "queue_items_canceled"
+
+    canceled_item_ids: list[int] = Field(description="The IDs of the queue items that were canceled or deleted")
+    user_ids: list[str] = Field(description="The IDs of the users who own the canceled queue items")
+    canceled_item_ids_by_user: dict[str, list[int]] = Field(
+        description="The canceled queue item IDs keyed by owner user ID."
+    )
+
+    @classmethod
+    def build(cls, queue_id: str, canceled_item_ids_by_user: dict[str, list[int]]) -> "QueueItemsCanceledEvent":
+        return cls(
+            queue_id=queue_id,
+            canceled_item_ids=[item_id for item_ids in canceled_item_ids_by_user.values() for item_id in item_ids],
+            user_ids=list(canceled_item_ids_by_user.keys()),
+            canceled_item_ids_by_user=canceled_item_ids_by_user,
         )
 
 
@@ -318,9 +384,77 @@ class QueueClearedEvent(QueueEventBase):
 
     __event_name__ = "queue_cleared"
 
+    user_id: str | None = Field(
+        default=None,
+        description="The ID of the user whose queue items were cleared, or None if all users' items were cleared",
+    )
+
     @classmethod
-    def build(cls, queue_id: str) -> "QueueClearedEvent":
-        return cls(queue_id=queue_id)
+    def build(cls, queue_id: str, user_id: str | None = None) -> "QueueClearedEvent":
+        return cls(queue_id=queue_id, user_id=user_id)
+
+
+class WorkflowEventBase(EventBase):
+    """Base class for workflow library CRUD events."""
+
+    workflow_id: str = Field(description="The ID of the workflow")
+    user_id: str = Field(description="The owner of the workflow")
+
+
+@payload_schema.register
+class WorkflowCreatedEvent(WorkflowEventBase):
+    """Event model for workflow_created"""
+
+    __event_name__ = "workflow_created"
+
+    is_public: bool = Field(description="Whether the workflow is shared with all users")
+
+    @classmethod
+    def build(cls, workflow_id: str, user_id: str, is_public: bool) -> "WorkflowCreatedEvent":
+        return cls(workflow_id=workflow_id, user_id=user_id, is_public=is_public)
+
+
+@payload_schema.register
+class WorkflowUpdatedEvent(WorkflowEventBase):
+    """Event model for workflow_updated"""
+
+    __event_name__ = "workflow_updated"
+
+    old_is_public: bool = Field(description="Whether the workflow was shared before the update")
+    new_is_public: bool = Field(description="Whether the workflow is shared after the update")
+
+    @classmethod
+    def build(cls, workflow_id: str, user_id: str, old_is_public: bool, new_is_public: bool) -> "WorkflowUpdatedEvent":
+        return cls(
+            workflow_id=workflow_id,
+            user_id=user_id,
+            old_is_public=old_is_public,
+            new_is_public=new_is_public,
+        )
+
+
+@payload_schema.register
+class WorkflowDeletedEvent(WorkflowEventBase):
+    """Event model for workflow_deleted"""
+
+    __event_name__ = "workflow_deleted"
+
+    is_public: bool = Field(description="Whether the workflow was shared when it was deleted")
+
+    @classmethod
+    def build(cls, workflow_id: str, user_id: str, is_public: bool) -> "WorkflowDeletedEvent":
+        return cls(workflow_id=workflow_id, user_id=user_id, is_public=is_public)
+
+
+@payload_schema.register
+class WorkflowAccessRevokedEvent(WorkflowEventBase):
+    """Event model for workflow_access_revoked."""
+
+    __event_name__ = "workflow_access_revoked"
+
+    @classmethod
+    def build(cls, workflow_id: str, user_id: str) -> "WorkflowAccessRevokedEvent":
+        return cls(workflow_id=workflow_id, user_id=user_id)
 
 
 class DownloadEventBase(EventBase):
@@ -429,10 +563,13 @@ class ModelLoadStartedEvent(ModelEventBase):
 
     config: AnyModelConfig = Field(description="The model's config")
     submodel_type: Optional[SubModelType] = Field(default=None, description="The submodel type, if any")
+    user_id: str = Field(default="system", description="The ID of the user whose action triggered the load")
 
     @classmethod
-    def build(cls, config: AnyModelConfig, submodel_type: Optional[SubModelType] = None) -> "ModelLoadStartedEvent":
-        return cls(config=config, submodel_type=submodel_type)
+    def build(
+        cls, config: AnyModelConfig, submodel_type: Optional[SubModelType] = None, user_id: str = "system"
+    ) -> "ModelLoadStartedEvent":
+        return cls(config=config, submodel_type=submodel_type, user_id=user_id)
 
 
 @payload_schema.register
@@ -443,10 +580,13 @@ class ModelLoadCompleteEvent(ModelEventBase):
 
     config: AnyModelConfig = Field(description="The model's config")
     submodel_type: Optional[SubModelType] = Field(default=None, description="The submodel type, if any")
+    user_id: str = Field(default="system", description="The ID of the user whose action triggered the load")
 
     @classmethod
-    def build(cls, config: AnyModelConfig, submodel_type: Optional[SubModelType] = None) -> "ModelLoadCompleteEvent":
-        return cls(config=config, submodel_type=submodel_type)
+    def build(
+        cls, config: AnyModelConfig, submodel_type: Optional[SubModelType] = None, user_id: str = "system"
+    ) -> "ModelLoadCompleteEvent":
+        return cls(config=config, submodel_type=submodel_type, user_id=user_id)
 
 
 @payload_schema.register
@@ -684,6 +824,51 @@ class BulkDownloadErrorEvent(BulkDownloadEventBase):
         )
 
 
+class LLMTaskEventBase(EventBase):
+    """Base class for LLM utility task events (expand-prompt, image-to-prompt).
+
+    These events are correlated to a specific HTTP request via a client-supplied
+    task_id and routed privately to the originating user so partial prompt content
+    is not broadcast.
+    """
+
+    task_id: str = Field(description="Client-supplied task ID correlating events to a single request")
+    user_id: str = Field(default="system", description="ID of the user who initiated the task")
+
+
+@payload_schema.register
+class LLMTaskProgressEvent(LLMTaskEventBase):
+    """Event model for llm_task_progress"""
+
+    __event_name__ = "llm_task_progress"
+
+    phase: Literal["loading_model", "generating"] = Field(description="Which phase of the task is in progress")
+    message: str = Field(description="A short message describing the current phase")
+    percentage: float | None = Field(
+        default=None, ge=0, le=1, description="Progress fraction in [0, 1]; omit for indeterminate progress"
+    )
+    current_tokens: int | None = Field(default=None, description="Number of tokens generated so far (generating phase)")
+    total_tokens: int | None = Field(
+        default=None, description="Max tokens the request will generate (generating phase)"
+    )
+
+
+@payload_schema.register
+class LLMTaskCompleteEvent(LLMTaskEventBase):
+    """Event model for llm_task_complete"""
+
+    __event_name__ = "llm_task_complete"
+
+
+@payload_schema.register
+class LLMTaskErrorEvent(LLMTaskEventBase):
+    """Event model for llm_task_error"""
+
+    __event_name__ = "llm_task_error"
+
+    error: str = Field(description="The error message")
+
+
 @payload_schema.register
 class RecallParametersUpdatedEvent(QueueEventBase):
     """Event model for recall_parameters_updated"""
@@ -696,3 +881,31 @@ class RecallParametersUpdatedEvent(QueueEventBase):
     @classmethod
     def build(cls, queue_id: str, user_id: str, parameters: dict[str, Any]) -> "RecallParametersUpdatedEvent":
         return cls(queue_id=queue_id, user_id=user_id, parameters=parameters)
+
+
+class UserAccessChangedEvent(EventBase):
+    """Event model for user_access_changed.
+
+    Emitted when a user's authorization state changes (role change, deactivation,
+    or deletion) so that live connections — e.g. open sockets — can be re-authorized
+    immediately instead of trusting connect-time claims until reconnect.
+
+    This event is server-internal: it is deliberately NOT registered with
+    `payload_schema`, is excluded from the generated API schema, and is never
+    emitted to clients.
+    """
+
+    __event_name__ = "user_access_changed"
+    __server_internal__ = True
+
+    user_id: str = Field(description="The ID of the affected user")
+    is_admin: bool = Field(description="Whether the user currently has admin privileges")
+    is_active: bool = Field(description="Whether the user account is currently active (False for deleted users)")
+    token_epoch: int = Field(
+        default=0,
+        description="The user's current token revocation epoch; sockets that authenticated under an older one are dropped",
+    )
+
+    @classmethod
+    def build(cls, user_id: str, is_admin: bool, is_active: bool, token_epoch: int = 0) -> "UserAccessChangedEvent":
+        return cls(user_id=user_id, is_admin=is_admin, is_active=is_active, token_epoch=token_epoch)

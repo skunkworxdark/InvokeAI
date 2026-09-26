@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Collection, Sequence
 from pathlib import Path
 from typing import Optional
 
@@ -9,13 +10,30 @@ class ImageFileStorageBase(ABC):
     """Low-level service responsible for storing and retrieving image files."""
 
     @abstractmethod
-    def get(self, image_name: str) -> PILImageType:
+    def get(self, image_name: str, image_subfolder: str = "") -> PILImageType:
         """Retrieves an image as PIL Image."""
         pass
 
     @abstractmethod
-    def get_path(self, image_name: str, thumbnail: bool = False) -> Path:
+    def get_path(self, image_name: str, thumbnail: bool = False, image_subfolder: str = "") -> Path:
         """Gets the internal path to an image or thumbnail."""
+        pass
+
+    @property
+    @abstractmethod
+    def image_root(self) -> Path:
+        """Gets the root directory for full-size images."""
+        pass
+
+    @property
+    @abstractmethod
+    def thumbnail_root(self) -> Path:
+        """Gets the root directory for thumbnails."""
+        pass
+
+    @abstractmethod
+    def evict_cache_paths(self, paths: list[Path]) -> None:
+        """Evicts any cached image objects for the provided paths."""
         pass
 
     # TODO: We need to validate paths before starlette makes the FileResponse, else we get a
@@ -34,21 +52,56 @@ class ImageFileStorageBase(ABC):
         workflow: Optional[str] = None,
         graph: Optional[str] = None,
         thumbnail_size: int = 256,
+        image_subfolder: str = "",
     ) -> None:
         """Saves an image and a 256x256 WEBP thumbnail. Returns a tuple of the image name, thumbnail name, and created timestamp."""
         pass
 
     @abstractmethod
-    def delete(self, image_name: str) -> None:
+    def delete(self, image_name: str, image_subfolder: str = "") -> None:
         """Deletes an image and its thumbnail (if one exists)."""
         pass
 
     @abstractmethod
-    def get_workflow(self, image_name: str) -> Optional[str]:
+    def stage_delete(self, image_name: str, image_subfolder: str = "") -> object:
+        """Moves an image's files out of service and returns a rollback token."""
+        pass
+
+    @abstractmethod
+    def begin_delete(self, images: Sequence[tuple[str, str]]) -> object:
+        """Durably records the intent to purge the (image_name, image_subfolder) pairs' files.
+
+        Call this before deleting the records, then ``commit_delete()`` after. If the process dies
+        in between, startup recovery uses the journal to purge the files of every listed image
+        whose record is gone, and leaves the files of every image whose record survives.
+        """
+        pass
+
+    @abstractmethod
+    def commit_delete(self, token: object, image_names: Optional[Collection[str]] = None) -> None:
+        """Permanently removes the files represented by a delete token.
+
+        ``image_names`` narrows a pending-delete token to the records that were actually deleted;
+        it is ignored for a staged-delete token.
+        """
+        pass
+
+    @abstractmethod
+    def abandon_delete(self, token: object) -> None:
+        """Drops a pending-delete journal without purging anything, leaving the files in place."""
+        pass
+
+    @abstractmethod
+    def rollback_delete(self, token: object) -> None:
+        """Restores files represented by a staged-delete token."""
+        pass
+
+    @abstractmethod
+    def get_workflow(self, image_name: str, image_subfolder: str = "") -> Optional[str]:
         """Gets the workflow of an image."""
         pass
 
     @abstractmethod
-    def get_graph(self, image_name: str) -> Optional[str]:
+    def get_graph(self, image_name: str, image_subfolder: str = "") -> Optional[str]:
         """Gets the graph of an image."""
         pass

@@ -2,11 +2,12 @@ import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import { draggable } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import type { ImageProps, SystemStyleObject } from '@invoke-ai/ui-library';
 import { Image } from '@invoke-ai/ui-library';
-import { useAppStore } from 'app/store/storeHooks';
+import { useMiddleClickOpenInNewTab } from 'common/hooks/useMiddleClickOpenInNewTab';
+import { useMediaUrl } from 'features/auth/store/mediaCookieRefresh';
 import { singleImageDndSource } from 'features/dnd/dnd';
 import type { DndDragPreviewSingleImageState } from 'features/dnd/DndDragPreviewSingleImage';
 import { createSingleImageDragPreview, setSingleImageDragPreview } from 'features/dnd/DndDragPreviewSingleImage';
-import { firefoxDndFix } from 'features/dnd/util';
+import { dndInputFix } from 'features/dnd/util';
 import { useImageContextMenu } from 'features/gallery/components/ContextMenu/ImageContextMenu';
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { ImageDTO } from 'services/api/types';
@@ -15,7 +16,6 @@ const sx = {
   objectFit: 'contain',
   maxW: 'full',
   maxH: 'full',
-  cursor: 'grab',
   '&[data-is-dragging=true]': {
     opacity: 0.3,
   },
@@ -28,12 +28,14 @@ type Props = {
 
 export const DndImage = memo(
   forwardRef(({ imageDTO, asThumbnail, ...rest }: Props, forwardedRef) => {
-    const store = useAppStore();
-
     const [isDragging, setIsDragging] = useState(false);
     const ref = useRef<HTMLImageElement>(null);
     useImperativeHandle(forwardedRef, () => ref.current!, []);
     const [dragPreviewState, setDragPreviewState] = useState<DndDragPreviewSingleImageState | null>(null);
+    const imageUrl = useMediaUrl(asThumbnail ? imageDTO.thumbnail_url : imageDTO.image_url);
+    const fallbackUrl = useMediaUrl(asThumbnail ? undefined : imageDTO.thumbnail_url);
+
+    useMiddleClickOpenInNewTab(ref, imageDTO.image_url);
 
     useEffect(() => {
       const element = ref.current;
@@ -41,7 +43,7 @@ export const DndImage = memo(
         return;
       }
       return combine(
-        firefoxDndFix(element),
+        dndInputFix(element),
         draggable({
           element,
           getInitialData: () => singleImageDndSource.getData({ imageDTO }, imageDTO.image_name),
@@ -62,7 +64,7 @@ export const DndImage = memo(
           },
         })
       );
-    }, [forwardedRef, imageDTO, store]);
+    }, [imageDTO]);
 
     useImageContextMenu(imageDTO, ref);
 
@@ -71,8 +73,8 @@ export const DndImage = memo(
         <Image
           role="button"
           ref={ref}
-          src={asThumbnail ? imageDTO.thumbnail_url : imageDTO.image_url}
-          fallbackSrc={asThumbnail ? undefined : imageDTO.thumbnail_url}
+          src={imageUrl}
+          fallbackSrc={fallbackUrl}
           width={imageDTO.width}
           height={imageDTO.height}
           sx={sx}

@@ -18,6 +18,7 @@ import type { MainModelConfig } from 'services/api/types';
 
 import { DefaultCfgRescaleMultiplier } from './DefaultCfgRescaleMultiplier';
 import { DefaultCfgScale } from './DefaultCfgScale';
+import { DefaultFp8Storage } from './DefaultFp8Storage';
 import { DefaultGuidance } from './DefaultGuidance';
 import { DefaultScheduler } from './DefaultScheduler';
 import { DefaultSteps } from './DefaultSteps';
@@ -39,6 +40,7 @@ export type MainModelDefaultSettingsFormData = {
   width: FormField<number>;
   height: FormField<number>;
   guidance: FormField<number>;
+  fp8Storage: FormField<boolean>;
 };
 
 type Props = {
@@ -52,6 +54,15 @@ export const MainModelDefaultSettings = memo(({ modelConfig }: Props) => {
 
   const isFluxFamily = useMemo(() => {
     return ['flux', 'flux2'].includes(modelConfig.base);
+  }, [modelConfig]);
+
+  // Already-quantized weights cannot also be stored as FP8 — the backend refuses it (see
+  // `_should_use_fp8`), so offering the switch would be a control that silently does nothing.
+  // Keep in sync with `_QUANTIZED_MODEL_FORMATS` in `load_default.py`.
+  const isQuantized = useMemo(() => {
+    return ['gguf_quantized', 'bnb_quantized_nf4b', 'bnb_quantized_int8b', 'sdnq_quantized'].includes(
+      modelConfig.format
+    );
   }, [modelConfig]);
 
   const defaultSettingsDefaults = useMainModelDefaultSettings(modelConfig);
@@ -85,6 +96,7 @@ export const MainModelDefaultSettings = memo(({ modelConfig }: Props) => {
         width: data.width.isEnabled ? data.width.value : null,
         height: data.height.isEnabled ? data.height.value : null,
         guidance: data.guidance.isEnabled ? data.guidance.value : null,
+        fp8_storage: data.fp8Storage.isEnabled ? data.fp8Storage.value : null,
       };
 
       updateModel({
@@ -141,6 +153,7 @@ export const MainModelDefaultSettings = memo(({ modelConfig }: Props) => {
         {!isFluxFamily && <DefaultCfgRescaleMultiplier control={control} name="cfgRescaleMultiplier" />}
         <DefaultWidth control={control} optimalDimension={optimalDimension} />
         <DefaultHeight control={control} optimalDimension={optimalDimension} />
+        {!isQuantized && <DefaultFp8Storage control={control} name="fp8Storage" />}
       </SimpleGrid>
     </>
   );

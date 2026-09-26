@@ -9,6 +9,7 @@ from invokeai.app.invocations.baseinvocation import InvocationRegistry
 from invokeai.app.services.config.config_default import (
     DefaultInvokeAIAppConfig,
     InvokeAIAppConfig,
+    ensure_fonts_dir,
     get_config,
     load_and_migrate_config,
 )
@@ -17,6 +18,13 @@ from invokeai.frontend.cli.arg_parser import InvokeAIArgs
 
 v4_config = """
 schema_version: 4.0.0
+
+host: "192.168.1.1"
+port: 8080
+"""
+
+v4_0_2_config = """
+schema_version: "4.0.2"
 
 host: "192.168.1.1"
 port: 8080
@@ -73,6 +81,15 @@ def test_path_resolution_root_not_set(patch_rootdir: None):
     assert config.root_path == expected_root
 
 
+def test_wan_memory_optimization_defaults_to_false_and_loads_from_yaml(tmp_path: Path, patch_rootdir: None) -> None:
+    assert InvokeAIAppConfig().wan_memory_optimization is False
+
+    temp_config_file = tmp_path / "temp_invokeai.yaml"
+    temp_config_file.write_text('schema_version: "4.0.3"\nwan_memory_optimization: true\n')
+
+    assert load_and_migrate_config(temp_config_file).wan_memory_optimization is True
+
+
 def test_read_config_from_file(tmp_path: Path, patch_rootdir: None):
     """Test reading configuration from a file."""
     temp_config_file = tmp_path / "temp_invokeai.yaml"
@@ -81,6 +98,15 @@ def test_read_config_from_file(tmp_path: Path, patch_rootdir: None):
     config = load_and_migrate_config(temp_config_file)
     assert config.host == "192.168.1.1"
     assert config.port == 8080
+
+
+def test_pid_memory_optimization_defaults_to_false_and_loads_from_yaml(tmp_path: Path, patch_rootdir: None) -> None:
+    assert InvokeAIAppConfig().pid_memory_optimization is False
+
+    temp_config_file = tmp_path / "temp_invokeai.yaml"
+    temp_config_file.write_text('schema_version: "4.0.3"\npid_memory_optimization: true\n')
+
+    assert load_and_migrate_config(temp_config_file).pid_memory_optimization is True
 
 
 def test_migrate_v3_config_from_file(tmp_path: Path, patch_rootdir: None):
@@ -146,6 +172,19 @@ def test_failed_migrate_backup(tmp_path: Path, patch_rootdir: None):
     assert temp_config_file.with_suffix(".yaml.bak").read_text() == v3_config_with_bad_values
     assert temp_config_file.exists()
     assert temp_config_file.read_text() == v3_config_with_bad_values
+
+
+def test_migrate_v4_0_2_to_4_0_3_config(tmp_path: Path, patch_rootdir: None):
+    """Test that a v4.0.2 config is migrated to v4.0.3 (image subfolder support)."""
+    temp_config_file = tmp_path / "temp_invokeai.yaml"
+    temp_config_file.write_text(v4_0_2_config)
+
+    config = load_and_migrate_config(temp_config_file)
+    assert config.schema_version == "4.0.3"
+    assert config.host == "192.168.1.1"
+    assert config.port == 8080
+    # image_subfolder_strategy should have its default value
+    assert config.image_subfolder_strategy == "flat"
 
 
 def test_bails_on_invalid_config(tmp_path: Path, patch_rootdir: None):
@@ -249,6 +288,8 @@ def test_get_config_writing(patch_rootdir: None, monkeypatch: pytest.MonkeyPatch
     assert config.config_file_path == config_file_path
     assert config_file_path.exists()
     assert example_file_path.exists()
+    assert (tmp_path / "fonts").exists()
+    assert (tmp_path / "fonts" / "README.txt").exists()
 
     # The example file should have the default values
     example_file_content = example_file_path.read_text()
@@ -263,6 +304,60 @@ def test_get_config_writing(patch_rootdir: None, monkeypatch: pytest.MonkeyPatch
     assert "host" not in config_file_content
 
     # Undo our change to the singleton class
+    InvokeAIArgs.did_parse = False
+
+
+def test_ensure_fonts_dir_logs_warning_on_oserror(
+    patch_rootdir: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    original_mkdir = Path.mkdir
+    fonts_path = tmp_path / "fonts"
+
+    def mock_mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
+        if self == fonts_path:
+            raise OSError("read-only")
+        original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
+
+    with caplog.at_level("WARNING"):
+        ensure_fonts_dir(fonts_path)
+
+    assert "Unable to initialize fonts directory" in caplog.text
+
+
+def test_get_config_reads_external_api_keys_file(patch_rootdir: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Test that API keys are loaded from the dedicated api_keys.yaml file."""
+    InvokeAIArgs.did_parse = True
+    monkeypatch.setenv("INVOKEAI_ROOT", str(tmp_path))
+    (tmp_path / "invokeai.yaml").write_text("schema_version: 4.0.2\n")
+    (tmp_path / "api_keys.yaml").write_text("external_openai_api_key: openai-key\n")
+
+    get_config.cache_clear()
+    config = get_config()
+    get_config.cache_clear()
+
+    assert config.external_openai_api_key == "openai-key"
+
+    InvokeAIArgs.did_parse = False
+
+
+def test_get_config_env_vars_override_external_api_keys_file(
+    patch_rootdir: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """Test that environment variables override values from api_keys.yaml."""
+    InvokeAIArgs.did_parse = True
+    monkeypatch.setenv("INVOKEAI_ROOT", str(tmp_path))
+    monkeypatch.setenv("INVOKEAI_EXTERNAL_OPENAI_API_KEY", "env-openai-key")
+    (tmp_path / "invokeai.yaml").write_text("schema_version: 4.0.2\n")
+    (tmp_path / "api_keys.yaml").write_text("external_openai_api_key: file-openai-key\n")
+
+    get_config.cache_clear()
+    config = get_config()
+    get_config.cache_clear()
+
+    assert config.external_openai_api_key == "env-openai-key"
+
     InvokeAIArgs.did_parse = False
 
 
@@ -297,3 +392,35 @@ def test_deny_nodes(patch_rootdir):
     # Reset the config so that it doesn't affect other tests
     get_config.cache_clear()
     InvocationRegistry.invalidate_invocation_typeadapter()
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("/invoke", "/invoke"),
+        ("invoke", "/invoke"),
+        ("invoke/", "/invoke"),
+        ("/invoke/", "/invoke"),
+        ("//invoke//", "/invoke"),
+        (" /invoke ", "/invoke"),
+        ("/invoke/sub", "/invoke/sub"),
+        ("", None),
+        ("/", None),
+        ("   ", None),
+        (None, None),
+    ],
+)
+def test_base_url_validator_normalizes(raw: str | None, expected: str | None, patch_rootdir: None):
+    """`base_url` is normalized to a single leading slash with no trailing slash; empty/`/` disable it."""
+    config = InvokeAIAppConfig(base_url=raw)
+    assert config.base_url == expected
+
+
+@pytest.mark.parametrize(
+    "reserved",
+    ["/api", "api", "/ws", "/static", "/docs", "/redoc", "/openapi.json", "/locales", "/assets", "/api/foo"],
+)
+def test_base_url_validator_rejects_reserved_prefix(reserved: str, patch_rootdir: None):
+    """A `base_url` whose first segment collides with a real route prefix must fail fast, not brick the server."""
+    with pytest.raises(ValidationError, match="reserved path segment"):
+        InvokeAIAppConfig(base_url=reserved)

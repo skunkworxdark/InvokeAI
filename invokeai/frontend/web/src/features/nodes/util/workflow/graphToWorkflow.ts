@@ -3,14 +3,30 @@ import { logger } from 'app/logging/logger';
 import { forEach } from 'es-toolkit/compat';
 import { $templates } from 'features/nodes/store/nodesSlice';
 import { NODE_WIDTH } from 'features/nodes/types/constants';
-import type { FieldInputInstance } from 'features/nodes/types/field';
+import { nodeAcceptsExtraInputs } from 'features/nodes/types/extraInputs';
+import type { FieldInputInstance, FieldInputTemplate } from 'features/nodes/types/field';
 import type { WorkflowV3 } from 'features/nodes/types/workflow';
-import { getDefaultForm } from 'features/nodes/types/workflow';
+import { getDefaultForm, isWorkflowInvocationNode } from 'features/nodes/types/workflow';
+import { getConnectedInputNames, migrateImageCollectionInputValues } from 'features/nodes/util/node/nodeUpdate';
 import { buildFieldInputInstance } from 'features/nodes/util/schema/buildFieldInputInstance';
 import type { NonNullableGraph } from 'services/api/types';
 import { v4 as uuidv4 } from 'uuid';
 
 const log = logger('workflows');
+
+// Synthesize a MetadataExtraField template so values for `extra='allow'` keys round-trip through
+// the workflow when the OpenAPI schema does not declare them.
+const buildMetadataExtraFieldTemplate = (name: string): FieldInputTemplate => ({
+  name,
+  title: name,
+  description: '',
+  ui_hidden: true,
+  fieldKind: 'input',
+  input: 'any',
+  required: false,
+  default: undefined,
+  type: { name: 'MetadataExtraField', cardinality: 'SINGLE', batch: false },
+});
 
 /**
  * Converts a graph to a workflow. This is a best-effort conversion and may not be perfect.
@@ -60,12 +76,17 @@ export const graphToWorkflow = (graph: NonNullableGraph, autoLayout = true): Wor
         return;
       }
 
-      const inputTemplate = template.inputs[key];
+      let inputTemplate = template.inputs[key];
 
-      // Skip missing input templates
       if (!inputTemplate) {
-        log.warn(`Input ${key} not found in template for node type ${node.type}`);
-        return;
+        if (nodeAcceptsExtraInputs(node.type)) {
+          // The backend node accepts extras (pydantic `extra='allow'`); preserve the value so
+          // recall metadata survives the round-trip.
+          inputTemplate = buildMetadataExtraFieldTemplate(key);
+        } else {
+          log.warn(`Input ${key} not found in template for node type ${node.type}`);
+          return;
+        }
       }
 
       // This _should_ be all we need to do!
@@ -84,6 +105,7 @@ export const graphToWorkflow = (graph: NonNullableGraph, autoLayout = true): Wor
         version: template.version,
         label: '',
         notes: '',
+        dynamicInputTemplates: {},
         isOpen: true,
         isIntermediate: node.is_intermediate ?? false,
         useCache: node.use_cache ?? true,
@@ -101,6 +123,21 @@ export const graphToWorkflow = (graph: NonNullableGraph, autoLayout = true): Wor
       sourceHandle: edge.source.field,
       target: edge.destination.node_id,
       targetHandle: edge.destination.field,
+    });
+  });
+
+  workflow.nodes.filter(isWorkflowInvocationNode).forEach((node) => {
+    if (
+      node.data.type === 'image_collection' &&
+      node.data.inputs.collection &&
+      !node.data.inputs.images &&
+      templates.image_collection?.inputs.images
+    ) {
+      node.data.inputs.images = buildFieldInputInstance(node.id, templates.image_collection.inputs.images);
+    }
+
+    migrateImageCollectionInputValues(node, {
+      connectedInputNames: getConnectedInputNames(node.id, workflow.edges),
     });
   });
 

@@ -4,6 +4,7 @@ import type {
   BoardFieldInputTemplate,
   BooleanFieldInputTemplate,
   ColorFieldInputTemplate,
+  ControlNetMetadataFieldInputTemplate,
   EnumFieldInputTemplate,
   FieldInputTemplate,
   FieldType,
@@ -16,7 +17,12 @@ import type {
   IntegerFieldCollectionInputTemplate,
   IntegerFieldInputTemplate,
   IntegerGeneratorFieldInputTemplate,
+  IPAdapterMetadataFieldInputTemplate,
+  LoRAFieldCollectionInputTemplate,
+  LoRAMetadataFieldInputTemplate,
+  MetadataExtraFieldInputTemplate,
   ModelIdentifierFieldInputTemplate,
+  SavedWorkflowFieldInputTemplate,
   SchedulerFieldInputTemplate,
   StatefulFieldType,
   StatelessFieldInputTemplate,
@@ -24,6 +30,9 @@ import type {
   StringFieldInputTemplate,
   StringGeneratorFieldInputTemplate,
   StylePresetFieldInputTemplate,
+  SystemPromptFieldInputTemplate,
+  T2IAdapterMetadataFieldInputTemplate,
+  VideoFieldInputTemplate,
 } from 'features/nodes/types/field';
 import {
   getFloatGeneratorArithmeticSequenceDefaults,
@@ -33,6 +42,7 @@ import {
   isFloatCollectionFieldType,
   isImageCollectionFieldType,
   isIntegerCollectionFieldType,
+  isLoRAFieldCollectionFieldType,
   isStatefulFieldType,
   isStringCollectionFieldType,
 } from 'features/nodes/types/field';
@@ -304,12 +314,40 @@ const buildStylePresetFieldInputTemplate: FieldInputTemplateBuilder<StylePresetF
   return template;
 };
 
+const buildSystemPromptFieldInputTemplate: FieldInputTemplateBuilder<SystemPromptFieldInputTemplate> = ({
+  schemaObject,
+  baseField,
+  fieldType,
+}) => {
+  const template: SystemPromptFieldInputTemplate = {
+    ...baseField,
+    type: fieldType,
+    default: schemaObject.default ?? undefined,
+  };
+
+  return template;
+};
+
 const buildImageFieldInputTemplate: FieldInputTemplateBuilder<ImageFieldInputTemplate> = ({
   schemaObject,
   baseField,
   fieldType,
 }) => {
   const template: ImageFieldInputTemplate = {
+    ...baseField,
+    type: fieldType,
+    default: schemaObject.default ?? undefined,
+  };
+
+  return template;
+};
+
+const buildVideoFieldInputTemplate: FieldInputTemplateBuilder<VideoFieldInputTemplate> = ({
+  schemaObject,
+  baseField,
+  fieldType,
+}) => {
+  const template: VideoFieldInputTemplate = {
     ...baseField,
     type: fieldType,
     default: schemaObject.default ?? undefined,
@@ -327,6 +365,30 @@ const buildImageFieldCollectionInputTemplate: FieldInputTemplateBuilder<ImageFie
     ...baseField,
     type: fieldType,
     default: schemaObject.default ?? (schemaObject.orig_required ? [] : undefined),
+  };
+
+  if (schemaObject.minItems !== undefined) {
+    template.minItems = schemaObject.minItems;
+  }
+
+  if (schemaObject.maxItems !== undefined) {
+    template.maxItems = schemaObject.maxItems;
+  }
+
+  return template;
+};
+
+const buildLoRAFieldCollectionInputTemplate: FieldInputTemplateBuilder<LoRAFieldCollectionInputTemplate> = ({
+  schemaObject,
+  baseField,
+  fieldType,
+}) => {
+  const template: LoRAFieldCollectionInputTemplate = {
+    ...baseField,
+    type: fieldType,
+    // An empty collection is always valid, so we default to an empty list rather than leaving the
+    // field unsatisfied. This is what lets a node with no LoRAs selected still fire.
+    default: schemaObject.default ?? [],
   };
 
   if (schemaObject.minItems !== undefined) {
@@ -408,6 +470,28 @@ const buildSchedulerFieldInputTemplate: FieldInputTemplateBuilder<SchedulerField
   return template;
 };
 
+const buildSavedWorkflowFieldInputTemplate: FieldInputTemplateBuilder<SavedWorkflowFieldInputTemplate> = ({
+  schemaObject,
+  baseField,
+  fieldType,
+}) => {
+  const template: SavedWorkflowFieldInputTemplate = {
+    ...baseField,
+    type: fieldType,
+    default: schemaObject.default ?? '',
+  };
+
+  if (schemaObject.minLength !== undefined) {
+    template.minLength = schemaObject.minLength;
+  }
+
+  if (schemaObject.maxLength !== undefined) {
+    template.maxLength = schemaObject.maxLength;
+  }
+
+  return template;
+};
+
 const buildFloatGeneratorFieldInputTemplate: FieldInputTemplateBuilder<FloatGeneratorFieldInputTemplate> = ({
   // schemaObject,
   baseField,
@@ -464,6 +548,53 @@ const buildImageGeneratorFieldInputTemplate: FieldInputTemplateBuilder<ImageGene
   return template;
 };
 
+const buildLoRAMetadataFieldInputTemplate: FieldInputTemplateBuilder<LoRAMetadataFieldInputTemplate> = ({
+  baseField,
+  fieldType,
+}) => ({
+  ...baseField,
+  type: fieldType,
+  default: undefined,
+});
+
+const buildControlNetMetadataFieldInputTemplate: FieldInputTemplateBuilder<ControlNetMetadataFieldInputTemplate> = ({
+  baseField,
+  fieldType,
+}) => ({
+  ...baseField,
+  type: fieldType,
+  default: undefined,
+});
+
+const buildIPAdapterMetadataFieldInputTemplate: FieldInputTemplateBuilder<IPAdapterMetadataFieldInputTemplate> = ({
+  baseField,
+  fieldType,
+}) => ({
+  ...baseField,
+  type: fieldType,
+  default: undefined,
+});
+
+const buildT2IAdapterMetadataFieldInputTemplate: FieldInputTemplateBuilder<T2IAdapterMetadataFieldInputTemplate> = ({
+  baseField,
+  fieldType,
+}) => ({
+  ...baseField,
+  type: fieldType,
+  default: undefined,
+});
+
+// MetadataExtraField is synthesized by graphToWorkflow for `core_metadata` extras and never
+// produced by parseSchema. This builder exists only to satisfy the StatefulFieldType['name'] record.
+const buildMetadataExtraFieldInputTemplate: FieldInputTemplateBuilder<MetadataExtraFieldInputTemplate> = ({
+  baseField,
+  fieldType,
+}) => ({
+  ...baseField,
+  type: fieldType,
+  default: undefined,
+});
+
 const TEMPLATE_BUILDER_MAP: Record<StatefulFieldType['name'], FieldInputTemplateBuilder> = {
   BoardField: buildBoardFieldInputTemplate,
   BooleanField: buildBooleanFieldInputTemplate,
@@ -471,15 +602,26 @@ const TEMPLATE_BUILDER_MAP: Record<StatefulFieldType['name'], FieldInputTemplate
   EnumField: buildEnumFieldInputTemplate,
   FloatField: buildFloatFieldInputTemplate,
   ImageField: buildImageFieldInputTemplate,
+  VideoField: buildVideoFieldInputTemplate,
   IntegerField: buildIntegerFieldInputTemplate,
+  // LoRAField is always handled by the collection branch above (COLLECTION / SINGLE_OR_COLLECTION);
+  // this entry is a defensive fallback to satisfy the exhaustive builder map.
+  LoRAField: buildLoRAFieldCollectionInputTemplate,
   ModelIdentifierField: buildModelIdentifierFieldInputTemplate,
   SchedulerField: buildSchedulerFieldInputTemplate,
+  SavedWorkflowField: buildSavedWorkflowFieldInputTemplate,
   StringField: buildStringFieldInputTemplate,
   StylePresetField: buildStylePresetFieldInputTemplate,
+  SystemPromptField: buildSystemPromptFieldInputTemplate,
   FloatGeneratorField: buildFloatGeneratorFieldInputTemplate,
   IntegerGeneratorField: buildIntegerGeneratorFieldInputTemplate,
   StringGeneratorField: buildStringGeneratorFieldInputTemplate,
   ImageGeneratorField: buildImageGeneratorFieldInputTemplate,
+  LoRAMetadataField: buildLoRAMetadataFieldInputTemplate,
+  ControlNetMetadataField: buildControlNetMetadataFieldInputTemplate,
+  IPAdapterMetadataField: buildIPAdapterMetadataFieldInputTemplate,
+  T2IAdapterMetadataField: buildT2IAdapterMetadataFieldInputTemplate,
+  MetadataExtraField: buildMetadataExtraFieldInputTemplate,
 };
 
 export const buildFieldInputTemplate = (
@@ -499,6 +641,7 @@ export const buildFieldInputTemplate = (
     ui_model_type,
     ui_model_variant,
     ui_model_format,
+    ui_model_provider_id,
   } = fieldSchema;
 
   // This is the base field template that is common to all fields. The builder function will add all other
@@ -519,6 +662,7 @@ export const buildFieldInputTemplate = (
     ui_model_type,
     ui_model_variant,
     ui_model_format,
+    ui_model_provider_id,
   };
 
   if (isStatefulFieldType(fieldType)) {
@@ -542,6 +686,12 @@ export const buildFieldInputTemplate = (
       });
     } else if (isFloatCollectionFieldType(fieldType)) {
       return buildFloatFieldCollectionInputTemplate({
+        schemaObject: fieldSchema,
+        baseField,
+        fieldType,
+      });
+    } else if (isLoRAFieldCollectionFieldType(fieldType)) {
+      return buildLoRAFieldCollectionInputTemplate({
         schemaObject: fieldSchema,
         baseField,
         fieldType,

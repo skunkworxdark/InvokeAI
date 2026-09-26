@@ -9,29 +9,46 @@ import {
   useGetMissingModelsQuery,
   useGetModelConfigsQuery,
 } from 'services/api/endpoints/models';
-import type { AnyModelConfig } from 'services/api/types';
+import type { AnyModelConfig, AnyModelConfigWithExternal, MainOrExternalModelConfig } from 'services/api/types';
 import {
+  isAnimaCompatibleVAEModelConfig,
+  isAnimaInpaintControlNetModelConfig,
   isAnimaQwen3EncoderModelConfig,
   isAnimaVAEModelConfig,
   isCLIPEmbedModelConfigOrSubmodel,
   isControlLayerModelConfig,
   isControlNetModelConfig,
+  isExternalApiModelConfig,
   isFlux1VAEModelConfig,
+  isFlux2DevDiffusersMainModelConfig,
+  isFlux2DiffusersMainModelConfig,
   isFlux2VAEModelConfig,
   isFluxKontextModelConfig,
   isFluxReduxModelConfig,
-  isFluxVAEModelConfig,
+  isGemma2EncoderModelConfig,
   isIPAdapterModelConfig,
+  isLLaVAModelConfig,
   isLoRAModelConfig,
-  isNonRefinerMainModelConfig,
+  isMainOrExternalModelConfig,
+  isMistralEncoderModelConfig,
+  isPiDDecoderModelConfig,
   isQwen3EncoderModelConfig,
+  isQwen3VLEncoderModelConfig,
   isQwenImageDiffusersMainModelConfig,
+  isQwenImageVAEModelConfig,
+  isQwenVLEncoderModelConfig,
   isRefinerMainModelModelConfig,
   isSpandrelImageToImageModelConfig,
   isT5EncoderModelConfigOrSubmodel,
+  isTextLLMModelConfig,
   isTIModelConfig,
   isVAEModelConfigOrSubmodel,
+  isWanDiffusersMainModelConfig,
+  isWanLowNoisePartnerOption,
+  isWanT5EncoderModelConfig,
+  isWanVAEModelConfig,
   isZImageDiffusersMainModelConfig,
+  isZImageQwen3EncoderModelConfig,
 } from 'services/api/types';
 
 const buildModelsHook =
@@ -50,16 +67,42 @@ const buildModelsHook =
         modelConfigsAdapterSelectors.selectAll(missingModelsData ?? { ids: [], entities: {} }).map((m) => m.key)
       );
 
-      return modelConfigsAdapterSelectors
-        .selectAll(result.data)
-        .filter((config) => typeGuard(config))
+      return (modelConfigsAdapterSelectors.selectAll(result.data) as AnyModelConfigWithExternal[])
+        .filter((config): config is T => {
+          if (isExternalApiModelConfig(config)) {
+            return false;
+          }
+          return typeGuard(config as AnyModelConfig);
+        })
         .filter((config) => !missingModelKeys.has(config.key))
         .filter(filter);
     }, [filter, result.data, missingModelsData]);
 
     return [modelConfigs, result] as const;
   };
-export const useMainModels = buildModelsHook(isNonRefinerMainModelConfig);
+
+export const useMainModels = (filter: (config: MainOrExternalModelConfig) => boolean = () => true) => {
+  const result = useGetModelConfigsQuery(undefined);
+  const { data: missingModelsData } = useGetMissingModelsQuery();
+
+  const modelConfigs = useMemo(() => {
+    if (!result.data) {
+      return EMPTY_ARRAY;
+    }
+
+    const missingModelKeys = new Set(
+      modelConfigsAdapterSelectors.selectAll(missingModelsData ?? { ids: [], entities: {} }).map((m) => m.key)
+    );
+
+    return (modelConfigsAdapterSelectors.selectAll(result.data) as AnyModelConfigWithExternal[])
+      .filter((config): config is MainOrExternalModelConfig => isMainOrExternalModelConfig(config))
+      .filter((config) => !missingModelKeys.has(config.key) || isExternalApiModelConfig(config))
+      .filter(filter);
+  }, [filter, result.data, missingModelsData]);
+
+  return [modelConfigs, result] as const;
+};
+
 export const useRefinerModels = buildModelsHook(isRefinerMainModelModelConfig);
 export const useLoRAModels = buildModelsHook(isLoRAModelConfig);
 export const useControlLayerModels = buildModelsHook(isControlLayerModelConfig);
@@ -72,10 +115,26 @@ export const useVAEModels = () => buildModelsHook(isVAEModelConfigOrSubmodel)();
 export const useFlux1VAEModels = () => buildModelsHook(isFlux1VAEModelConfig)();
 export const useFlux2VAEModels = () => buildModelsHook(isFlux2VAEModelConfig)();
 export const useAnimaVAEModels = () => buildModelsHook(isAnimaVAEModelConfig)();
+/** The Anima VAE slot itself - wider than `useAnimaVAEModels`, which feeds Krea-2's pool. */
+export const useAnimaCompatibleVAEModels = () => buildModelsHook(isAnimaCompatibleVAEModelConfig)();
 export const useAnimaQwen3EncoderModels = () => buildModelsHook(isAnimaQwen3EncoderModelConfig)();
+export const useAnimaInpaintControlNetModels = () => buildModelsHook(isAnimaInpaintControlNetModelConfig)();
 export const useZImageDiffusersModels = () => buildModelsHook(isZImageDiffusersMainModelConfig)();
+export const useFlux2DiffusersModels = () => buildModelsHook(isFlux2DiffusersMainModelConfig)();
+export const useFlux2DevDiffusersModels = () => buildModelsHook(isFlux2DevDiffusersMainModelConfig)();
+export const useMistralEncoderModels = () => buildModelsHook(isMistralEncoderModelConfig)();
 export const useQwenImageDiffusersModels = () => buildModelsHook(isQwenImageDiffusersMainModelConfig)();
+export const useQwenImageVAEModels = () => buildModelsHook(isQwenImageVAEModelConfig)();
+export const useQwenVLEncoderModels = () => buildModelsHook(isQwenVLEncoderModelConfig)();
 export const useQwen3EncoderModels = () => buildModelsHook(isQwen3EncoderModelConfig)();
+export const useZImageQwen3EncoderModels = () => buildModelsHook(isZImageQwen3EncoderModelConfig)();
+export const useQwen3VLEncoderModels = () => buildModelsHook(isQwen3VLEncoderModelConfig)();
+export const useWanDiffusersModels = () => buildModelsHook(isWanDiffusersMainModelConfig)();
+export const useWanSingleFileLowNoiseModels = () => buildModelsHook(isWanLowNoisePartnerOption)();
+export const useWanVAEModels = () => buildModelsHook(isWanVAEModelConfig)();
+export const useWanT5EncoderModels = () => buildModelsHook(isWanT5EncoderModelConfig)();
+export const usePiDDecoderModels = buildModelsHook(isPiDDecoderModelConfig);
+export const useGemma2EncoderModels = () => buildModelsHook(isGemma2EncoderModelConfig)();
 export const useGlobalReferenceImageModels = buildModelsHook(
   (config) => isIPAdapterModelConfig(config) || isFluxReduxModelConfig(config) || isFluxKontextModelConfig(config)
 );
@@ -97,10 +156,15 @@ const buildModelsSelector =
       modelConfigsAdapterSelectors.selectAll(missingResult.data ?? { ids: [], entities: {} }).map((m) => m.key)
     );
 
-    return modelConfigsAdapterSelectors
-      .selectAll(result.data)
-      .filter(typeGuard)
-      .filter((config) => !missingModelKeys.has(config.key));
+    return (
+      modelConfigsAdapterSelectors
+        .selectAll(result.data)
+        // Called with exactly one argument on purpose: several guards take an optional `excludeSubmodels`
+        // second parameter, and a point-free `.filter(typeGuard)` would hand them the array *index* - so
+        // the first entry would be evaluated with submodels included and every other one without.
+        .filter((config): config is T => typeGuard(config))
+        .filter((config) => !missingModelKeys.has(config.key))
+    );
   };
 export const selectIPAdapterModels = buildModelsSelector(isIPAdapterModelConfig);
 export const selectGlobalRefImageModels = buildModelsSelector(
@@ -110,9 +174,24 @@ export const selectRegionalRefImageModels = buildModelsSelector(
   (config) => isIPAdapterModelConfig(config) || isFluxReduxModelConfig(config)
 );
 export const selectAnimaQwen3EncoderModels = buildModelsSelector(isAnimaQwen3EncoderModelConfig);
-export const selectQwen3EncoderModels = buildModelsSelector(isQwen3EncoderModelConfig);
+export const selectZImageQwen3EncoderModels = buildModelsSelector(isZImageQwen3EncoderModelConfig);
 export const selectQwenImageDiffusersModels = buildModelsSelector(isQwenImageDiffusersMainModelConfig);
+export const selectQwenImageVAEModels = buildModelsSelector(isQwenImageVAEModelConfig);
+export const selectQwenVLEncoderModels = buildModelsSelector(isQwenVLEncoderModelConfig);
 export const selectZImageDiffusersModels = buildModelsSelector(isZImageDiffusersMainModelConfig);
-export const selectFluxVAEModels = buildModelsSelector(isFluxVAEModelConfig);
+export const selectFlux2DiffusersModels = buildModelsSelector(isFlux2DiffusersMainModelConfig);
+export const selectFlux2DevDiffusersModels = buildModelsSelector(isFlux2DevDiffusersMainModelConfig);
+/**
+ * FLUX.1 VAEs only. The `params.fluxVAE` and `params.zImageVaeModel` slots both hold one of these -
+ * their pickers are built from `isFlux1VAEModelConfig`, and neither slot can use a FLUX.2 VAE - so the
+ * listeners that auto-fill them must draw from this pool, not from the wider flux+flux2 one.
+ */
+export const selectFlux1VAEModels = buildModelsSelector(isFlux1VAEModelConfig);
 export const selectAnimaVAEModels = buildModelsSelector(isAnimaVAEModelConfig);
-export const selectT5EncoderModels = buildModelsSelector(isT5EncoderModelConfigOrSubmodel);
+export const selectAnimaCompatibleVAEModels = buildModelsSelector(isAnimaCompatibleVAEModelConfig);
+export const selectQwen3VLEncoderModels = buildModelsSelector(isQwen3VLEncoderModelConfig);
+export const selectWanDiffusersModels = buildModelsSelector(isWanDiffusersMainModelConfig);
+export const selectWanVAEModels = buildModelsSelector(isWanVAEModelConfig);
+export const selectWanT5EncoderModels = buildModelsSelector(isWanT5EncoderModelConfig);
+export const useTextLLMModels = () => buildModelsHook(isTextLLMModelConfig)();
+export const useLlavaModels = () => buildModelsHook(isLLaVAModelConfig)();

@@ -26,32 +26,43 @@ type AddedRegionResult = {
   addedFLUXReduxes: number;
 };
 
+type RegionalPositiveConditioning = Invocation<
+  | 'compel'
+  | 'sdxl_compel_prompt'
+  | 'flux_text_encoder'
+  | 'flux2_klein_text_encoder'
+  | 'flux2_dev_text_encoder'
+  | 'z_image_text_encoder'
+  | 'anima_text_encoder'
+  | 'krea2_text_encoder'
+>;
+
+type PositiveConditioningSource = Invocation<
+  RegionalPositiveConditioning['type'] | 'krea2_conditioning_rebalance' | 'krea2_seed_variance'
+>;
+
 type AddRegionsArg = {
   manager: CanvasManager;
   regions: CanvasRegionalGuidanceState[];
   g: Graph;
   bbox: Rect;
   model: MainModelConfig;
-  posCond: Invocation<
-    | 'compel'
-    | 'sdxl_compel_prompt'
-    | 'flux_text_encoder'
-    | 'flux2_klein_text_encoder'
-    | 'z_image_text_encoder'
-    | 'anima_text_encoder'
-  >;
+  posCond: RegionalPositiveConditioning;
   negCond: Invocation<
     | 'compel'
     | 'sdxl_compel_prompt'
     | 'flux_text_encoder'
     | 'flux2_klein_text_encoder'
+    | 'flux2_dev_text_encoder'
     | 'z_image_text_encoder'
     | 'anima_text_encoder'
+    | 'krea2_text_encoder'
   > | null;
   posCondCollect: Invocation<'collect'>;
   negCondCollect: Invocation<'collect'> | null;
   ipAdapterCollect: Invocation<'collect'>;
   fluxReduxCollect: Invocation<'collect'> | null;
+  transformRegionalPositiveConditioning?: (conditioning: RegionalPositiveConditioning) => PositiveConditioningSource;
 };
 
 /**
@@ -82,11 +93,18 @@ export const addRegions = async ({
   negCondCollect,
   ipAdapterCollect,
   fluxReduxCollect,
+  transformRegionalPositiveConditioning,
 }: AddRegionsArg): Promise<AddedRegionResult[]> => {
   const isSDXL = model.base === 'sdxl';
   const isFLUX = model.base === 'flux';
+  const isFlux2 = model.base === 'flux2';
+  // FLUX.2 Klein uses the Qwen3 encoder; FLUX.2 [dev] uses the Mistral encoder. The region
+  // conditioning node type must match the main model's encoder.
+  const isFlux2Dev = isFlux2 && 'variant' in model && model.variant === 'dev';
+  const isFlux2Klein = isFlux2 && !isFlux2Dev;
   const isZImage = model.base === 'z-image';
   const isAnima = model.base === 'anima';
+  const isKrea2 = model.base === 'krea-2';
 
   const validRegions = regions
     .filter((entity) => entity.isEnabled)
@@ -127,9 +145,7 @@ export const addRegions = async ({
     if (region.positivePrompt) {
       // The main positive conditioning node
       result.addedPositivePrompt = true;
-      let regionalPosCond: Invocation<
-        'compel' | 'sdxl_compel_prompt' | 'flux_text_encoder' | 'z_image_text_encoder' | 'anima_text_encoder'
-      >;
+      let regionalPosCond: RegionalPositiveConditioning;
       if (isSDXL) {
         regionalPosCond = g.addNode({
           type: 'sdxl_compel_prompt',
@@ -140,6 +156,18 @@ export const addRegions = async ({
       } else if (isFLUX) {
         regionalPosCond = g.addNode({
           type: 'flux_text_encoder',
+          id: getPrefixedId('prompt_region_positive_cond'),
+          prompt: region.positivePrompt,
+        });
+      } else if (isFlux2Dev) {
+        regionalPosCond = g.addNode({
+          type: 'flux2_dev_text_encoder',
+          id: getPrefixedId('prompt_region_positive_cond'),
+          prompt: region.positivePrompt,
+        });
+      } else if (isFlux2Klein) {
+        regionalPosCond = g.addNode({
+          type: 'flux2_klein_text_encoder',
           id: getPrefixedId('prompt_region_positive_cond'),
           prompt: region.positivePrompt,
         });
@@ -155,6 +183,12 @@ export const addRegions = async ({
           id: getPrefixedId('prompt_region_positive_cond'),
           prompt: region.positivePrompt,
         });
+      } else if (isKrea2) {
+        regionalPosCond = g.addNode({
+          type: 'krea2_text_encoder',
+          id: getPrefixedId('prompt_region_positive_cond'),
+          prompt: region.positivePrompt,
+        });
       } else {
         regionalPosCond = g.addNode({
           type: 'compel',
@@ -164,8 +198,6 @@ export const addRegions = async ({
       }
       // Connect the mask to the conditioning
       g.addEdge(maskToTensor, 'mask', regionalPosCond, 'mask');
-      // Connect the conditioning to the collector
-      g.addEdge(regionalPosCond, 'conditioning', posCondCollect, 'item');
       // Copy the connections to the "global" positive conditioning node to the regional cond
       if (posCond.type === 'compel') {
         for (const edge of g.getEdgesTo(posCond, ['clip', 'mask'])) {
@@ -185,6 +217,18 @@ export const addRegions = async ({
           clone.destination.node_id = regionalPosCond.id;
           g.addEdgeFromObj(clone);
         }
+      } else if (posCond.type === 'flux2_klein_text_encoder') {
+        for (const edge of g.getEdgesTo(posCond, ['qwen3_encoder', 'max_seq_len', 'mask'])) {
+          const clone = deepClone(edge);
+          clone.destination.node_id = regionalPosCond.id;
+          g.addEdgeFromObj(clone);
+        }
+      } else if (posCond.type === 'flux2_dev_text_encoder') {
+        for (const edge of g.getEdgesTo(posCond, ['mistral_encoder', 'max_seq_len', 'mask'])) {
+          const clone = deepClone(edge);
+          clone.destination.node_id = regionalPosCond.id;
+          g.addEdgeFromObj(clone);
+        }
       } else if (posCond.type === 'z_image_text_encoder') {
         for (const edge of g.getEdgesTo(posCond, ['qwen3_encoder', 'mask'])) {
           const clone = deepClone(edge);
@@ -192,7 +236,13 @@ export const addRegions = async ({
           g.addEdgeFromObj(clone);
         }
       } else if (posCond.type === 'anima_text_encoder') {
-        for (const edge of g.getEdgesTo(posCond, ['qwen3_encoder', 't5_encoder', 'mask'])) {
+        for (const edge of g.getEdgesTo(posCond, ['qwen3_encoder', 'mask'])) {
+          const clone = deepClone(edge);
+          clone.destination.node_id = regionalPosCond.id;
+          g.addEdgeFromObj(clone);
+        }
+      } else if (posCond.type === 'krea2_text_encoder') {
+        for (const edge of g.getEdgesTo(posCond, ['qwen3_vl_encoder', 'mask'])) {
           const clone = deepClone(edge);
           clone.destination.node_id = regionalPosCond.id;
           g.addEdgeFromObj(clone);
@@ -200,9 +250,16 @@ export const addRegions = async ({
       } else {
         assert(false, 'Unsupported positive conditioning node type.');
       }
+      // Apply any model-specific conditioning transforms before collection.
+      const conditioningSource = transformRegionalPositiveConditioning?.(regionalPosCond) ?? regionalPosCond;
+      g.addEdge(conditioningSource, 'conditioning', posCondCollect, 'item');
     }
 
     if (region.negativePrompt) {
+      // FLUX.2 regions with negative prompts are filtered out by getRegionalGuidanceWarnings; fail
+      // loudly if that ever changes, because there is no flux2 branch below.
+      assert(!isFlux2, 'Regional negative prompts are not supported for FLUX.2 Klein');
+      assert(!isKrea2, 'Canvas regional negative prompts are not supported for Krea-2');
       assert(negCond, 'Negative conditioning node is required if there is a negative prompt');
       assert(negCondCollect, 'Negative conditioning collector is required if there is a negative prompt');
 
@@ -274,7 +331,7 @@ export const addRegions = async ({
           g.addEdgeFromObj(clone);
         }
       } else if (negCond.type === 'anima_text_encoder') {
-        for (const edge of g.getEdgesTo(negCond, ['qwen3_encoder', 't5_encoder', 'mask'])) {
+        for (const edge of g.getEdgesTo(negCond, ['qwen3_encoder', 'mask'])) {
           const clone = deepClone(edge);
           clone.destination.node_id = regionalNegCond.id;
           g.addEdgeFromObj(clone);
@@ -286,6 +343,9 @@ export const addRegions = async ({
 
     // If we are using the "invert" auto-negative setting, we need to add an additional negative conditioning node
     if (region.autoNegative && region.positivePrompt) {
+      // See note on the negative prompt branch above — unreachable for FLUX.2 via validators.
+      assert(!isFlux2, 'Auto-negative is not supported for FLUX.2 Klein');
+      assert(!isKrea2, 'Canvas auto-negative is not supported for Krea-2');
       assert(negCondCollect, 'Negative conditioning collector is required if there is an auto-negative setting');
 
       result.addedAutoNegativePositivePrompt = true;
@@ -362,7 +422,7 @@ export const addRegions = async ({
           g.addEdgeFromObj(clone);
         }
       } else if (posCond.type === 'anima_text_encoder') {
-        for (const edge of g.getEdgesTo(posCond, ['qwen3_encoder', 't5_encoder', 'mask'])) {
+        for (const edge of g.getEdgesTo(posCond, ['qwen3_encoder', 'mask'])) {
           const clone = deepClone(edge);
           clone.destination.node_id = regionalPosCondInverted.id;
           g.addEdgeFromObj(clone);
@@ -375,6 +435,7 @@ export const addRegions = async ({
     for (const { id, config } of region.referenceImages) {
       if (isRegionalGuidanceIPAdapterConfig(config)) {
         assert(!isFLUX, 'Regional IP adapters are not supported for FLUX.');
+        assert(!isKrea2, 'Regional IP adapters are not supported for Krea-2.');
 
         result.addedIPAdapters++;
         const { weight, model, clipVisionModel, method, beginEndStepPct, image } = config;

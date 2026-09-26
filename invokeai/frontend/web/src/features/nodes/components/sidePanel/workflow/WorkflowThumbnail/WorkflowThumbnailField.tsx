@@ -1,6 +1,6 @@
 import { Box, Button, Flex, Icon, IconButton, Image, Tooltip } from '@invoke-ai/ui-library';
-import { dropzoneAccept } from 'common/hooks/useImageUploadButton';
 import { convertImageUrlToBlob } from 'common/util/convertImageUrlToBlob';
+import { imageDropzoneAccept } from 'common/util/uploadMediaAccept';
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
@@ -15,25 +15,38 @@ export const WorkflowThumbnailField = ({
 }) => {
   const [thumbnail, setThumbnail] = useState<File | null>(null);
 
-  const syncThumbnail = useCallback(async (imageUrl?: string | null) => {
-    if (!imageUrl) {
-      setThumbnail(null);
-      return;
-    }
-    try {
-      const blob = await convertImageUrlToBlob(imageUrl);
-      if (blob) {
-        const file = new File([blob], 'workflow.png', { type: 'image/png' });
-        setThumbnail(file);
-      }
-    } catch {
-      setThumbnail(null);
-    }
-  }, []);
-
   useEffect(() => {
-    syncThumbnail(imageUrl);
-  }, [imageUrl, syncThumbnail]);
+    let isActive = true;
+
+    if (!imageUrl) {
+      void Promise.resolve().then(() => {
+        if (isActive) {
+          setThumbnail(null);
+        }
+      });
+      return () => {
+        isActive = false;
+      };
+    }
+
+    void convertImageUrlToBlob(imageUrl).then(
+      (blob) => {
+        if (!isActive) {
+          return;
+        }
+        setThumbnail(blob ? new File([blob], 'workflow.png', { type: 'image/png' }) : null);
+      },
+      () => {
+        if (isActive) {
+          setThumbnail(null);
+        }
+      }
+    );
+
+    return () => {
+      isActive = false;
+    };
+  }, [imageUrl]);
 
   const { t } = useTranslation();
 
@@ -54,7 +67,7 @@ export const WorkflowThumbnailField = ({
   }, [onChange]);
 
   const { getInputProps, getRootProps } = useDropzone({
-    accept: dropzoneAccept,
+    accept: imageDropzoneAccept,
     onDropAccepted,
     noDrag: true,
     multiple: false,

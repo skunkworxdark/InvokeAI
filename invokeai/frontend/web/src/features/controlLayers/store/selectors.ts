@@ -13,7 +13,8 @@ import type {
   CanvasRegionalGuidanceState,
   CanvasState,
 } from 'features/controlLayers/store/types';
-import { getGridSize, getOptimalDimension } from 'features/parameters/util/optimalDimension';
+import type { BaseModelType } from 'features/nodes/types/common';
+import { getGridSize, getOptimalDimension, getPidScale } from 'features/parameters/util/optimalDimension';
 import type { Equals } from 'tsafe';
 import { assert } from 'tsafe';
 
@@ -74,16 +75,16 @@ export const selectHasEntities = createSelector(selectEntityCountAll, (count) =>
  * Selects the optimal dimension for the canvas based on the currently-selected model
  */
 export const selectOptimalDimension = createSelector(selectParamsSlice, (params): number => {
-  const modelBase = params.model?.base;
-  return getOptimalDimension(modelBase ?? null);
+  const modelBase = params.model?.base as BaseModelType | undefined;
+  return getOptimalDimension(modelBase ?? null, getPidScale(params.pidMode));
 });
 
 /**
  * Selects the grid size for the canvas based on the currently-selected model
  */
 export const selectGridSize = createSelector(selectParamsSlice, (params): number => {
-  const modelBase = params.model?.base;
-  return getGridSize(modelBase ?? null);
+  const modelBase = params.model?.base as BaseModelType | undefined;
+  return getGridSize(modelBase ?? null, getPidScale(params.pidMode));
 });
 
 /**

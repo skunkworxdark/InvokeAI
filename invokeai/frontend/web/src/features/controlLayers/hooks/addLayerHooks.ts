@@ -29,18 +29,22 @@ import type {
   Flux2ReferenceImageConfig,
   FluxKontextReferenceImageConfig,
   IPAdapterConfig,
+  Krea2ReferenceImageConfig,
   QwenImageReferenceImageConfig,
   RegionalGuidanceIPAdapterConfig,
   T2IAdapterConfig,
+  WanReferenceImageConfig,
 } from 'features/controlLayers/store/types';
 import {
   initialControlNet,
   initialFlux2ReferenceImage,
   initialFluxKontextReferenceImage,
   initialIPAdapter,
+  initialKrea2ReferenceImage,
   initialQwenImageReferenceImage,
   initialRegionalGuidanceIPAdapter,
   initialT2IAdapter,
+  initialWanReferenceImage,
 } from 'features/controlLayers/store/util';
 import { zModelIdentifierField } from 'features/nodes/types/common';
 import { useCallback } from 'react';
@@ -80,7 +84,13 @@ export const selectDefaultControlAdapter = createSelector(
 
 export const getDefaultRefImageConfig = (
   getState: AppGetState
-): IPAdapterConfig | FluxKontextReferenceImageConfig | Flux2ReferenceImageConfig | QwenImageReferenceImageConfig => {
+):
+  | IPAdapterConfig
+  | FluxKontextReferenceImageConfig
+  | Flux2ReferenceImageConfig
+  | QwenImageReferenceImageConfig
+  | WanReferenceImageConfig
+  | Krea2ReferenceImageConfig => {
   const state = getState();
 
   const mainModelConfig = selectMainModelConfig(state);
@@ -96,6 +106,16 @@ export const getDefaultRefImageConfig = (
   // Qwen Image Edit has built-in reference image support - no model needed
   if (base === 'qwen-image') {
     return deepClone(initialQwenImageReferenceImage);
+  }
+
+  // Wan 2.2 I2V uses the main model's own VAE - no adapter model needed
+  if (base === 'wan') {
+    return deepClone(initialWanReferenceImage);
+  }
+
+  // Krea-2 transfers style training-free via shared-KV reference attention - no adapter model needed
+  if (base === 'krea-2') {
+    return deepClone(initialKrea2ReferenceImage);
   }
 
   if (base === 'flux' && mainModelConfig?.name?.toLowerCase().includes('kontext')) {

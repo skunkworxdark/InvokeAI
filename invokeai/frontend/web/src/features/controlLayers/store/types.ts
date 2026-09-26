@@ -2,6 +2,7 @@ import { deepClone } from 'common/util/deepClone';
 import type { CanvasEntityAdapter } from 'features/controlLayers/konva/CanvasEntity/types';
 import { zMainModelBase, zModelIdentifierField } from 'features/nodes/types/common';
 import {
+  zParameterAnimaScheduler,
   zParameterCanvasCoherenceMode,
   zParameterCFGRescaleMultiplier,
   zParameterCFGScale,
@@ -9,11 +10,13 @@ import {
   zParameterCLIPGEmbedModel,
   zParameterCLIPLEmbedModel,
   zParameterControlLoRAModel,
+  zParameterErnieImageScheduler,
   zParameterFluxDypeExponent,
   zParameterFluxDypePreset,
   zParameterFluxDypeScale,
   zParameterFluxScheduler,
   zParameterGuidance,
+  zParameterIdeogram4SamplerPreset,
   zParameterImageDimension,
   zParameterMaskBlurMethod,
   zParameterModel,
@@ -212,6 +215,7 @@ const zCanvasBrushLineState = z.object({
   points: zPoints,
   color: zRgbaColor,
   clip: zRect.nullable(),
+  globalCompositeOperation: z.string().optional(),
 });
 export type CanvasBrushLineState = z.infer<typeof zCanvasBrushLineState>;
 
@@ -224,7 +228,10 @@ const zCanvasBrushLineWithPressureState = z.object({
    */
   points: zPointsWithPressure,
   color: zRgbaColor,
+  pressureAffectsWidth: z.boolean().default(true),
+  pressureAffectsOpacity: z.boolean().default(false),
   clip: zRect.nullable(),
+  globalCompositeOperation: z.string().optional(),
 });
 export type CanvasBrushLineWithPressureState = z.infer<typeof zCanvasBrushLineWithPressureState>;
 
@@ -248,15 +255,20 @@ const zCanvasEraserLineWithPressureState = z.object({
    * Points with pressure are in the format [x1, y1, pressure1, x2, y2, pressure2, ...]
    */
   points: zPointsWithPressure,
+  pressureAffectsWidth: z.boolean().default(true),
   clip: zRect.nullable(),
 });
 export type CanvasEraserLineWithPressureState = z.infer<typeof zCanvasEraserLineWithPressureState>;
+
+const zCanvasShapeCompositeOperation = z.enum(['source-over', 'source-atop', 'destination-out']);
 
 const zCanvasRectState = z.object({
   id: zId,
   type: z.literal('rect'),
   rect: zRect,
   color: zRgbaColor,
+  compositeOperation: zCanvasShapeCompositeOperation.default('source-over'),
+  clip: zRect.nullable().default(null),
 });
 export type CanvasRectState = z.infer<typeof zCanvasRectState>;
 
@@ -274,6 +286,29 @@ const zCanvasLassoState = z.object({
 });
 export type CanvasLassoState = z.infer<typeof zCanvasLassoState>;
 
+const zCanvasOvalState = z.object({
+  id: zId,
+  type: z.literal('oval'),
+  rect: zRect,
+  color: zRgbaColor,
+  compositeOperation: zCanvasShapeCompositeOperation.default('source-over'),
+  clip: zRect.nullable().default(null),
+});
+export type CanvasOvalState = z.infer<typeof zCanvasOvalState>;
+
+const zCanvasPolygonState = z.object({
+  id: zId,
+  type: z.literal('polygon'),
+  points: zPoints,
+  color: zRgbaColor,
+  compositeOperation: zCanvasShapeCompositeOperation.default('source-over'),
+  previewPoint: zCoordinate.optional(),
+});
+export type CanvasPolygonState = z.infer<typeof zCanvasPolygonState>;
+
+const zCanvasShapeState = z.union([zCanvasRectState, zCanvasOvalState, zCanvasPolygonState]);
+type CanvasShapeState = z.infer<typeof zCanvasShapeState>;
+
 // Gradient state includes clip metadata so the tool can optionally clip to drag gesture.
 const zCanvasLinearGradientState = z.object({
   id: zId,
@@ -289,6 +324,7 @@ const zCanvasLinearGradientState = z.object({
   bboxRect: zRect,
   fgColor: zRgbaColor,
   bgColor: zRgbaColor,
+  globalCompositeOperation: z.string().optional(),
 });
 const zCanvasRadialGradientState = z.object({
   id: zId,
@@ -303,6 +339,7 @@ const zCanvasRadialGradientState = z.object({
   bboxRect: zRect,
   fgColor: zRgbaColor,
   bgColor: zRgbaColor,
+  globalCompositeOperation: z.string().optional(),
 });
 const zCanvasGradientState = z.discriminatedUnion('gradientType', [
   zCanvasLinearGradientState,
@@ -322,7 +359,7 @@ const zCanvasObjectState = z.union([
   zCanvasImageState,
   zCanvasBrushLineState,
   zCanvasEraserLineState,
-  zCanvasRectState,
+  zCanvasShapeState,
   zCanvasLassoState,
   zCanvasBrushLineWithPressureState,
   zCanvasEraserLineWithPressureState,
@@ -392,6 +429,25 @@ const zQwenImageReferenceImageConfig = z.object({
 });
 export type QwenImageReferenceImageConfig = z.infer<typeof zQwenImageReferenceImageConfig>;
 
+// Wan 2.2 I2V uses the model's own VAE to encode a single reference image -
+// no separate adapter model needed. Only consumed by the I2V variant of Wan
+// 2.2 (A14B). T2V / TI2V variants ignore the ref image at graph build time.
+const zWanReferenceImageConfig = z.object({
+  type: z.literal('wan_reference_image'),
+  image: zCroppableImageWithDims.nullable(),
+});
+export type WanReferenceImageConfig = z.infer<typeof zWanReferenceImageConfig>;
+
+// Krea-2 transfers style training-free, by splicing the reference's attention keys/values into the
+// target's - no adapter model needed. styleStrength is the only knob surfaced here; the rest of the
+// tuning parameters live on the krea2_style_reference node and keep their defaults.
+const zKrea2ReferenceImageConfig = z.object({
+  type: z.literal('krea2_reference_image'),
+  image: zCroppableImageWithDims.nullable(),
+  styleStrength: z.number().gte(0).lte(2).default(1),
+});
+export type Krea2ReferenceImageConfig = z.infer<typeof zKrea2ReferenceImageConfig>;
+
 const zCanvasEntityBase = z.object({
   id: zId,
   name: zName,
@@ -408,6 +464,8 @@ export const zRefImageState = z.object({
     zFluxKontextReferenceImageConfig,
     zFlux2ReferenceImageConfig,
     zQwenImageReferenceImageConfig,
+    zWanReferenceImageConfig,
+    zKrea2ReferenceImageConfig,
   ]),
 });
 export type RefImageState = z.infer<typeof zRefImageState>;
@@ -428,6 +486,12 @@ export const isFlux2ReferenceImageConfig = (config: RefImageState['config']): co
 export const isQwenImageReferenceImageConfig = (
   config: RefImageState['config']
 ): config is QwenImageReferenceImageConfig => config.type === 'qwen_image_reference_image';
+
+export const isWanReferenceImageConfig = (config: RefImageState['config']): config is WanReferenceImageConfig =>
+  config.type === 'wan_reference_image';
+
+export const isKrea2ReferenceImageConfig = (config: RefImageState['config']): config is Krea2ReferenceImageConfig =>
+  config.type === 'krea2_reference_image';
 
 const zFillStyle = z.enum(['solid', 'grid', 'crosshatch', 'diagonal', 'horizontal', 'vertical']);
 export type FillStyle = z.infer<typeof zFillStyle>;
@@ -503,6 +567,14 @@ const zZImageControlConfig = z.object({
   beginEndStepPct: zBeginEndStepPct,
 });
 export type ZImageControlConfig = z.infer<typeof zZImageControlConfig>;
+
+const zAnimaLLLiteConfig = z.object({
+  type: z.literal('anima_lllite'),
+  model: zModelIdentifierField.nullable(),
+  weight: z.number().gte(0).lte(2),
+  beginEndStepPct: zBeginEndStepPct,
+});
+export type AnimaLLLiteConfig = z.infer<typeof zAnimaLLLiteConfig>;
 
 /**
  * All simple params normalized to `[-1, 1]` except sharpness `[0, 1]`.
@@ -613,6 +685,8 @@ const zCanvasRasterLayerState = zCanvasEntityBase.extend({
   adjustments: zRasterLayerAdjustments.optional(),
   // Optional per-layer composite operation. When undefined, defaults to 'source-over'.
   globalCompositeOperation: z.enum(COMPOSITE_OPERATIONS).optional(),
+  // When true, brush strokes only paint where existing pixels are non-transparent (preserve alpha).
+  isTransparencyLocked: z.boolean().optional(),
 });
 export type CanvasRasterLayerState = z.infer<typeof zCanvasRasterLayerState>;
 
@@ -624,6 +698,7 @@ const zCanvasControlLayerState = zCanvasRasterLayerState.extend({
     zT2IAdapterConfig,
     zControlLoRAConfig,
     zZImageControlConfig,
+    zAnimaLLLiteConfig,
   ]),
 });
 export type CanvasControlLayerState = z.infer<typeof zCanvasControlLayerState>;
@@ -659,23 +734,46 @@ export const zLoRA = z.object({
   id: z.string(),
   isEnabled: z.boolean(),
   model: zModelIdentifierField,
-  weight: z.number().gte(-10).lte(10),
+  weight: z.number(),
 });
 export type LoRA = z.infer<typeof zLoRA>;
 
-export const zAspectRatioID = z.enum(['Free', '21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '9:21']);
+export const zAspectRatioID = z.enum([
+  'Free',
+  '8:1',
+  '4:1',
+  '21:9',
+  '16:9',
+  '3:2',
+  '5:4',
+  '4:3',
+  '1:1',
+  '3:4',
+  '4:5',
+  '2:3',
+  '9:16',
+  '1:4',
+  '9:21',
+  '1:8',
+]);
 export type AspectRatioID = z.infer<typeof zAspectRatioID>;
 export const isAspectRatioID = (v: unknown): v is AspectRatioID => zAspectRatioID.safeParse(v).success;
 export const ASPECT_RATIO_MAP: Record<Exclude<AspectRatioID, 'Free'>, { ratio: number; inverseID: AspectRatioID }> = {
+  '8:1': { ratio: 8 / 1, inverseID: '1:8' },
+  '4:1': { ratio: 4 / 1, inverseID: '1:4' },
   '21:9': { ratio: 21 / 9, inverseID: '9:21' },
   '16:9': { ratio: 16 / 9, inverseID: '9:16' },
   '3:2': { ratio: 3 / 2, inverseID: '2:3' },
+  '5:4': { ratio: 5 / 4, inverseID: '4:5' },
   '4:3': { ratio: 4 / 3, inverseID: '4:3' },
   '1:1': { ratio: 1, inverseID: '1:1' },
   '3:4': { ratio: 3 / 4, inverseID: '4:3' },
+  '4:5': { ratio: 4 / 5, inverseID: '5:4' },
   '2:3': { ratio: 2 / 3, inverseID: '3:2' },
   '9:16': { ratio: 9 / 16, inverseID: '16:9' },
+  '1:4': { ratio: 1 / 4, inverseID: '4:1' },
   '9:21': { ratio: 9 / 21, inverseID: '21:9' },
+  '1:8': { ratio: 1 / 8, inverseID: '8:1' },
 };
 
 const zAspectRatioConfig = z.object({
@@ -714,15 +812,26 @@ const zDimensionsState = z.object({
 });
 
 export const MAX_POSITIVE_PROMPT_HISTORY = 100;
+const zPromptHistoryItem = z.union([
+  zParameterPositivePrompt.transform((positivePrompt) => ({ positivePrompt, negativePrompt: null })),
+  z.object({
+    positivePrompt: zParameterPositivePrompt,
+    negativePrompt: zParameterNegativePrompt,
+  }),
+]);
+export type PromptHistoryItem = z.infer<typeof zPromptHistoryItem>;
 const zPositivePromptHistory = z
-  .array(zParameterPositivePrompt)
+  .array(zPromptHistoryItem)
   .transform((arr) => arr.slice(0, MAX_POSITIVE_PROMPT_HISTORY));
 
 export const zInfillMethod = z.enum(['patchmatch', 'lama', 'cv2', 'color', 'tile']);
 export type InfillMethod = z.infer<typeof zInfillMethod>;
 
+const zPidMode = z.enum(['off', 'fit', 'native']);
+export type PidMode = z.infer<typeof zPidMode>;
+
 export const zParamsState = z.object({
-  _version: z.literal(2),
+  _version: z.literal(5),
   maskBlur: z.number(),
   maskBlurMethod: zParameterMaskBlurMethod,
   canvasCoherenceMode: zParameterCanvasCoherenceMode,
@@ -737,6 +846,15 @@ export const zParamsState = z.object({
   guidance: zParameterGuidance,
   img2imgStrength: zParameterStrength,
   optimizedDenoisingEnabled: z.boolean(),
+  // Added after the `_version` 3 -> 4 bump, so while 4 was current no migration step could seed them
+  // — a blob already at v4 matched no branch in the chain. Without defaults they are required, and
+  // every persisted blob in existence fails the parse in `migrate()`, wiping the user's whole params
+  // slice on upgrade. The defaults are still what covers the current tier, which has no step either.
+  hiDiffusionEnabled: z.boolean().default(false),
+  hiDiffusionRauNetEnabled: z.boolean().default(true),
+  hiDiffusionWindowAttnEnabled: z.boolean().default(true),
+  hiDiffusionT1Ratio: z.number().default(0.4),
+  hiDiffusionT2Ratio: z.number().default(0.0),
   iterations: z.number(),
   scheduler: zParameterScheduler,
   fluxScheduler: zParameterFluxScheduler,
@@ -745,6 +863,19 @@ export const zParamsState = z.object({
   fluxDypeExponent: zParameterFluxDypeExponent,
   zImageScheduler: zParameterZImageScheduler,
   zImageShift: z.number().min(0).max(3).nullable(),
+  // Defaults make these resilient to rehydration of persisted state saved before the fields existed.
+  ernieImageScheduler: zParameterErnieImageScheduler.default('euler'),
+  ernieImageUsePromptEnhancer: z.boolean().default(true),
+  ideogram4SamplerPreset: zParameterIdeogram4SamplerPreset.default('V4_QUALITY_48'),
+  // Optional advanced overrides of the Ideogram 4 sampler preset (null = use the preset's value).
+  // Backend requires steps >= 2 (a polish and a main step). `.catch(null)` normalizes a stale/invalid
+  // persisted or recalled value (e.g. 1 from an older build) to null (= use preset) instead of letting an
+  // out-of-range value reach the graph or breaking the whole persisted params slice on rehydrate.
+  ideogram4Steps: z.number().int().min(2).max(100).nullable().catch(null).default(null),
+  ideogram4GuidanceScale: z.number().min(1).max(20).nullable().default(null),
+  ideogram4Mu: z.number().min(-4).max(4).nullable().default(null),
+  // Hex colors (#RRGGBB) injected into the JSON caption's style_description.color_palette.
+  ideogram4ColorPalette: z.array(z.string()).default([]),
   upscaleScheduler: zParameterScheduler,
   upscaleCfgScale: zParameterCFGScale,
   seed: zParameterSeed,
@@ -778,27 +909,77 @@ export const zParamsState = z.object({
   zImageVaeModel: zParameterVAEModel.nullable(), // Optional: Separate FLUX VAE
   zImageQwen3EncoderModel: zModelIdentifierField.nullable(), // Optional: Separate Qwen3 Encoder
   zImageQwen3SourceModel: zParameterModel.nullable(), // Diffusers Z-Image model (fallback for VAE/Encoder)
-  // Anima model components - uses Qwen3 0.6B + T5-XXL tokenizer + QwenImage VAE
+  // Anima model components - uses Qwen3 0.6B + bundled T5-XXL tokenizer + QwenImage VAE
   animaVaeModel: zParameterVAEModel.nullable(), // Optional: Separate QwenImage/FLUX VAE for Anima
   animaQwen3EncoderModel: zModelIdentifierField.nullable(), // Optional: Separate Qwen3 0.6B Encoder for Anima
-  animaT5EncoderModel: zModelIdentifierField.nullable(), // T5-XXL tokenizer for Anima LLM Adapter
-  animaScheduler: z.enum(['euler', 'heun', 'lcm']).default('euler'),
-  // Flux2 Klein model components - uses Qwen3 instead of CLIP+T5
-  kleinVaeModel: zParameterVAEModel.nullable(), // Optional: Separate FLUX.2 VAE for Klein
+  animaScheduler: zParameterAnimaScheduler,
+  animaLLLiteModel: zModelIdentifierField.nullable().default(null), // Optional: ControlNet-LLLite inpaint adapter for Anima
+  animaLLLiteWeight: z.number().min(-10).max(10).default(1),
+  // FLUX.2 VAE shared by Klein and [dev] — both use the same 32-channel AutoencoderKLFlux2 pool,
+  // so a single slot avoids losing the selection when switching a GGUF between the two.
+  flux2VaeModel: zParameterVAEModel.nullable(), // Optional: Separate FLUX.2 VAE (Klein + [dev])
+  // Flux2 Klein text encoder - uses Qwen3 instead of CLIP+T5
   kleinQwen3EncoderModel: zModelIdentifierField.nullable(), // Optional: Separate Qwen3 Encoder for Klein
+  // Flux2 [dev] text encoder - uses Mistral Small 3.1 (24B)
+  flux2DevMistralEncoderModel: zModelIdentifierField.nullable(), // Optional: Standalone Mistral encoder for [dev]
+  // PiD (Pixel Diffusion Decoder) - optional 4x super-resolution decode replacing the VAE decode.
+  // - 'off':    regular VAE decode
+  // - 'fit':    PiD decodes 4x internally, then downscales back to the bbox (compositing-safe; works in canvas/inpaint)
+  // - 'native': PiD's full 4x output IS the result; the user-facing dimensions are the target, generation runs at target / 4
+  // These four landed *after* the `_version` 3 -> 4 bump, so for as long as 4 was the current
+  // version no migration step could reach them: a blob already at v4 (dev builds from that window)
+  // matched no branch in the chain. They carry zod defaults for the same reason the ERNIE-Image
+  // fields above do — without one they would be required, and their absence would fail the parse in
+  // `migrate()` and wipe the whole slice. That is the rule for any field added after the last bump,
+  // which is why it still applies now that the v4 -> v5 step also seeds these.
+  pidMode: zPidMode.default('off'),
+  pidDecoderModel: zModelIdentifierField.nullable().default(null), // PiD decoder checkpoint (matched to the main model's base)
+  gemma2EncoderModel: zModelIdentifierField.nullable().default(null), // Gemma-2 caption encoder required by PiD
+  pidSteps: z.number().int().min(1).max(4).default(4), // PiD distill steps: student schedule has only 4 transitions, so 1-4
   // Qwen Image Edit model components - GGUF transformer needs a Diffusers source for VAE/encoder
   qwenImageComponentSource: zParameterModel.nullable(), // Diffusers model providing VAE + text encoder
+  qwenImageVaeModel: zParameterVAEModel.nullable(), // Optional: Standalone Qwen Image VAE checkpoint
+  qwenImageQwenVLEncoderModel: zModelIdentifierField.nullable(), // Optional: Standalone Qwen2.5-VL encoder
   qwenImageQuantization: z.enum(['none', 'int8', 'nf4']), // BitsAndBytes quantization for Qwen VL encoder
   qwenImageShift: z.number().nullable(), // Sigma schedule shift override (e.g. 3.0 for Lightning LoRAs)
+  // Wan 2.2 model components — A14B GGUF needs a paired second-expert transformer
+  // plus a Diffusers source for VAE/T5 unless standalone VAE/encoder models are wired.
+  wanTransformerLowNoise: zParameterModel.nullable(), // A14B GGUF only: second-expert transformer
+  wanComponentSource: zParameterModel.nullable(), // Diffusers Wan model providing VAE + UMT5-XXL
+  wanVaeModel: zParameterVAEModel.nullable(), // Optional: Standalone Wan VAE checkpoint
+  wanT5EncoderModel: zModelIdentifierField.nullable(), // Optional: Standalone UMT5-XXL encoder
+  wanGuidanceScaleLowNoise: z.number().nullable(), // Optional: separate CFG for low-noise expert (A14B). null = same as primary
   // Z-Image Seed Variance Enhancer settings
   zImageSeedVarianceEnabled: z.boolean(),
   zImageSeedVarianceStrength: z.number().min(0).max(2),
   zImageSeedVarianceRandomizePercent: z.number().min(1).max(100),
+  // Krea-2 standalone submodels (optional; used when the transformer is a single-file checkpoint/GGUF
+  // that has no bundled VAE / Qwen3-VL encoder. When null, they are extracted from the diffusers model.)
+  krea2VaeModel: zParameterVAEModel.nullable(),
+  krea2Qwen3VlEncoderModel: zModelIdentifierField.nullable(),
+  // Krea-2 conditioning enhancers (optional; both default off so stock behaviour is unchanged)
+  krea2SeedVarianceEnabled: z.boolean(),
+  krea2SeedVarianceStrength: z.number().min(0).max(2),
+  krea2SeedVarianceRandomizePercent: z.number().min(0).max(100),
+  krea2RebalanceEnabled: z.boolean(),
+  krea2RebalanceMultiplier: z.number().min(0).max(20),
+  krea2RebalanceWeights: z.string(),
+  imageSize: z.string().nullable().default(null),
+  // OpenAI-specific external options
+  openaiQuality: z.enum(['auto', 'high', 'medium', 'low']).default('auto'),
+  openaiBackground: z.enum(['auto', 'transparent', 'opaque']).default('auto'),
+  openaiInputFidelity: z.enum(['low', 'high']).nullable().default(null),
+  // Gemini-specific external options
+  geminiTemperature: z.number().min(0).max(2).nullable().default(null),
+  geminiThinkingLevel: z.enum(['minimal', 'high']).nullable().default(null),
+  // Seedream-specific external options
+  seedreamWatermark: z.boolean().default(false),
+  seedreamOptimizePrompt: z.boolean().default(false),
   dimensions: zDimensionsState,
 });
 export type ParamsState = z.infer<typeof zParamsState>;
 export const getInitialParamsState = (): ParamsState => ({
-  _version: 2,
+  _version: 5,
   maskBlur: 16,
   maskBlurMethod: 'box',
   canvasCoherenceMode: 'Gaussian Blur',
@@ -813,6 +994,11 @@ export const getInitialParamsState = (): ParamsState => ({
   guidance: 4,
   img2imgStrength: 0.75,
   optimizedDenoisingEnabled: true,
+  hiDiffusionEnabled: false,
+  hiDiffusionRauNetEnabled: true,
+  hiDiffusionWindowAttnEnabled: true,
+  hiDiffusionT1Ratio: 0.4,
+  hiDiffusionT2Ratio: 0.0,
   iterations: 1,
   scheduler: 'dpmpp_3m_k',
   fluxScheduler: 'euler',
@@ -821,6 +1007,13 @@ export const getInitialParamsState = (): ParamsState => ({
   fluxDypeExponent: 2.0,
   zImageScheduler: 'euler',
   zImageShift: null,
+  ernieImageScheduler: 'euler',
+  ernieImageUsePromptEnhancer: true,
+  ideogram4SamplerPreset: 'V4_QUALITY_48',
+  ideogram4Steps: null,
+  ideogram4GuidanceScale: null,
+  ideogram4Mu: null,
+  ideogram4ColorPalette: [],
   upscaleScheduler: 'kdpm_2',
   upscaleCfgScale: 2,
   seed: 0,
@@ -855,16 +1048,45 @@ export const getInitialParamsState = (): ParamsState => ({
   zImageQwen3SourceModel: null,
   animaVaeModel: null,
   animaQwen3EncoderModel: null,
-  animaT5EncoderModel: null,
   animaScheduler: 'euler',
-  kleinVaeModel: null,
+  animaLLLiteModel: null,
+  animaLLLiteWeight: 1,
+  flux2VaeModel: null,
   kleinQwen3EncoderModel: null,
+  flux2DevMistralEncoderModel: null,
+  pidMode: 'off',
+  pidDecoderModel: null,
+  gemma2EncoderModel: null,
+  pidSteps: 4,
   qwenImageComponentSource: null,
+  qwenImageVaeModel: null,
+  qwenImageQwenVLEncoderModel: null,
   qwenImageQuantization: 'none' as const,
   qwenImageShift: null,
+  wanTransformerLowNoise: null,
+  wanComponentSource: null,
+  wanVaeModel: null,
+  wanT5EncoderModel: null,
+  wanGuidanceScaleLowNoise: null,
   zImageSeedVarianceEnabled: false,
   zImageSeedVarianceStrength: 0.1,
   zImageSeedVarianceRandomizePercent: 50,
+  krea2VaeModel: null,
+  krea2Qwen3VlEncoderModel: null,
+  krea2SeedVarianceEnabled: false,
+  krea2SeedVarianceStrength: 0.1,
+  krea2SeedVarianceRandomizePercent: 50,
+  krea2RebalanceEnabled: false,
+  krea2RebalanceMultiplier: 4,
+  krea2RebalanceWeights: '1.0,1.0,1.0,1.0,1.0,1.0,1.0,2.5,5.0,1.1,4.0,1.0',
+  imageSize: null,
+  openaiQuality: 'auto',
+  openaiBackground: 'auto',
+  openaiInputFidelity: null,
+  geminiTemperature: null,
+  geminiThinkingLevel: null,
+  seedreamWatermark: false,
+  seedreamOptimizePrompt: false,
   dimensions: {
     width: 512,
     height: 512,
@@ -969,8 +1191,8 @@ export type EntityBrushLineAddedPayload = EntityIdentifierPayload<{
 export type EntityEraserLineAddedPayload = EntityIdentifierPayload<{
   eraserLine: CanvasEraserLineState | CanvasEraserLineWithPressureState;
 }>;
-export type EntityRectAddedPayload = EntityIdentifierPayload<{ rect: CanvasRectState }>;
 export type EntityLassoAddedPayload = EntityIdentifierPayload<{ lasso: CanvasLassoState }>;
+export type EntityShapeAddedPayload = EntityIdentifierPayload<{ shape: CanvasShapeState }>;
 export type EntityGradientAddedPayload = EntityIdentifierPayload<{ gradient: CanvasGradientState }>;
 export type EntityRasterizedPayload = EntityIdentifierPayload<{
   imageObject: CanvasImageState;

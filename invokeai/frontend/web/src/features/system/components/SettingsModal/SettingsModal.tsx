@@ -21,12 +21,16 @@ import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import { InformationalPopover } from 'common/components/InformationalPopover/InformationalPopover';
 import ScrollableContent from 'common/components/OverlayScrollbars/ScrollableContent';
 import { buildUseBoolean } from 'common/hooks/useBoolean';
-import { selectCurrentUser } from 'features/auth/store/authSlice';
+import { useIsAdmin } from 'features/auth/hooks/useIsAdmin';
 import { selectShouldUseCPUNoise, shouldUseCpuNoiseChanged } from 'features/controlLayers/store/paramsSlice';
+import { ExternalProviderStatusList } from 'features/system/components/SettingsModal/ExternalProviderStatusList';
 import { useRefreshAfterResetModal } from 'features/system/components/SettingsModal/RefreshAfterResetModal';
 import { SettingsDeveloperLogIsEnabled } from 'features/system/components/SettingsModal/SettingsDeveloperLogIsEnabled';
 import { SettingsDeveloperLogLevel } from 'features/system/components/SettingsModal/SettingsDeveloperLogLevel';
 import { SettingsDeveloperLogNamespaces } from 'features/system/components/SettingsModal/SettingsDeveloperLogNamespaces';
+import { SettingsGenerationDevices } from 'features/system/components/SettingsModal/SettingsGenerationDevices';
+import { SettingsImageStorageMaintenance } from 'features/system/components/SettingsModal/SettingsImageStorageMaintenance';
+import { SettingsImageSubfolderStrategySelect } from 'features/system/components/SettingsModal/SettingsImageSubfolderStrategySelect';
 import { useClearIntermediates } from 'features/system/components/SettingsModal/useClearIntermediates';
 import { StickyScrollable } from 'features/system/components/StickyScrollable';
 import {
@@ -38,6 +42,7 @@ import {
   selectSystemShouldEnableInformationalPopovers,
   selectSystemShouldEnableModelDescriptions,
   selectSystemShouldShowInvocationProgressDetail,
+  selectSystemShouldUseMiddleClickToOpenInNewTab,
   selectSystemShouldUseNSFWChecker,
   selectSystemShouldUseWatermarker,
   setPrefersNumericAttentionStyle,
@@ -46,6 +51,7 @@ import {
   setShouldEnableModelDescriptions,
   setShouldHighlightFocusedRegions,
   setShouldShowInvocationProgressDetail,
+  setShouldUseMiddleClickToOpenInNewTab,
   shouldAntialiasProgressImageChanged,
   shouldConfirmOnNewSessionToggled,
   shouldUseNSFWCheckerChanged,
@@ -70,7 +76,7 @@ const formatOptionalInteger = (value: number | null | undefined) => {
   return String(value);
 };
 
-const SettingsModal = (props: { children: ReactElement }) => {
+const SettingsModal = (props: { children: ReactElement<{ onClick?: () => void }> }) => {
   const dispatch = useAppDispatch();
   const { t } = useTranslation();
 
@@ -84,8 +90,9 @@ const SettingsModal = (props: { children: ReactElement }) => {
 
   const settingsModal = useSettingsModal();
   const refreshModal = useRefreshAfterResetModal();
-  const currentUser = useAppSelector(selectCurrentUser);
-  const { data: runtimeConfig } = useGetRuntimeConfigQuery();
+  const canEditRuntimeConfig = useIsAdmin();
+  // runtime_config is an admin-only route; don't fire it for non-admins just to render disabled controls.
+  const { data: runtimeConfig } = useGetRuntimeConfigQuery(undefined, { skip: !canEditRuntimeConfig });
   const [updateRuntimeConfig, { isLoading: isUpdatingRuntimeConfig }] = useUpdateRuntimeConfigMutation();
   const pendingMaxQueueHistoryRef = useRef<number | null | undefined>(undefined);
 
@@ -99,11 +106,18 @@ const SettingsModal = (props: { children: ReactElement }) => {
   const shouldEnableInformationalPopovers = useAppSelector(selectSystemShouldEnableInformationalPopovers);
   const shouldEnableModelDescriptions = useAppSelector(selectSystemShouldEnableModelDescriptions);
   const shouldHighlightFocusedRegions = useAppSelector(selectSystemShouldEnableHighlightFocusedRegions);
+  const shouldUseMiddleClickToOpenInNewTab = useAppSelector(selectSystemShouldUseMiddleClickToOpenInNewTab);
   const shouldConfirmOnNewSession = useAppSelector(selectSystemShouldConfirmOnNewSession);
   const shouldShowInvocationProgressDetail = useAppSelector(selectSystemShouldShowInvocationProgressDetail);
   const maxQueueHistory = runtimeConfig?.config.max_queue_history ?? null;
-  const canEditRuntimeConfig = runtimeConfig ? !runtimeConfig.config.multiuser || currentUser?.is_admin : false;
-  const [maxQueueHistoryInput, setMaxQueueHistoryInput] = useState(formatOptionalInteger(maxQueueHistory));
+  const [maxQueueHistoryInputState, setMaxQueueHistoryInputState] = useState(() => ({
+    source: maxQueueHistory,
+    value: formatOptionalInteger(maxQueueHistory),
+  }));
+  const maxQueueHistoryInput =
+    maxQueueHistoryInputState.source === maxQueueHistory
+      ? maxQueueHistoryInputState.value
+      : formatOptionalInteger(maxQueueHistory);
 
   const onToggleConfirmOnNewSession = useCallback(() => {
     dispatch(shouldConfirmOnNewSessionToggled());
@@ -116,10 +130,6 @@ const SettingsModal = (props: { children: ReactElement }) => {
     }
   }, [refetchIntermediatesCount, settingsModal.isTrue]);
 
-  useEffect(() => {
-    setMaxQueueHistoryInput(formatOptionalInteger(maxQueueHistory));
-  }, [maxQueueHistory]);
-
   const commitMaxQueueHistory = useCallback(async () => {
     if (!runtimeConfig || !canEditRuntimeConfig) {
       return;
@@ -129,7 +139,7 @@ const SettingsModal = (props: { children: ReactElement }) => {
     const parsedValue = trimmedValue === '' ? null : Number.parseInt(trimmedValue, 10);
 
     if (parsedValue !== null && Number.isNaN(parsedValue)) {
-      setMaxQueueHistoryInput(formatOptionalInteger(maxQueueHistory));
+      setMaxQueueHistoryInputState({ source: maxQueueHistory, value: formatOptionalInteger(maxQueueHistory) });
       return;
     }
 
@@ -138,17 +148,17 @@ const SettingsModal = (props: { children: ReactElement }) => {
       pendingMaxQueueHistoryRef.current === undefined ? maxQueueHistory : pendingMaxQueueHistoryRef.current;
 
     if (normalizedValue === currentValue) {
-      setMaxQueueHistoryInput(formatOptionalInteger(currentValue));
+      setMaxQueueHistoryInputState({ source: currentValue, value: formatOptionalInteger(currentValue) });
       return;
     }
 
     pendingMaxQueueHistoryRef.current = normalizedValue;
-    setMaxQueueHistoryInput(formatOptionalInteger(normalizedValue));
+    setMaxQueueHistoryInputState({ source: normalizedValue, value: formatOptionalInteger(normalizedValue) });
 
     try {
       await updateRuntimeConfig({ max_queue_history: normalizedValue }).unwrap();
     } catch {
-      setMaxQueueHistoryInput(formatOptionalInteger(maxQueueHistory));
+      setMaxQueueHistoryInputState({ source: maxQueueHistory, value: formatOptionalInteger(maxQueueHistory) });
       toast({
         id: 'SETTINGS_MAX_QUEUE_HISTORY_SAVE_FAILED',
         title: t('settings.maxQueueHistorySaveFailed'),
@@ -234,6 +244,13 @@ const SettingsModal = (props: { children: ReactElement }) => {
     [dispatch]
   );
 
+  const handleChangeShouldUseMiddleClickToOpenInNewTab = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      dispatch(setShouldUseMiddleClickToOpenInNewTab(e.target.checked));
+    },
+    [dispatch]
+  );
+
   const handleChangePreferAttentionStyleNumeric = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       dispatch(setPrefersNumericAttentionStyle(e.target.checked));
@@ -241,9 +258,12 @@ const SettingsModal = (props: { children: ReactElement }) => {
     [dispatch]
   );
 
-  const handleChangeMaxQueueHistory = useCallback((valueAsString: string) => {
-    setMaxQueueHistoryInput(valueAsString);
-  }, []);
+  const handleChangeMaxQueueHistory = useCallback(
+    (valueAsString: string) => {
+      setMaxQueueHistoryInputState({ source: maxQueueHistory, value: valueAsString });
+    },
+    [maxQueueHistory]
+  );
 
   const handleBlurMaxQueueHistory = useCallback(() => {
     void commitMaxQueueHistory();
@@ -293,21 +313,33 @@ const SettingsModal = (props: { children: ReactElement }) => {
                       <FormLabel>{t('settings.enableInvisibleWatermark')}</FormLabel>
                       <Switch isChecked={shouldUseWatermarker} onChange={handleChangeShouldUseWatermarker} />
                     </FormControl>
-                    <FormControl>
-                      <FormLabel>{t('settings.maxQueueHistory')}</FormLabel>
-                      <NumberInput
-                        min={0}
-                        step={1}
-                        value={maxQueueHistoryInput}
-                        onChange={handleChangeMaxQueueHistory}
-                        onBlur={handleBlurMaxQueueHistory}
-                        clampValueOnBlur={false}
-                        isDisabled={!runtimeConfig || !canEditRuntimeConfig || isUpdatingRuntimeConfig}
-                        w="8rem"
-                      >
-                        <NumberInputField onKeyDown={handleKeyDownMaxQueueHistory} />
-                      </NumberInput>
-                    </FormControl>
+                    {/* Admin-only: the backing runtime_config query is skipped for non-admins, so a
+                        rendered-but-disabled input would sit permanently blank. Hide it instead, matching
+                        SettingsImageSubfolderStrategySelect below. */}
+                    {canEditRuntimeConfig && (
+                      <FormControl>
+                        <FormLabel>{t('settings.maxQueueHistory')}</FormLabel>
+                        <NumberInput
+                          min={0}
+                          step={1}
+                          value={maxQueueHistoryInput}
+                          onChange={handleChangeMaxQueueHistory}
+                          onBlur={handleBlurMaxQueueHistory}
+                          clampValueOnBlur={false}
+                          isDisabled={!runtimeConfig || isUpdatingRuntimeConfig}
+                          w="8rem"
+                        >
+                          <NumberInputField onKeyDown={handleKeyDownMaxQueueHistory} />
+                        </NumberInput>
+                      </FormControl>
+                    )}
+                    <SettingsImageSubfolderStrategySelect />
+                    <SettingsImageStorageMaintenance />
+                    <SettingsGenerationDevices />
+                  </StickyScrollable>
+
+                  <StickyScrollable title={t('settings.models')}>
+                    <ExternalProviderStatusList />
                   </StickyScrollable>
 
                   <StickyScrollable title={t('settings.ui')}>
@@ -358,6 +390,13 @@ const SettingsModal = (props: { children: ReactElement }) => {
                       <Switch
                         isChecked={shouldHighlightFocusedRegions}
                         onChange={handleChangeShouldHighlightFocusedRegions}
+                      />
+                    </FormControl>
+                    <FormControl>
+                      <FormLabel>{t('settings.middleClickOpenInNewTab')}</FormLabel>
+                      <Switch
+                        isChecked={shouldUseMiddleClickToOpenInNewTab}
+                        onChange={handleChangeShouldUseMiddleClickToOpenInNewTab}
                       />
                     </FormControl>
                   </StickyScrollable>

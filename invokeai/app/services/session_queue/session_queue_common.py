@@ -15,7 +15,7 @@ from pydantic import (
 )
 from pydantic_core import to_jsonable_python
 
-from invokeai.app.invocations.fields import ImageField
+from invokeai.app.invocations.fields import ImageField, VideoField
 from invokeai.app.services.shared.graph import Graph, GraphExecutionState, NodeNotFoundError
 from invokeai.app.services.workflow_records.workflow_records_common import (
     WorkflowWithoutID,
@@ -51,7 +51,8 @@ class SessionQueueItemNotFoundError(ValueError):
 
 # region Batch
 
-BatchDataType = Union[StrictStr, float, int, ImageField]
+BatchScalarDataType = Union[StrictStr, float, int, ImageField, VideoField]
+BatchDataType = Union[BatchScalarDataType, list[BatchScalarDataType]]
 
 
 class NodeFieldValue(BaseModel):
@@ -172,7 +173,7 @@ class Batch(BaseModel):
 DEFAULT_QUEUE_ID = "default"
 SYSTEM_USER_ID = "system"  # Default user_id for system-generated queue items
 
-QUEUE_ITEM_STATUS = Literal["pending", "in_progress", "completed", "failed", "canceled"]
+QUEUE_ITEM_STATUS = Literal["pending", "in_progress", "waiting", "completed", "failed", "canceled"]
 
 
 class ItemIdsResult(BaseModel):
@@ -219,6 +220,11 @@ class SessionQueueItem(BaseModel):
 
     item_id: int = Field(description="The identifier of the session queue item")
     status: QUEUE_ITEM_STATUS = Field(default="pending", description="The status of this queue item")
+    status_sequence: int | None = Field(
+        default=None,
+        # Fallback for rows serialized before migration_28 added the DB-level default of 0.
+        description="A monotonically increasing version for this queue item's visible status lifecycle",
+    )
     priority: int = Field(default=0, description="The priority of this queue item")
     batch_id: str = Field(description="The ID of the batch associated with this queue item")
     origin: str | None = Field(
@@ -257,6 +263,25 @@ class SessionQueueItem(BaseModel):
     retried_from_item_id: Optional[int] = Field(
         default=None, description="The item_id of the queue item that this item was retried from"
     )
+    device: Optional[str] = Field(
+        default=None,
+        description="The device that processed this queue item, e.g. 'cuda:1' (set only when running on a GPU)",
+    )
+    workflow_call_id: Optional[str] = Field(
+        default=None, description="The active workflow-call relationship id when this queue item is a child execution."
+    )
+    parent_item_id: Optional[int] = Field(
+        default=None, description="The parent queue item id when this queue item is a child workflow execution."
+    )
+    parent_session_id: Optional[str] = Field(
+        default=None, description="The parent session id when this queue item is a child workflow execution."
+    )
+    root_item_id: Optional[int] = Field(
+        default=None, description="The root queue item id for this workflow call chain, if any."
+    )
+    workflow_call_depth: Optional[int] = Field(
+        default=None, description="The 1-based workflow-call depth for this queue item when it is a child execution."
+    )
     session: GraphExecutionState = Field(description="The fully-populated session to be executed")
     workflow: Optional[WorkflowWithoutID] = Field(
         default=None, description="The workflow associated with this queue item"
@@ -288,6 +313,35 @@ class SessionQueueItem(BaseModel):
     )
 
 
+class SessionQueueItemSummary(BaseModel):
+    """Queue item fields needed to render the queue list."""
+
+    item_id: int = Field(description="The identifier of the session queue item")
+    created_at: Union[datetime.datetime, str] = Field(description="When this queue item was created")
+    status: QUEUE_ITEM_STATUS = Field(description="The status of this queue item")
+    device: Optional[str] = Field(
+        default=None,
+        description="The device that processed this queue item, e.g. 'cuda:1'",
+    )
+    started_at: Optional[Union[datetime.datetime, str]] = Field(description="When this queue item was started")
+    completed_at: Optional[Union[datetime.datetime, str]] = Field(description="When this queue item was completed")
+    origin: str | None = Field(description="The origin of this queue item")
+    destination: str | None = Field(description="The destination of this queue item")
+    batch_id: str = Field(description="The ID of the batch associated with this queue item")
+    user_id: str = Field(description="The ID of the user who created this queue item")
+    user_display_name: Optional[str] = Field(description="The display name of the user who created this queue item")
+    user_email: Optional[str] = Field(description="The email of the user who created this queue item")
+    field_values: Optional[list[NodeFieldValue]] = Field(description="The batch field values used for this queue item")
+    # Carried because the list rows decide from it whether to offer a retry: a child item of a
+    # workflow call cannot be retried on its own.
+    parent_item_id: Optional[int] = Field(description="The ID of the parent queue item, if this is a child item")
+
+    @classmethod
+    def queue_item_summary_from_dict(cls, queue_item_dict: dict) -> "SessionQueueItemSummary":
+        queue_item_dict["field_values"] = get_field_values(queue_item_dict)
+        return cls(**queue_item_dict)
+
+
 # endregion Queue Items
 
 # region Query Results
@@ -300,10 +354,19 @@ class SessionQueueStatus(BaseModel):
     session_id: Optional[str] = Field(description="The current queue item's session id")
     pending: int = Field(..., description="Number of queue items with status 'pending'")
     in_progress: int = Field(..., description="Number of queue items with status 'in_progress'")
+    waiting: int = Field(..., description="Number of queue items with status 'waiting'")
     completed: int = Field(..., description="Number of queue items with status 'complete'")
     failed: int = Field(..., description="Number of queue items with status 'error'")
     canceled: int = Field(..., description="Number of queue items with status 'canceled'")
     total: int = Field(..., description="Total number of queue items")
+    user_pending: Optional[int] = Field(
+        default=None,
+        description="Number of the requesting user's queue items with status 'pending' (None for admins/global callers)",
+    )
+    user_in_progress: Optional[int] = Field(
+        default=None,
+        description="Number of the requesting user's queue items with status 'in_progress' (None for admins/global callers)",
+    )
 
 
 class SessionQueueCountsByDestination(BaseModel):
@@ -311,6 +374,7 @@ class SessionQueueCountsByDestination(BaseModel):
     destination: str = Field(..., description="The destination of queue items included in this status")
     pending: int = Field(..., description="Number of queue items with status 'pending' for the destination")
     in_progress: int = Field(..., description="Number of queue items with status 'in_progress' for the destination")
+    waiting: int = Field(..., description="Number of queue items with status 'waiting' for the destination")
     completed: int = Field(..., description="Number of queue items with status 'complete' for the destination")
     failed: int = Field(..., description="Number of queue items with status 'error' for the destination")
     canceled: int = Field(..., description="Number of queue items with status 'canceled' for the destination")
@@ -324,6 +388,7 @@ class BatchStatus(BaseModel):
     destination: str | None = Field(..., description="The destination of the batch")
     pending: int = Field(..., description="Number of queue items with status 'pending'")
     in_progress: int = Field(..., description="Number of queue items with status 'in_progress'")
+    waiting: int = Field(..., description="Number of queue items with status 'waiting'")
     completed: int = Field(..., description="Number of queue items with status 'complete'")
     failed: int = Field(..., description="Number of queue items with status 'error'")
     canceled: int = Field(..., description="Number of queue items with status 'canceled'")
@@ -551,15 +616,11 @@ def calc_session_count(batch: Batch) -> int:
     # TODO: Should this be a class method on Batch?
     if not batch.data:
         return batch.runs
-    data = []
+    session_count = batch.runs
     for batch_datum_list in batch.data:
-        to_zip = []
-        for batch_datum in batch_datum_list:
-            batch_data_items = range(len(batch_datum.items))
-            to_zip.append(batch_data_items)
-        data.append(list(zip(*to_zip, strict=True)))
-    data_product = list(product(*data))
-    return len(data_product) * batch.runs
+        group_length = len(batch_datum_list[0].items) if batch_datum_list else 0
+        session_count *= group_length
+    return session_count
 
 
 ValueToInsertTuple: TypeAlias = tuple[

@@ -1,5 +1,12 @@
+import copy
+import pickle
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
 import pytest
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 from pydantic.json_schema import models_json_schema
 
 from invokeai.app.invocations.baseinvocation import (
@@ -276,6 +283,15 @@ def test_graph_connects_collector():
     g.add_edge(e3)
 
 
+def test_graph_rejects_collector_output_edge_before_input_edge():
+    graph = Graph()
+    graph.add_node(CollectInvocation(id="collect"))
+    graph.add_node(ListPassThroughInvocation(id="consumer"))
+
+    with pytest.raises(InvalidEdgeError, match="Collector must have at least one item or collection input edge"):
+        graph.add_edge(create_edge("collect", "collection", "consumer", "collection"))
+
+
 # TODO: test that derived types mixed with base types are compatible
 
 
@@ -547,6 +563,105 @@ def test_graph_invalid_with_invalid_connection():
     g.edges.append(e1)
 
     assert g.is_valid() is False
+
+
+def test_graph_edge_indexes_follow_direct_edge_list_mutation():
+    graph = Graph()
+    range_node = PromptCollectionTestInvocation(id="range", collection=["one"])
+    iterate_node = IterateInvocation(id="iterate")
+    graph.add_node(range_node)
+    graph.add_node(iterate_node)
+    graph.add_edge(create_edge("range", "collection", "iterate", "collection"))
+
+    assert len(graph._get_input_edges("iterate")) == 1
+
+    graph.edges.clear()
+
+    assert graph._get_input_edges("iterate") == []
+    with pytest.raises(InvalidEdgeError):
+        graph.validate_self()
+
+
+def test_graph_edge_indexes_follow_edge_list_replacement():
+    edge = create_edge("source", "value", "destination", "value")
+    graph = Graph(edges=[edge])
+    assert graph._get_output_edges("source") == [edge]
+
+    graph.edges = []
+
+    assert graph._get_output_edges("source") == []
+
+
+def test_graph_edge_indexes_follow_partially_failed_edge_list_mutation():
+    first_edge = create_edge("source", "value", "first", "value")
+    second_edge = create_edge("source", "value", "second", "value")
+    graph = Graph(edges=[first_edge])
+    graph._get_output_edges("source")
+
+    def failing_edges():
+        yield second_edge
+        raise RuntimeError("failed while extending edges")
+
+    with pytest.raises(RuntimeError):
+        graph.edges.extend(failing_edges())
+
+    assert graph._get_output_edges("source") == [first_edge, second_edge]
+
+
+def test_graph_copy_rebinds_edge_list_invalidation():
+    edge = create_edge("source", "value", "destination", "value")
+    original = Graph(edges=[edge])
+    copied = original.model_copy()
+    copied._get_output_edges("source")
+
+    copied.edges.clear()
+
+    assert copied._get_output_edges("source") == []
+    assert original._get_output_edges("source") == [edge]
+
+
+@pytest.mark.parametrize("copy_graph", [copy.copy, copy.deepcopy])
+def test_graph_python_copy_rebinds_edge_list_invalidation(copy_graph):
+    edge = create_edge("source", "value", "destination", "value")
+    original = Graph(edges=[edge])
+    copied = copy_graph(original)
+    copied._get_output_edges("source")
+
+    copied.edges.clear()
+
+    assert copied._get_output_edges("source") == []
+    assert original._get_output_edges("source") == [edge]
+
+
+def test_graph_pickle_rebinds_edge_list_invalidation():
+    edge = create_edge("source", "value", "destination", "value")
+    graph = Graph(edges=[edge])
+
+    restored = pickle.loads(pickle.dumps(graph))
+    restored._get_output_edges("source")
+    restored.edges.clear()
+
+    assert restored._get_output_edges("source") == []
+
+
+def test_graph_edges_cannot_be_mutated_after_indexing():
+    edge = create_edge("source", "value", "destination", "value")
+    graph = Graph(edges=[edge])
+    graph._get_output_edges("source")
+
+    with pytest.raises(ValidationError):
+        edge.source.node_id = "different-source"
+
+    assert graph._get_output_edges("source") == [edge]
+
+
+def test_graph_equality_ignores_adjacency_cache_state():
+    left = Graph(id="same")
+    right = Graph(id="same")
+
+    left._get_input_edges("missing")
+
+    assert left == right
 
 
 def test_graph_gets_networkx_graph():
@@ -877,6 +992,36 @@ def test_nodes_must_return_invocation_output():
                 return "foo"
 
 
+def test_nodes_must_return_invocation_output_under_optimized_python():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-O",
+            "-c",
+            textwrap.dedent(
+                """
+                from invokeai.app.invocations.baseinvocation import BaseInvocation, invocation
+
+                try:
+                    @invocation("test_no_output_optimized", version="1.0.0")
+                    class NoOutputInvocation(BaseInvocation):
+                        def invoke(self) -> str:
+                            return "foo"
+                except ValueError:
+                    pass
+                else:
+                    raise SystemExit("invalid invocation return annotation was accepted under python -O")
+                """
+            ),
+        ],
+        capture_output=True,
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def test_collector_different_incomers():
     """Tests an edge case where a collector has incoming edges from invocations with differently-named output fields."""
     g = Graph()
@@ -1070,10 +1215,10 @@ def test_iterator_collector_iterator_chain_with_empty_collection():
     session = GraphExecutionState(graph=g)
     run_session_with_mock_context(session)
 
-    # With empty collection, iterators don't create execution nodes, so collectors don't execute
-    # Verify that the final collector was never prepared (which is correct behavior)
-    assert n7.id not in session.source_prepared_mapping
-
-    # Verify only the source collection node executed
-    assert n1.id in session.source_prepared_mapping
-    assert len(session.source_prepared_mapping[n1.id]) == 1
+    first_output = get_single_output_from_session(session, n4.id)
+    final_output = get_single_output_from_session(session, n7.id)
+    assert isinstance(first_output, CollectInvocationOutput)
+    assert isinstance(final_output, CollectInvocationOutput)
+    assert first_output.collection == []
+    assert final_output.collection == []
+    assert session.is_complete()

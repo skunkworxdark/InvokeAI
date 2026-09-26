@@ -1,6 +1,7 @@
 import type { ChakraProps, CollapseProps, FlexProps } from '@invoke-ai/ui-library';
 import { ButtonGroup, Collapse, Flex, IconButton, Text } from '@invoke-ai/ui-library';
 import { useAppSelector } from 'app/store/storeHooks';
+import { getCudaDeviceIndex } from 'common/util/getCudaDeviceIndex';
 import { selectCurrentUser } from 'features/auth/store/authSlice';
 import QueueStatusBadge from 'features/queue/components/common/QueueStatusBadge';
 import { useDestinationText } from 'features/queue/components/QueueList/useDestinationText';
@@ -15,13 +16,14 @@ import { PiArrowCounterClockwiseBold, PiXBold } from 'react-icons/pi';
 import type { S } from 'services/api/types';
 
 import { COLUMN_WIDTHS, SYSTEM_USER_ID } from './constants';
+import { getQueueItemActionVisibility } from './getQueueItemActionVisibility';
 import QueueItemDetail from './QueueItemDetail';
 
 const selectedStyles = { bg: 'base.700' };
 
 type InnerItemProps = {
   index: number;
-  item: S['SessionQueueItem'];
+  item: S['SessionQueueItemSummary'];
 };
 
 const sx: ChakraProps['sx'] = {
@@ -95,8 +97,11 @@ const QueueItemComponent = ({ index, item }: InnerItemProps) => {
     return `${seconds}s`;
   }, [item]);
 
+  const gpuIndex = useMemo(() => getCudaDeviceIndex(item.device), [item.device]);
+
   const isCanceled = useMemo(() => ['canceled', 'completed', 'failed'].includes(item.status), [item.status]);
   const isFailed = useMemo(() => ['canceled', 'failed'].includes(item.status), [item.status]);
+  const { canShowCancelQueueItem, canShowRetryQueueItem } = useMemo(() => getQueueItemActionVisibility(item), [item]);
   const originText = useOriginText(item.origin);
   const destinationText = useDestinationText(item.destination);
 
@@ -139,6 +144,9 @@ const QueueItemComponent = ({ index, item }: InnerItemProps) => {
         </Flex>
         <Flex w={COLUMN_WIDTHS.statusBadge} alignItems="center" flexShrink={0}>
           <QueueStatusBadge status={item.status} />
+        </Flex>
+        <Flex w={COLUMN_WIDTHS.gpu} alignItems="center" flexShrink={0}>
+          {gpuIndex !== null ? gpuIndex : '-'}
         </Flex>
 
         <Flex w={COLUMN_WIDTHS.time} alignItems="center" flexShrink={0}>
@@ -183,7 +191,7 @@ const QueueItemComponent = ({ index, item }: InnerItemProps) => {
 
         <Flex alignItems="center" w={COLUMN_WIDTHS.actions} pe={3}>
           <ButtonGroup size="xs" variant="ghost">
-            {!isFailed && (
+            {canShowCancelQueueItem && !isFailed && (
               <IconButton
                 onClick={onClickCancelQueueItem}
                 isDisabled={isCanceled || !canManageItem}
@@ -192,7 +200,7 @@ const QueueItemComponent = ({ index, item }: InnerItemProps) => {
                 icon={<PiXBold />}
               />
             )}
-            {isFailed && (
+            {canShowRetryQueueItem && isFailed && (
               <IconButton
                 onClick={onClickRetryQueueItem}
                 isDisabled={!canManageItem}

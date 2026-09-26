@@ -15,18 +15,39 @@ class ModelLoadServiceBase(ABC):
     """Wrapper around AnyModelLoader."""
 
     @abstractmethod
-    def load_model(self, model_config: AnyModelConfig, submodel_type: Optional[SubModelType] = None) -> LoadedModel:
+    def load_model(
+        self,
+        model_config: AnyModelConfig,
+        submodel_type: Optional[SubModelType] = None,
+        user_id: Optional[str] = None,
+    ) -> LoadedModel:
         """
         Given a model's configuration, load it and return the LoadedModel object.
 
         :param model_config: Model configuration record (as returned by ModelRecordBase.get_model())
         :param submodel: For main (pipeline models), the submodel to fetch.
+        :param user_id: The user whose action triggered the load, threaded into the model load
+            events so they can be routed to that user's UI (defaults to the system user).
         """
 
     @property
     @abstractmethod
     def ram_cache(self) -> ModelCache:
-        """Return the RAM cache used by this loader."""
+        """Return the RAM cache for the current thread's execution device.
+
+        In multi-GPU mode, each session-processor worker is pinned to a device and gets its own
+        cache; this resolves to the calling thread's cache. Outside a worker (e.g. API threads),
+        it resolves to the default device's cache.
+        """
+
+    @property
+    @abstractmethod
+    def ram_caches(self) -> dict[str, ModelCache]:
+        """Return all per-device RAM caches, keyed by normalized device string.
+
+        Use this for maintenance operations that must apply to every device (clear cache, drop a
+        model from all devices, shutdown).
+        """
 
     @abstractmethod
     def load_model_from_path(

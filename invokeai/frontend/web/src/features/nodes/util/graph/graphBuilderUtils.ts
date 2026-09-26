@@ -209,16 +209,18 @@ export const getInfill = (
 
 export const CANVAS_OUTPUT_PREFIX = 'canvas_output';
 
-export const isMainModelWithoutUnet = (modelLoader: Invocation<MainModelLoaderNodes>) => {
-  return (
-    modelLoader.type === 'flux_model_loader' ||
-    modelLoader.type === 'flux2_klein_model_loader' ||
-    modelLoader.type === 'sd3_model_loader' ||
-    modelLoader.type === 'cogview4_model_loader' ||
-    modelLoader.type === 'qwen_image_model_loader' ||
-    modelLoader.type === 'z_image_model_loader' ||
-    modelLoader.type === 'anima_model_loader'
-  );
+// Only the classic SD/SDXL loaders expose a `unet` output; every other main-model loader (FLUX,
+// FLUX.2, SD3, CogView4, Qwen-Image, Z-Image, ERNIE-Image, Krea-2, Anima, Wan) is transformer-based
+// and has no `unet`.
+// Defining the predicate by this small allow-list means any newly added transformer loader is treated
+// as unet-less automatically, and the negated branch narrows `modelLoader` to the unet-bearing loaders
+// so `addEdge(modelLoader, 'unet', ...)` type-checks.
+type MainModelLoaderWithUnetNodes = 'main_model_loader' | 'sdxl_model_loader';
+
+export const isMainModelWithoutUnet = (
+  modelLoader: Invocation<MainModelLoaderNodes>
+): modelLoader is Invocation<Exclude<MainModelLoaderNodes, MainModelLoaderWithUnetNodes>> => {
+  return modelLoader.type !== 'main_model_loader' && modelLoader.type !== 'sdxl_model_loader';
 };
 
 export const isCanvasOutputNodeId = (nodeId: string) => nodeId.split(':')[0] === CANVAS_OUTPUT_PREFIX;
@@ -260,22 +262,14 @@ export const getDenoisingStartAndEnd = (state: RootState): { denoising_start: nu
         };
       }
     }
-    case 'anima': {
-      // Anima uses a fixed shift=3.0 which makes the sigma schedule highly non-linear.
-      // Without rescaling, most of the visual 'change' is concentrated in the high denoise
-      // strength range (>0.8). The exponent 0.2 spreads the effective range more evenly,
-      // matching the approach used for FLUX and SD3.
-      const animaExponent = optimizedDenoisingEnabled ? 0.2 : 1;
-      return {
-        denoising_start: 1 - denoisingStrength ** animaExponent,
-        denoising_end: 1,
-      };
-    }
+    case 'anima':
     case 'sd-1':
     case 'sd-2':
     case 'cogview4':
     case 'qwen-image':
-    case 'z-image': {
+    case 'wan':
+    case 'z-image':
+    case 'krea-2': {
       return {
         denoising_start: 1 - denoisingStrength,
         denoising_end: 1,

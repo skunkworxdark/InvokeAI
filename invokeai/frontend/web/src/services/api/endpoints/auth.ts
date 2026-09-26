@@ -30,6 +30,10 @@ type LogoutResponse = {
   success: boolean;
 };
 
+type MediaCookieResponse = {
+  success: boolean;
+};
+
 type SetupStatusResponse = {
   setup_required: boolean;
   multiuser_enabled: boolean;
@@ -79,10 +83,40 @@ export const authApi = api.injectEndpoints({
         url: 'api/v1/auth/logout',
         method: 'POST',
       }),
-      // Invalidate boards and images cache on logout to clear stale data
+      // NOTE: cross-user cache clearing does NOT rely on this list. A store-level
+      // listener (see store.ts) dispatches api.util.resetApiState() on the logout /
+      // sessionExpiredLogout actions, dropping EVERY cached query — video, gallery,
+      // and any future tag types included. These tags are a redundant belt-and-braces
+      // for the brief window before that action fires.
       invalidatesTags: ['Board', 'Image', 'ImageList', 'ImageNameList', 'ImageCollection', 'ImageMetadata'],
     }),
-    getCurrentUser: build.query<MeResponse, void>({
+    /**
+     * Re-issues the HttpOnly media cookie from the session's Bearer token. Media elements
+     * (`<video src>`) can't send Authorization headers, so video routes authenticate via a
+     * cookie that is normally set at login — a restored session can hold a valid JWT without
+     * it, making every video render as a black player. Called once on app load (see
+     * useMediaCookieRefresh) so such sessions self-heal without re-login.
+     */
+    refreshMediaCookie: build.mutation<MediaCookieResponse, void>({
+      query: () => ({
+        url: 'api/v1/auth/media-cookie',
+        method: 'POST',
+      }),
+    }),
+    /**
+     * Keyed by the bearer token the request will carry, which is why it takes an argument it
+     * never sends: the token travels in the `Authorization` header, read out of localStorage at
+     * send time, but it is what the answer is *about*, so it belongs in the cache key.
+     *
+     * Shared across logins, one entry outlives the token that produced it. A 401 for a token
+     * that has since been replaced stays readable under its replacement — and `ProtectedRoute`
+     * ends the session on a 401 from this query, so it would end a session on a stranger's
+     * failure. Nothing refetches it on its own to correct that: the argument never changed, the
+     * endpoint has no tags, and the API-state reset that a login normally triggers is skipped
+     * when the new token belongs to the same user. Keyed by token, the replacement session
+     * simply reads a different entry, and asking for it is what fetches it.
+     */
+    getCurrentUser: build.query<MeResponse, string>({
       query: () => 'api/v1/auth/me',
     }),
     setup: build.mutation<SetupResponse, SetupRequest>({
@@ -142,6 +176,7 @@ export const authApi = api.injectEndpoints({
 export const {
   useLoginMutation,
   useLogoutMutation,
+  useRefreshMediaCookieMutation,
   useGetCurrentUserQuery,
   useSetupMutation,
   useGetSetupStatusQuery,

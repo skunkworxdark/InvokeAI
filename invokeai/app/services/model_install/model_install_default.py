@@ -28,6 +28,7 @@ from invokeai.app.services.invoker import Invoker
 from invokeai.app.services.model_install.model_install_base import ModelInstallServiceBase
 from invokeai.app.services.model_install.model_install_common import (
     MODEL_SOURCE_TO_TYPE_MAP,
+    ExternalModelSource,
     HFModelSource,
     InstallStatus,
     InvalidModelConfigException,
@@ -37,10 +38,15 @@ from invokeai.app.services.model_install.model_install_common import (
     StringLikeSource,
     URLModelSource,
 )
-from invokeai.app.services.model_records import DuplicateModelException, ModelRecordServiceBase
+from invokeai.app.services.model_records import DuplicateModelException, ModelRecordServiceBase, UnknownModelException
 from invokeai.app.services.model_records.model_records_base import ModelRecordChanges
 from invokeai.app.util.misc import get_iso_timestamp
 from invokeai.backend.model_manager.configs.base import Checkpoint_Config_Base
+from invokeai.backend.model_manager.configs.external_api import (
+    ExternalApiModelConfig,
+    ExternalApiModelDefaultSettings,
+    ExternalModelCapabilities,
+)
 from invokeai.backend.model_manager.configs.factory import (
     AnyModelConfig,
     ModelConfigFactory,
@@ -55,7 +61,13 @@ from invokeai.backend.model_manager.metadata import (
 )
 from invokeai.backend.model_manager.metadata.metadata_base import HuggingFaceMetadata
 from invokeai.backend.model_manager.search import ModelSearch
-from invokeai.backend.model_manager.taxonomy import ModelRepoVariant, ModelSourceType
+from invokeai.backend.model_manager.taxonomy import (
+    BaseModelType,
+    ModelFormat,
+    ModelRepoVariant,
+    ModelSourceType,
+    ModelType,
+)
 from invokeai.backend.model_manager.util.lora_metadata_extractor import apply_lora_metadata
 from invokeai.backend.util import InvokeAILogger
 from invokeai.backend.util.catch_sigint import catch_sigint
@@ -100,8 +112,21 @@ class ModelInstallService(ModelInstallServiceBase):
         self._stop_event = threading.Event()
         self._downloads_changed_event = threading.Event()
         self._install_completed_event = threading.Event()
+        # Imports must not begin until startup restoration has completed. Leave this unset until
+        # _restore_incomplete_installs_async() finishes so an import racing start() cannot pass the barrier early.
+        self._restore_completed_event = threading.Event()
+        self._startup_error: Optional[BaseException] = None
         self._download_queue = download_queue
         self._download_cache: Dict[int, ModelInstallJob] = {}
+        # Per-source locks serializing download_and_cache_model() so parallel (multi-GPU) sessions
+        # that need the same remote model (e.g. the LaMa infill model) don't race to download into
+        # the same cache directory. _download_cache_locks_guard protects the dict itself.
+        self._download_cache_locks: Dict[str, threading.Lock] = {}
+        self._download_cache_locks_guard = threading.Lock()
+        # Import helpers may call into the download queue, so they must run without _lock held. Reserve sources under
+        # this condition instead, preventing concurrent imports from creating jobs for the same source.
+        self._install_condition = threading.Condition(self._lock)
+        self._pending_sources: set[str] = set()
         self._running = False
         self._session = session
         self._install_thread: Optional[threading.Thread] = None
@@ -252,6 +277,8 @@ class ModelInstallService(ModelInstallServiceBase):
                         self._safe_rmtree(job._install_tmpdir, self._logger)
 
     def _restore_incomplete_installs_async(self) -> None:
+        self._restore_completed_event.clear()
+
         def _run() -> None:
             try:
                 self._logger.info("Restoring incomplete installs")
@@ -259,8 +286,27 @@ class ModelInstallService(ModelInstallServiceBase):
                 self._logger.info("Finished restoring incomplete installs")
             except Exception as e:
                 self._logger.error(f"Failed to restore incomplete installs: {e}")
+            finally:
+                self._restore_completed_event.set()
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def _wait_for_restore_complete(self, timeout: Optional[float] = None) -> bool:
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        if deadline is None:
+            self._lock.acquire()
+        elif not self._lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            return False
+        try:
+            if not self._running and not self._restore_completed_event.is_set():
+                raise RuntimeError("Model install service is not running")
+            startup_error = self._startup_error
+        finally:
+            self._lock.release()
+        if startup_error is not None:
+            raise RuntimeError("Model install service failed to start") from startup_error
+        remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+        return self._restore_completed_event.wait(timeout=remaining)
 
     def _resume_remote_download(self, job: ModelInstallJob) -> None:
         job.status = InstallStatus.WAITING
@@ -309,23 +355,30 @@ class ModelInstallService(ModelInstallServiceBase):
         with self._lock:
             if self._running:
                 raise Exception("Attempt to start the installer service twice")
-            self._start_installer_thread()
-            self._remove_dangling_install_dirs()
-            self._migrate_yaml()
-            # In normal use, we do not want to scan the models directory - it should never have orphaned models.
-            # We should only do the scan when the flag is set (which should only be set when testing).
-            if self.app_config.scan_models_on_startup:
-                with catch_sigint():
-                    self._register_orphaned_models()
+            self._startup_error = None
+            self._restore_completed_event.clear()
+            try:
+                self._start_installer_thread()
+                self._remove_dangling_install_dirs()
+                self._migrate_yaml()
+                # In normal use, we do not want to scan the models directory - it should never have orphaned models.
+                # We should only do the scan when the flag is set (which should only be set when testing).
+                if self.app_config.scan_models_on_startup:
+                    with catch_sigint():
+                        self._register_orphaned_models()
 
-            # Check all models' paths and confirm they exist. A model could be missing if it was installed on a volume
-            # that isn't currently mounted. In this case, we don't want to delete the model from the database, but we do
-            # want to alert the user.
-            for model in self._scan_for_missing_models():
-                self._logger.warning(f"Missing model file: {model.name} at {model.path}")
+                # Check all models' paths and confirm they exist. A model could be missing if it was installed on a volume
+                # that isn't currently mounted. In this case, we don't want to delete the model from the database, but we do
+                # want to alert the user.
+                for model in self._scan_for_missing_models():
+                    self._logger.warning(f"Missing model file: {model.name} at {model.path}")
 
-            self._write_invoke_managed_models_dir_readme()
-            self._restore_incomplete_installs_async()
+                self._write_invoke_managed_models_dir_readme()
+                self._restore_incomplete_installs_async()
+            except BaseException as error:
+                self._startup_error = error
+                self._restore_completed_event.set()
+                raise
 
     def stop(self, invoker: Optional[Invoker] = None) -> None:
         """Stop the installer thread; after this the object can be deleted and garbage collected."""
@@ -334,7 +387,8 @@ class ModelInstallService(ModelInstallServiceBase):
         self._logger.debug("calling stop_event.set()")
         self._stop_event.set()
         self._clear_pending_jobs()
-        self._download_cache.clear()
+        with self._lock:
+            self._download_cache.clear()
         assert self._install_thread is not None
         self._install_thread.join()
         self._running = False
@@ -447,22 +501,52 @@ class ModelInstallService(ModelInstallServiceBase):
         return self.import_model(source_obj, config)
 
     def import_model(self, source: ModelSource, config: Optional[ModelRecordChanges] = None) -> ModelInstallJob:  # noqa D102
-        similar_jobs = [x for x in self.list_jobs() if x.source == source and not x.in_terminal_state]
-        if similar_jobs:
-            self._logger.warning(f"There is already an active install job for {source}. Not enqueuing.")
-            return similar_jobs[0]
+        self._wait_for_restore_complete()
 
-        if isinstance(source, LocalModelSource):
-            install_job = self._import_local_model(source, config)
-            self._put_in_queue(install_job)  # synchronously install
-        elif isinstance(source, HFModelSource):
-            install_job = self._import_from_hf(source, config)
-        elif isinstance(source, URLModelSource):
-            install_job = self._import_from_url(source, config)
-        else:
-            raise ValueError(f"Unsupported model source: '{type(source)}'")
+        source_key = str(source)
+        with self._install_condition:
+            known_job_ids = {job.id for job in self._install_jobs if job.source == source}
+            while source_key in self._pending_sources:
+                self._install_condition.wait()
 
-        self._install_jobs.append(install_job)
+            # Prefer a live job. Waiting can leave this source with both a job that was registered while we waited
+            # and has since gone terminal, and a live one; returning the dead one would report a failure for a
+            # source that is actively installing.
+            similar_jobs = [job for job in self._install_jobs if job.source == source and not job.in_terminal_state]
+            if similar_jobs:
+                self._logger.warning(f"There is already an active install job for {source}. Not enqueuing.")
+                return similar_jobs[0]
+
+            # No live job, but a concurrent owner may have registered one for us while we waited. Return it even if
+            # it is already terminal - we asked at the same time it did, so we get the same answer.
+            new_jobs = [job for job in self._install_jobs if job.source == source and job.id not in known_job_ids]
+            if new_jobs:
+                return new_jobs[0]
+            self._pending_sources.add(source_key)
+
+        try:
+            if isinstance(source, LocalModelSource):
+                install_job = self._import_local_model(source, config)
+                self._put_in_queue(install_job)  # synchronously install
+            elif isinstance(source, HFModelSource):
+                install_job = self._import_from_hf(source, config)
+            elif isinstance(source, URLModelSource):
+                install_job = self._import_from_url(source, config)
+            elif isinstance(source, ExternalModelSource):
+                install_job = self._import_external_model(source, config)
+                self._put_in_queue(install_job)
+            else:
+                raise ValueError(f"Unsupported model source: '{type(source)}'")
+        except BaseException:
+            with self._install_condition:
+                self._pending_sources.remove(source_key)
+                self._install_condition.notify_all()
+            raise
+
+        with self._install_condition:
+            self._install_jobs.append(install_job)
+            self._pending_sources.remove(source_key)
+            self._install_condition.notify_all()
         return install_job
 
     def list_jobs(self) -> List[ModelInstallJob]:  # noqa D102
@@ -492,7 +576,18 @@ class ModelInstallService(ModelInstallServiceBase):
     def wait_for_installs(self, timeout: int = 0) -> List[ModelInstallJob]:  # noqa D102
         """Block until all installation jobs are done."""
         start = time.time()
-        while len(self._download_cache) > 0:
+        restore_timeout = timeout if timeout > 0 else None
+        if not self._wait_for_restore_complete(timeout=restore_timeout):
+            raise TimeoutError("Timeout exceeded")
+
+        while True:
+            # The completion callback removes a download from this cache while holding
+            # the same lock it uses to enqueue the install. Do not observe the cache
+            # between those two operations.
+            with self._lock:
+                downloads_pending = bool(self._download_cache)
+            if not downloads_pending:
+                break
             if self._downloads_changed_event.wait(timeout=0.25):  # in case we miss an event
                 self._downloads_changed_event.clear()
             if timeout > 0 and time.time() - start > timeout:
@@ -580,8 +675,11 @@ class ModelInstallService(ModelInstallServiceBase):
 
     def prune_jobs(self) -> None:
         """Prune all completed and errored jobs."""
-        unfinished_jobs = [x for x in self._install_jobs if not x.in_terminal_state]
-        self._install_jobs = unfinished_jobs
+        # Filter and rebind under the condition. Unlocked, a registration made by a concurrent import_model()
+        # between the two would be dropped, leaving a live install invisible to the duplicate check. Rebind rather
+        # than mutating in place so that readers already iterating the old list are not silently truncated.
+        with self._install_condition:
+            self._install_jobs = [x for x in self._install_jobs if not x.in_terminal_state]
 
     def _migrate_yaml(self) -> None:
         db_models = self.record_store.all_models()
@@ -696,27 +794,47 @@ class ModelInstallService(ModelInstallServiceBase):
             if len(contents) > 0:
                 return contents[0]
 
-        model_path.mkdir(parents=True, exist_ok=True)
-        model_source = self._guess_source(str(source))
-        remote_files, _ = self._remote_files_from_source(model_source)
-        # Handle multiple subfolders for HFModelSource
-        subfolders = model_source.subfolders if isinstance(model_source, HFModelSource) else []
-        job = self._multifile_download(
-            dest=model_path,
-            remote_files=remote_files,
-            subfolder=model_source.subfolder
-            if isinstance(model_source, HFModelSource) and len(subfolders) <= 1
-            else None,
-            subfolders=subfolders if len(subfolders) > 1 else None,
-        )
-        files_string = "file" if len(remote_files) == 1 else "files"
-        self._logger.info(f"Queuing model download: {source} ({len(remote_files)} {files_string})")
-        self._download_queue.wait_for_job(job)
-        if job.complete:
-            assert job.download_path is not None
-            return job.download_path
-        else:
-            raise Exception(job.error)
+        # Serialize concurrent downloads of the same source. Parallel multi-GPU sessions can each
+        # request the same remote model (e.g. the LaMa infill model) at once; without this lock they
+        # both download into the same cache directory and collide on the final rename, which fails on
+        # Windows with "WinError 32: the file is being used by another process". The other waiters
+        # find the completed download on the post-lock re-check below and skip downloading.
+        with self._download_cache_lock(str(source)):
+            if model_path.exists():
+                contents = list(model_path.iterdir())
+                if len(contents) > 0:
+                    return contents[0]
+
+            model_path.mkdir(parents=True, exist_ok=True)
+            model_source = self._guess_source(str(source))
+            remote_files, _ = self._remote_files_from_source(model_source)
+            # Handle multiple subfolders for HFModelSource
+            subfolders = model_source.subfolders if isinstance(model_source, HFModelSource) else []
+            job = self._multifile_download(
+                dest=model_path,
+                remote_files=remote_files,
+                subfolder=model_source.subfolder
+                if isinstance(model_source, HFModelSource) and len(subfolders) <= 1
+                else None,
+                subfolders=subfolders if len(subfolders) > 1 else None,
+            )
+            files_string = "file" if len(remote_files) == 1 else "files"
+            self._logger.info(f"Queuing model download: {source} ({len(remote_files)} {files_string})")
+            self._download_queue.wait_for_job(job)
+            if job.complete:
+                assert job.download_path is not None
+                return job.download_path
+            else:
+                raise Exception(job.error)
+
+    def _download_cache_lock(self, source: str) -> threading.Lock:
+        """Return the lock that serializes downloads for a given source, creating it on first use."""
+        with self._download_cache_locks_guard:
+            lock = self._download_cache_locks.get(source)
+            if lock is None:
+                lock = threading.Lock()
+                self._download_cache_locks[source] = lock
+            return lock
 
     def _remote_files_from_source(
         self, source: ModelSource
@@ -747,7 +865,7 @@ class ModelInstallService(ModelInstallServiceBase):
             except ValueError:
                 pass
 
-            return [RemoteModelFile(url=source.url, path=Path("."), size=0)], None
+            return [RemoteModelFile(url=self._normalize_huggingface_blob_url(source.url), path=Path("."), size=0)], None
 
         raise Exception(f"No files associated with {source}")
 
@@ -758,7 +876,13 @@ class ModelInstallService(ModelInstallServiceBase):
         source_obj: Optional[StringLikeSource] = None
         source_stripped = source.strip('"')
 
-        if Path(source_stripped).exists():  # A local file or directory
+        if source_stripped.startswith("external://"):
+            external_id = source_stripped.removeprefix("external://")
+            provider_id, _, provider_model_id = external_id.partition("/")
+            if not provider_id or not provider_model_id:
+                raise ValueError(f"Invalid external model source: '{source_stripped}'")
+            source_obj = ExternalModelSource(provider_id=provider_id, provider_model_id=provider_model_id)
+        elif Path(source_stripped).exists():  # A local file or directory
             source_obj = LocalModelSource(path=Path(source_stripped))
         elif match := re.match(hf_repoid_re, source):
             source_obj = HFModelSource(
@@ -850,6 +974,9 @@ class ModelInstallService(ModelInstallServiceBase):
         self._logger.info(f"Installer thread {threading.get_ident()} exiting")
 
     def _register_or_install(self, job: ModelInstallJob) -> None:
+        if isinstance(job.source, ExternalModelSource):
+            self._register_external_model(job)
+            return
         # local jobs will be in waiting state, remote jobs will be downloading state
         job.total_bytes = self._stat_size(job.local_path)
         job.bytes = job.total_bytes
@@ -868,6 +995,71 @@ class ModelInstallService(ModelInstallServiceBase):
         else:
             key = self.install_path(job.local_path, job.config_in)
         job.config_out = self.record_store.get_model(key)
+        self._signal_job_completed(job)
+
+    def _register_external_model(self, job: ModelInstallJob) -> None:
+        job.total_bytes = 0
+        job.bytes = 0
+        self._signal_job_running(job)
+        job.config_in.source = str(job.source)
+        job.config_in.source_type = MODEL_SOURCE_TO_TYPE_MAP[job.source.__class__]
+
+        provider_id = job.source.provider_id
+        provider_model_id = job.source.provider_model_id
+        capabilities = job.config_in.capabilities or ExternalModelCapabilities()
+        default_settings = (
+            job.config_in.default_settings
+            if isinstance(job.config_in.default_settings, ExternalApiModelDefaultSettings)
+            else None
+        )
+        name = job.config_in.name or f"{provider_id} {provider_model_id}"
+        key = job.config_in.key or slugify(f"{provider_id}-{provider_model_id}")
+
+        existing_external = next(
+            (
+                model
+                for model in self.record_store.search_by_attr(
+                    base_model=BaseModelType.External, model_type=ModelType.ExternalImageGenerator
+                )
+                if isinstance(model, ExternalApiModelConfig)
+                and model.provider_id == provider_id
+                and model.provider_model_id == provider_model_id
+            ),
+            None,
+        )
+
+        if existing_external is not None:
+            key = existing_external.key
+        else:
+            try:
+                self.record_store.get_model(key)
+                raise DuplicateModelException(
+                    f"Model key '{key}' already exists. Provide a different key to install this external model."
+                )
+            except UnknownModelException:
+                pass
+
+        config = ExternalApiModelConfig(
+            key=key,
+            name=name,
+            description=job.config_in.description,
+            provider_id=provider_id,
+            provider_model_id=provider_model_id,
+            capabilities=capabilities,
+            default_settings=default_settings,
+            source=str(job.source),
+            source_type=MODEL_SOURCE_TO_TYPE_MAP[job.source.__class__],
+            path="",
+            hash="",
+            file_size=0,
+        )
+
+        if existing_external is not None:
+            self.record_store.replace_model(existing_external.key, config)
+        else:
+            self.record_store.add_model(config)
+
+        job.config_out = self.record_store.get_model(config.key)
         self._signal_job_completed(job)
 
     def _set_error(self, install_job: ModelInstallJob, excp: Exception) -> None:
@@ -905,6 +1097,8 @@ class ModelInstallService(ModelInstallServiceBase):
         """Scan the models directory for missing models and return a list of them."""
         missing_models: list[AnyModelConfig] = []
         for model_config in self.record_store.all_models():
+            if model_config.base == BaseModelType.External or model_config.format == ModelFormat.ExternalApi:
+                continue
             if not (self.app_config.models_path / model_config.path).resolve().exists():
                 missing_models.append(model_config)
         return missing_models
@@ -939,6 +1133,14 @@ class ModelInstallService(ModelInstallServiceBase):
             except DuplicateModelException:
                 # In case a duplicate models sneaks by, we will ignore this error - we "found" the model
                 pass
+            except InvalidModelConfigException as e:
+                # A file we cannot register at all - unidentifiable with allow_unknown_models off, or
+                # recognised and rejected as unusable (e.g. a truncated checkpoint). ModelSearch already
+                # contains anything this callback raises, so startup survives either way; handling it
+                # here makes that a property of the scan rather than of the caller, and says which file
+                # was skipped and why.
+                self._logger.warning(f"Skipping {model_path.name}: {e}")
+                return False
             return True
 
         self._logger.info(f"Scanning {self._app_config.models_path} for orphaned models")
@@ -959,8 +1161,15 @@ class ModelInstallService(ModelInstallServiceBase):
         )
 
         if result.config is None:
-            self._logger.error(f"Could not identify model for {model_path}, detailed results: {result.details}")
-            raise InvalidModelConfigException(f"Could not identify model for {model_path}")
+            # A model that was recognised and then rejected as unusable (e.g. a truncated checkpoint)
+            # comes with a specific reason. Report that instead of "could not identify", which would be
+            # both wrong and useless to whoever has to work out why the install failed.
+            if invalid := result.invalid_matches:
+                reason = f"Model at {model_path} cannot be used: {invalid[0]}"
+            else:
+                reason = f"Could not identify model for {model_path}"
+            self._logger.error(f"{reason}, detailed results: {result.details}")
+            raise InvalidModelConfigException(reason)
         elif isinstance(result.config, Unknown_Config):
             self._logger.error(f"Could not identify model for {model_path}, detailed results: {result.details}")
 
@@ -1044,6 +1253,19 @@ class ModelInstallService(ModelInstallServiceBase):
             config=config,
             metadata=metadata,
             remote_files=remote_files,
+        )
+
+    def _import_external_model(
+        self,
+        source: ExternalModelSource,
+        config: Optional[ModelRecordChanges] = None,
+    ) -> ModelInstallJob:
+        return ModelInstallJob(
+            id=self._next_id(),
+            source=source,
+            config_in=config or ModelRecordChanges(),
+            local_path=self._app_config.models_path,
+            inplace=True,
         )
 
     def _import_remote_model(
@@ -1140,7 +1362,8 @@ class ModelInstallService(ModelInstallServiceBase):
                 part.final_url = meta.get("final_url") or part.final_url
                 if meta.get("download_path"):
                     part.download_path = Path(meta.get("download_path"))
-        self._download_cache[multifile_job.id] = job
+        with self._lock:
+            self._download_cache[multifile_job.id] = job
         job._multifile_job = multifile_job
 
         self._write_install_marker(job, status=InstallStatus.WAITING)
@@ -1384,3 +1607,15 @@ class ModelInstallService(ModelInstallServiceBase):
         if re.match(r"^https?://huggingface.co/[^/]+/[^/]+$", url.lower()):
             return HuggingFaceMetadataFetch
         raise ValueError(f"Unsupported model source: '{url}'")
+
+    @staticmethod
+    def _normalize_huggingface_blob_url(url: AnyHttpUrl) -> Url:
+        """Convert Hugging Face file page URLs to direct download URLs."""
+        return Url(
+            re.sub(
+                r"^(https?://huggingface\.co/[^/]+/[^/]+)/blob/([^?#]+)([?#].*)?$",
+                r"\1/resolve/\2\3",
+                str(url),
+                flags=re.IGNORECASE,
+            )
+        )

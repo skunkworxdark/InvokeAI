@@ -4,8 +4,12 @@ import type { CanvasToolModule } from 'features/controlLayers/konva/CanvasTool/C
 import { canvasToBlob, getPrefixedId } from 'features/controlLayers/konva/util';
 import { type CanvasTextSettingsState, selectCanvasTextSlice } from 'features/controlLayers/store/canvasTextSlice';
 import type { Coordinate, RgbaColor } from 'features/controlLayers/store/types';
-import { imageDTOToImageObject } from 'features/controlLayers/store/util';
-import { getFontStackById, TEXT_RASTER_PADDING } from 'features/controlLayers/text/textConstants';
+import { buildCommittedTextImageState, getCommittedTextImageDimensions } from 'features/controlLayers/text/textCommit';
+import {
+  getFontStackById,
+  subscribeToCustomTextFontStacks,
+  TEXT_RASTER_PADDING,
+} from 'features/controlLayers/text/textConstants';
 import {
   buildFontDescriptor,
   calculateLayerPosition,
@@ -15,7 +19,10 @@ import {
   type TextMeasureConfig,
 } from 'features/controlLayers/text/textRenderer';
 import { type TextSessionStatus, transitionTextSessionStatus } from 'features/controlLayers/text/textSessionMachine';
+import { awaitUserFontReady } from 'features/controlLayers/text/textUserFonts';
+import { toast } from 'features/toast/toast';
 import { selectActiveTab } from 'features/ui/store/uiSelectors';
+import { t } from 'i18next';
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { atom } from 'nanostores';
@@ -114,6 +121,12 @@ export class CanvasTextToolModule extends CanvasModuleBase {
     );
     this.subscriptions.add(
       this.parent.$cursorPos.listen(() => {
+        this.render();
+      })
+    );
+    this.subscriptions.add(
+      subscribeToCustomTextFontStacks(() => {
+        this.cursorMetricsKey = null;
         this.render();
       })
     );
@@ -318,7 +331,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       return;
     }
     if (this.parent.$tool.get() !== 'text') {
-      this.parent.$tool.set('text');
+      this.parent.setBaseTool('text');
     }
   };
 
@@ -351,6 +364,25 @@ export class CanvasTextToolModule extends CanvasModuleBase {
     textSettings: CanvasTextSettingsState,
     color: RgbaColor
   ) => {
+    const fontReadiness = await awaitUserFontReady(textSettings.fontId);
+    if (fontReadiness !== 'ready') {
+      const currentSession = this.$session.get();
+      if (currentSession?.id === session.id) {
+        this.$session.set({ ...currentSession, status: 'editing' });
+      }
+      const isTimeout = fontReadiness === 'timeout';
+      toast({
+        id: isTimeout
+          ? `custom-font-still-loading:${textSettings.fontId}`
+          : `custom-font-load-failed:${textSettings.fontId}`,
+        status: 'error',
+        title: t(isTimeout ? 'toast.customFontStillLoading' : 'toast.customFontLoadFailed'),
+        description: t(isTimeout ? 'toast.customFontStillLoadingDesc' : 'toast.customFontUnavailableDesc'),
+        withCount: false,
+      });
+      return;
+    }
+
     if (typeof document !== 'undefined' && document.fonts?.load) {
       const fontSpec = buildFontDescriptor({
         fontFamily: getFontStackById(textSettings.fontId),
@@ -418,7 +450,8 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       is_intermediate: true,
       silent: true,
     });
-    const imageState = imageDTOToImageObject(imageDTO);
+    const { width: committedWidth, height: committedHeight } = getCommittedTextImageDimensions(totalWidth, totalHeight);
+    const imageState = buildCommittedTextImageState(imageDTO, totalWidth, totalHeight);
 
     const extraLeftPadding = Math.ceil(textSettings.fontSize * 0.12);
     const fallbackPosition = calculateLayerPosition(
@@ -434,8 +467,8 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       rotation === 0
         ? basePosition
         : {
-            x: basePosition.x + baseSize.width / 2 - totalWidth / 2,
-            y: basePosition.y + baseSize.height / 2 - totalHeight / 2,
+            x: basePosition.x + baseSize.width / 2 - committedWidth / 2,
+            y: basePosition.y + baseSize.height / 2 - committedHeight / 2,
           };
 
     const selectedAdapter = this.manager.stateApi.getSelectedEntityAdapter();

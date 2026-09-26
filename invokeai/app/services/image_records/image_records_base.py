@@ -12,6 +12,7 @@ from invokeai.app.services.image_records.image_records_common import (
 )
 from invokeai.app.services.shared.pagination import OffsetPaginatedResults
 from invokeai.app.services.shared.sqlite.sqlite_common import SQLiteDirection
+from invokeai.app.services.virtual_boards.virtual_boards_common import VirtualSubBoardDTO
 
 
 class ImageRecordStorageBase(ABC):
@@ -22,6 +23,17 @@ class ImageRecordStorageBase(ABC):
     @abstractmethod
     def get(self, image_name: str) -> ImageRecord:
         """Gets an image record."""
+        pass
+
+    @abstractmethod
+    def exists(self, image_name: str) -> bool:
+        """Reports whether the image row is present, without reading it.
+
+        Separate from `get` because the callers that need this are deciding whether something is
+        gone, and `get` cannot answer that alone: it also deserializes, so a row written by a
+        newer version -- an enum value this one does not know -- fails the same way a missing row
+        does. A storage error still propagates, because "could not look" is not "not there".
+        """
         pass
 
     @abstractmethod
@@ -69,8 +81,18 @@ class ImageRecordStorageBase(ABC):
         pass
 
     @abstractmethod
-    def delete_intermediates(self) -> list[str]:
-        """Deletes all intermediate image records, returning a list of deleted image names."""
+    def get_intermediates(self) -> list[tuple[str, str]]:
+        """Gets all intermediate image records as (image_name, image_subfolder) tuples, without deleting them."""
+        pass
+
+    @abstractmethod
+    def delete_intermediates_by_names(self, image_names: list[str]) -> list[str]:
+        """Deletes the named image records, skipping any that are no longer intermediates.
+
+        Returns the names whose records this call actually removed. Names that were already gone, and
+        names whose records survive because they are no longer intermediates, are both excluded, so a
+        caller purges the files of exactly the returned names and touches nothing else.
+        """
         pass
 
     @abstractmethod
@@ -93,6 +115,7 @@ class ImageRecordStorageBase(ABC):
         node_id: Optional[str] = None,
         metadata: Optional[str] = None,
         user_id: Optional[str] = None,
+        image_subfolder: str = "",
     ) -> datetime:
         """Saves an image record."""
         pass
@@ -121,4 +144,27 @@ class ImageRecordStorageBase(ABC):
         is_admin: bool = False,
     ) -> ImageNamesResult:
         """Gets ordered list of image names with metadata for optimistic updates."""
+        pass
+
+    @abstractmethod
+    def get_image_dates(
+        self,
+        user_id: Optional[str] = None,
+        is_admin: bool = False,
+    ) -> list[VirtualSubBoardDTO]:
+        """Gets a list of dates with image counts, grouped by DATE(created_at)."""
+        pass
+
+    @abstractmethod
+    def get_image_names_by_date(
+        self,
+        date: str,
+        starred_first: bool = True,
+        order_dir: SQLiteDirection = SQLiteDirection.Descending,
+        categories: Optional[list[ImageCategory]] = None,
+        search_term: Optional[str] = None,
+        user_id: Optional[str] = None,
+        is_admin: bool = False,
+    ) -> ImageNamesResult:
+        """Gets ordered list of image names for a specific date."""
         pass

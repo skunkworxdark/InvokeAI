@@ -1,9 +1,14 @@
 import type { OpenAPIV3_1 } from 'openapi-types';
 import type { stringify } from 'querystring';
 import type { paths } from 'services/api/schema';
-import type { AppVersion } from 'services/api/types';
+import type {
+  AppVersion,
+  ExternalProviderConfig,
+  ExternalProviderConfigUpdate,
+  ExternalProviderStatus,
+} from 'services/api/types';
 
-import { api, buildV1Url } from '..';
+import { api, buildV1Url, getBaseUrl } from '..';
 
 /**
  * Builds an endpoint URL for the app router
@@ -53,6 +58,16 @@ export const appInfoApi = api.injectEndpoints({
       }),
       providesTags: ['AppConfig'],
     }),
+    getGenerationDeviceOptions: build.query<
+      paths['/api/v1/app/generation_device_options']['get']['responses']['200']['content']['application/json'],
+      void
+    >({
+      query: () => ({
+        url: buildAppInfoUrl('generation_device_options'),
+        method: 'GET',
+      }),
+      providesTags: ['FetchOnReconnect'],
+    }),
     updateRuntimeConfig: build.mutation<
       paths['/api/v1/app/runtime_config']['patch']['responses']['200']['content']['application/json'],
       paths['/api/v1/app/runtime_config']['patch']['requestBody']['content']['application/json']
@@ -71,6 +86,35 @@ export const appInfoApi = api.injectEndpoints({
         }
       },
       invalidatesTags: ['AppConfig'],
+    }),
+    getExternalProviderStatuses: build.query<ExternalProviderStatus[], void>({
+      query: () => ({
+        url: buildAppInfoUrl('external_providers/status'),
+        method: 'GET',
+      }),
+      providesTags: ['FetchOnReconnect'],
+    }),
+    getExternalProviderConfigs: build.query<ExternalProviderConfig[], void>({
+      query: () => ({
+        url: buildAppInfoUrl('external_providers/config'),
+        method: 'GET',
+      }),
+      providesTags: ['AppConfig', 'FetchOnReconnect'],
+    }),
+    setExternalProviderConfig: build.mutation<ExternalProviderConfig, SetExternalProviderConfigArg>({
+      query: ({ provider_id, ...body }) => ({
+        url: buildAppInfoUrl(`external_providers/config/${provider_id}`),
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['AppConfig', 'FetchOnReconnect'],
+    }),
+    resetExternalProviderConfig: build.mutation<ExternalProviderConfig, string>({
+      query: (provider_id) => ({
+        url: buildAppInfoUrl(`external_providers/config/${provider_id}`),
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['AppConfig', 'FetchOnReconnect'],
     }),
     getInvocationCacheStatus: build.query<
       paths['/api/v1/app/invocation_cache/status']['get']['responses']['200']['content']['application/json'],
@@ -104,7 +148,7 @@ export const appInfoApi = api.injectEndpoints({
       invalidatesTags: ['InvocationCacheStatus'],
     }),
     getOpenAPISchema: build.query<OpenAPIV3_1.Document, void>({
-      query: () => `${window.location.origin}/openapi.json`,
+      query: () => `${getBaseUrl()}/openapi.json`,
       providesTags: ['Schema'],
     }),
   }),
@@ -115,6 +159,11 @@ export const {
   useGetAppDepsQuery,
   useGetPatchmatchStatusQuery,
   useGetRuntimeConfigQuery,
+  useGetGenerationDeviceOptionsQuery,
+  useGetExternalProviderStatusesQuery,
+  useGetExternalProviderConfigsQuery,
+  useSetExternalProviderConfigMutation,
+  useResetExternalProviderConfigMutation,
   useUpdateRuntimeConfigMutation,
   useClearInvocationCacheMutation,
   useDisableInvocationCacheMutation,
@@ -123,3 +172,7 @@ export const {
   useGetOpenAPISchemaQuery,
   useLazyGetOpenAPISchemaQuery,
 } = appInfoApi;
+
+type SetExternalProviderConfigArg = ExternalProviderConfigUpdate & {
+  provider_id: string;
+};

@@ -11,6 +11,11 @@ export const HANDLE_TOOLTIP_OPEN_DELAY = 500;
 export const NODE_WIDTH = 320;
 
 /**
+ * The grid spacing used by the workflow editor and workflow image export.
+ */
+export const WORKFLOW_GRID_SIZE = 25;
+
+/**
  * This class name is special - reactflow uses it to identify the drag handle of a node,
  * applying the appropriate listeners to it.
  */
@@ -36,6 +41,7 @@ export const FIELD_COLORS: { [key: string]: string } = {
   BoardField: 'purple.500',
   BooleanField: 'green.500',
   StylePresetField: 'purple.400',
+  SystemPromptField: 'purple.300',
   CLIPField: 'green.500',
   ColorField: 'pink.300',
   ConditioningField: 'cyan.500',
@@ -57,6 +63,7 @@ export const FIELD_COLORS: { [key: string]: string } = {
   CogView4MainModelField: 'teal.500',
   ZImageMainModelField: 'teal.500',
   AnimaMainModelField: 'teal.500',
+  WanMainModelField: 'teal.500',
   SDXLMainModelField: 'teal.500',
   SDXLRefinerModelField: 'teal.500',
   SpandrelImageToImageModelField: 'teal.500',

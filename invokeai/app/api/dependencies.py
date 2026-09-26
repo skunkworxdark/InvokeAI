@@ -10,13 +10,24 @@ from invokeai.app.services.auth.token_service import set_jwt_secret
 from invokeai.app.services.board_image_records.board_image_records_sqlite import SqliteBoardImageRecordStorage
 from invokeai.app.services.board_images.board_images_default import BoardImagesService
 from invokeai.app.services.board_records.board_records_sqlite import SqliteBoardRecordStorage
+from invokeai.app.services.board_video_records.board_video_records_sqlite import SqliteBoardVideoRecordStorage
 from invokeai.app.services.boards.boards_default import BoardService
 from invokeai.app.services.bulk_download.bulk_download_default import BulkDownloadService
 from invokeai.app.services.client_state_persistence.client_state_persistence_sqlite import ClientStatePersistenceSqlite
 from invokeai.app.services.config.config_default import InvokeAIAppConfig
 from invokeai.app.services.download.download_default import DownloadQueueService
 from invokeai.app.services.events.events_fastapievents import FastAPIEventService
+from invokeai.app.services.external_generation.external_generation_default import ExternalGenerationService
+from invokeai.app.services.external_generation.providers import (
+    AlibabaCloudProvider,
+    GeminiProvider,
+    OpenAIProvider,
+    SeedreamProvider,
+)
+from invokeai.app.services.external_generation.startup import sync_configured_external_starter_models
+from invokeai.app.services.gallery.gallery_default import SqliteGalleryService
 from invokeai.app.services.image_files.image_files_disk import DiskImageFileStorage
+from invokeai.app.services.image_moves.image_moves_default import ImageMoveService
 from invokeai.app.services.image_records.image_records_sqlite import SqliteImageRecordStorage
 from invokeai.app.services.images.images_default import ImageService
 from invokeai.app.services.invocation_cache.invocation_cache_memory import MemoryInvocationCache
@@ -41,8 +52,12 @@ from invokeai.app.services.session_queue.session_queue_sqlite import SqliteSessi
 from invokeai.app.services.shared.sqlite.sqlite_util import init_db
 from invokeai.app.services.style_preset_images.style_preset_images_disk import StylePresetImageFileStorageDisk
 from invokeai.app.services.style_preset_records.style_preset_records_sqlite import SqliteStylePresetRecordsStorage
+from invokeai.app.services.system_prompt_records.system_prompt_records_sqlite import SqliteSystemPromptRecordsStorage
 from invokeai.app.services.urls.urls_default import LocalUrlService
 from invokeai.app.services.users.users_default import UserService
+from invokeai.app.services.video_files.video_files_disk import DiskVideoFileStorage
+from invokeai.app.services.video_records.video_records_sqlite import SqliteVideoRecordStorage
+from invokeai.app.services.videos.videos_default import VideoService
 from invokeai.app.services.workflow_records.workflow_records_sqlite import SqliteWorkflowRecordsStorage
 from invokeai.app.services.workflow_thumbnails.workflow_thumbnails_disk import WorkflowThumbnailFileStorageDisk
 from invokeai.backend.stable_diffusion.diffusion.conditioning_data import (
@@ -50,10 +65,14 @@ from invokeai.backend.stable_diffusion.diffusion.conditioning_data import (
     BasicConditioningInfo,
     CogView4ConditioningInfo,
     ConditioningFieldData,
+    ErnieImageConditioningInfo,
     FLUXConditioningInfo,
+    Ideogram4ConditioningInfo,
+    Krea2ConditioningInfo,
     QwenImageConditioningInfo,
     SD3ConditioningInfo,
     SDXLConditioningInfo,
+    WanConditioningInfo,
     ZImageConditioningInfo,
 )
 from invokeai.backend.util.logging import InvokeAILogger
@@ -99,6 +118,7 @@ class ApiDependencies:
             raise ValueError("Output folder is not set")
 
         image_files = DiskImageFileStorage(f"{output_folder}/images")
+        video_files = DiskVideoFileStorage(f"{output_folder}/videos")
 
         model_images_folder = config.models_path
         style_presets_folder = config.style_presets_path
@@ -122,7 +142,12 @@ class ApiDependencies:
         events = FastAPIEventService(event_handler_id, loop=loop)
         bulk_download = BulkDownloadService()
         image_records = SqliteImageRecordStorage(db=db)
+        image_moves = ImageMoveService(db=db, image_files=image_files, config=configuration, logger=logger)
         images = ImageService()
+        video_records = SqliteVideoRecordStorage(db=db)
+        videos = VideoService()
+        board_video_records = SqliteBoardVideoRecordStorage(db=db)
+        gallery = SqliteGalleryService(db=db)
         invocation_cache = MemoryInvocationCache(max_cache_size=config.node_cache_size)
         tensors = ObjectSerializerForwardCache(
             ObjectSerializerDisk[torch.Tensor](
@@ -142,20 +167,35 @@ class ApiDependencies:
                     SD3ConditioningInfo,
                     CogView4ConditioningInfo,
                     ZImageConditioningInfo,
+                    ErnieImageConditioningInfo,
+                    Ideogram4ConditioningInfo,
                     QwenImageConditioningInfo,
+                    Krea2ConditioningInfo,
                     AnimaConditioningInfo,
+                    WanConditioningInfo,
                 ],
                 ephemeral=True,
             ),
         )
         download_queue_service = DownloadQueueService(app_config=configuration, event_bus=events)
-        model_images_service = ModelImageFileStorageDisk(model_images_folder / "model_images")
+        model_record_service = ModelRecordServiceSQL(db=db, logger=logger)
         model_manager = ModelManagerService.build_model_manager(
             app_config=configuration,
-            model_record_service=ModelRecordServiceSQL(db=db, logger=logger),
+            model_record_service=model_record_service,
             download_queue=download_queue_service,
             events=events,
         )
+        external_generation = ExternalGenerationService(
+            providers={
+                AlibabaCloudProvider.provider_id: AlibabaCloudProvider(app_config=configuration, logger=logger),
+                GeminiProvider.provider_id: GeminiProvider(app_config=configuration, logger=logger),
+                OpenAIProvider.provider_id: OpenAIProvider(app_config=configuration, logger=logger),
+                SeedreamProvider.provider_id: SeedreamProvider(app_config=configuration, logger=logger),
+            },
+            logger=logger,
+            record_store=model_record_service,
+        )
+        model_images_service = ModelImageFileStorageDisk(model_images_folder / "model_images")
         model_relationships = ModelRelationshipsService()
         model_relationship_records = SqliteModelRelationshipRecordStorage(db=db)
         names = SimpleNameService()
@@ -166,6 +206,7 @@ class ApiDependencies:
         workflow_records = SqliteWorkflowRecordsStorage(db=db)
         style_preset_records = SqliteStylePresetRecordsStorage(db=db)
         style_preset_image_files = StylePresetImageFileStorageDisk(style_presets_folder / "images")
+        system_prompt_records = SqliteSystemPromptRecordsStorage(db=db)
         workflow_thumbnails = WorkflowThumbnailFileStorageDisk(workflow_thumbnails_folder)
         client_state_persistence = ClientStatePersistenceSqlite(db=db)
         users = UserService(db=db)
@@ -179,6 +220,7 @@ class ApiDependencies:
             configuration=configuration,
             events=events,
             image_files=image_files,
+            image_moves=image_moves,
             image_records=image_records,
             images=images,
             invocation_cache=invocation_cache,
@@ -188,6 +230,7 @@ class ApiDependencies:
             model_relationships=model_relationships,
             model_relationship_records=model_relationship_records,
             download_queue=download_queue_service,
+            external_generation=external_generation,
             names=names,
             performance_statistics=performance_statistics,
             session_processor=session_processor,
@@ -198,12 +241,28 @@ class ApiDependencies:
             conditioning=conditioning,
             style_preset_records=style_preset_records,
             style_preset_image_files=style_preset_image_files,
+            system_prompt_records=system_prompt_records,
             workflow_thumbnails=workflow_thumbnails,
             client_state_persistence=client_state_persistence,
             users=users,
+            videos=videos,
+            video_files=video_files,
+            video_records=video_records,
+            board_video_records=board_video_records,
+            gallery=gallery,
         )
 
         ApiDependencies.invoker = Invoker(services)
+        configured_external_providers = {
+            provider_id
+            for provider_id, status in external_generation.get_provider_statuses().items()
+            if status.configured
+        }
+        sync_configured_external_starter_models(
+            configured_provider_ids=configured_external_providers,
+            model_manager=model_manager,
+            logger=logger,
+        )
         db.clean()
 
     @staticmethod

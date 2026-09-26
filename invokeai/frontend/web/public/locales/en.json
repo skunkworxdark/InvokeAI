@@ -13,7 +13,8 @@
         "toggleRightPanel": "Toggle Right Panel (G)",
         "toggleLeftPanel": "Toggle Left Panel (T)",
         "uploadImage": "Upload Image",
-        "uploadImages": "Upload Image(s)"
+        "uploadImages": "Upload Images",
+        "uploadMedia": "Upload Media"
     },
     "auth": {
         "login": {
@@ -53,6 +54,8 @@
         "userMenu": "User Menu",
         "admin": "Admin",
         "logout": "Logout",
+        "logoutFailed": "Logout Failed",
+        "logoutFailedDesc": "Could not reach the server to log out. You are still signed in.",
         "adminOnlyFeature": "This feature is only available to administrators.",
         "profile": {
             "menuItem": "My Profile",
@@ -119,8 +122,9 @@
         "archived": "Archived",
         "autoAddBoard": "Auto-Add Board",
         "boards": "Boards",
+        "byDate": "By Date",
         "selectedForAutoAdd": "Selected for Auto-Add",
-        "bottomMessage": "Deleting images will reset any features currently using them.",
+        "bottomMessage": "Deleting images/videos will reset any features currently using them.",
         "cancel": "Cancel",
         "pause": "Pause",
         "resume": "Resume",
@@ -129,22 +133,27 @@
         "restartRequired": "Restart required",
         "resumeRefused": "Resume refused by server. Restart required.",
         "changeBoard": "Change Board",
+        "changeBoardImage_one": "Move Image to Board",
+        "changeBoardImage_other": "Move {{count}} Images to Board",
+        "changeBoardVideo_one": "Move Video to Board",
+        "changeBoardVideo_other": "Move {{count}} Videos to Board",
         "clearSearch": "Clear Search",
         "deleteBoard": "Delete Board",
         "deleteBoardAndImages": "Delete Board and Images",
+        "deleteBoardAndAssets": "Delete Board, Images & Videos",
         "deleteBoardOnly": "Delete Board Only",
-        "deletedBoardsCannotbeRestored": "Deleted boards and images cannot be restored. Selecting 'Delete Board Only' will move images to an uncategorized state.",
-        "deletedPrivateBoardsCannotbeRestored": "Deleted boards and images cannot be restored. Selecting 'Delete Board Only' will move images to a private uncategorized state for the image's creator.",
-        "uncategorizedImages": "Uncategorized Images",
-        "deleteAllUncategorizedImages": "Delete All Uncategorized Images",
+        "deletedBoardsCannotbeRestored": "Deleted boards, images, and videos cannot be restored. Selecting 'Delete Board Only' will move images and videos to an uncategorized state.",
+        "deletedPrivateBoardsCannotbeRestored": "Deleted boards, images, and videos cannot be restored. Selecting 'Delete Board Only' will move images and videos to a private uncategorized state for the original creator.",
+        "uncategorizedImages": "Uncategorized Images/Videos",
+        "deleteAllUncategorizedImages": "Delete All Uncategorized Images/Videos",
         "deletedImagesCannotBeRestored": "Deleted images cannot be restored.",
         "hideBoards": "Hide Boards",
         "loading": "Loading...",
         "locateInGalery": "Locate in Gallery",
         "menuItemAutoAdd": "Auto-add to this Board",
         "move": "Move",
-        "movingImagesToBoard_one": "Moving {{count}} image to board:",
-        "movingImagesToBoard_other": "Moving {{count}} images to board:",
+        "movingImagesToBoard_one": "Moving {{count}} image/video to board:",
+        "movingImagesToBoard_other": "Moving {{count}} images/videos to board:",
         "myBoard": "My Board",
         "noBoards": "No {{boardType}} Boards",
         "noMatching": "No matching Boards",
@@ -152,15 +161,17 @@
         "searchBoard": "Search Boards...",
         "selectBoard": "Select a Board",
         "shared": "Shared Boards",
-        "topMessage": "This selection contains images used in the following features:",
+        "topMessage": "This selection contains images/videos used in the following features:",
         "unarchiveBoard": "Unarchive Board",
         "uncategorized": "Uncategorized",
         "viewBoards": "View Boards",
-        "downloadBoard": "Download Board",
+        "downloadBoard": "Download Board Images",
         "imagesWithCount_one": "{{count}} image",
         "imagesWithCount_other": "{{count}} images",
         "assetsWithCount_one": "{{count}} asset",
         "assetsWithCount_other": "{{count}} assets",
+        "videosWithCount_one": "{{count}} video",
+        "videosWithCount_other": "{{count}} videos",
         "updateBoardError": "Error updating board",
         "setBoardVisibility": "Set Board Visibility",
         "setVisibilityPrivate": "Set Private",
@@ -212,7 +223,9 @@
         "copy": "Copy",
         "copyError": "$t(gallery.copy) Error",
         "clipboard": "Clipboard",
+        "collapse": "Collapse",
         "collapseAll": "Collapse All",
+        "expand": "Expand",
         "crop": "Crop",
         "on": "On",
         "off": "Off",
@@ -227,6 +240,7 @@
         "direction": "Direction",
         "ipAdapter": "IP Adapter",
         "t2iAdapter": "T2I Adapter",
+        "prompt": "Prompt",
         "positivePrompt": "Positive Prompt",
         "negativePrompt": "Negative Prompt",
         "removeNegativePrompt": "Remove Negative Prompt",
@@ -303,6 +317,7 @@
         "unknown": "Unknown",
         "unpin": "Unpin",
         "upload": "Upload",
+        "userGuideLabel": "User Guide",
         "zoomIn": "Zoom In",
         "zoomOut": "Zoom Out",
         "updated": "Updated",
@@ -378,7 +393,23 @@
         "promptHistory": "Prompt History",
         "clearHistory": "Clear History",
         "usePrompt": "Use prompt",
-        "searchPrompts": "Search..."
+        "searchPrompts": "Search...",
+        "imageToPrompt": "Image to Prompt",
+        "selectVisionModel": "Select Vision Model...",
+        "changeImage": "Change Image",
+        "uploadImage": "Upload Image",
+        "generatePrompt": "Generate Prompt",
+        "expandPromptWithLLM": "Expand Prompt with LLM",
+        "expandPrompt": "Expand Prompt",
+        "selectTextLLM": "Select Text LLM...",
+        "expand": "Expand",
+        "noTextLLMInstalledTitle": "No Text LLM installed",
+        "noTextLLMInstalledDescription": "Prompt expansion needs a Text LLM (causal language model). We recommend Qwen2.5-1.5B-Instruct (~3 GB) — small, fast, and available as a starter model.",
+        "noVisionModelInstalledTitle": "No vision model installed",
+        "noVisionModelInstalledDescription": "Image-to-prompt needs a vision-language model (e.g. LLaVA Onevision). The 0.5B starter (~1 GB) is the lightweight default.",
+        "openModelManager": "Open Model Manager",
+        "llmTaskLoadingModel": "Loading model…",
+        "llmTaskGenerating": "Generating…"
     },
     "queue": {
         "queue": "Queue",
@@ -387,6 +418,7 @@
         "queueActionsMenu": "Queue Actions Menu",
         "queueEmpty": "Queue Empty",
         "queueItem": "Queue Item",
+        "queueItemLoadFailed": "This queue item could not be loaded.",
         "enqueueing": "Queueing Batch",
         "resume": "Resume",
         "resumeTooltip": "Resume Processor",
@@ -428,10 +460,12 @@
         "next": "Next",
         "status": "Status",
         "total": "Total",
+        "gpu": "GPU #",
         "time": "Time",
         "credits": "Credits",
         "pending": "Pending",
         "in_progress": "In Progress",
+        "waiting": "Waiting On Child Workflow",
         "paused": "Paused",
         "completed": "Completed",
         "failed": "Failed",
@@ -504,8 +538,8 @@
         "assets": "Assets",
         "alwaysShowImageSizeBadge": "Always Show Image Size Badge",
         "assetsTab": "Files you've uploaded for use in your projects.",
-        "autoAssignBoardOnClick": "Auto-Assign Board on Click",
-        "autoSwitchNewImages": "Auto-Switch to New Images",
+        "autoAssignBoardOnClick": "Auto-Assign Board",
+        "autoSwitchNewImages": "Auto-Switch to New Images/Videos",
         "boardsSettings": "Boards Settings",
         "copy": "Copy",
         "currentlyInUse": "This image is currently in use in the following features:",
@@ -515,32 +549,50 @@
         "deleteImage_one": "Delete Image",
         "deleteImage_other": "Delete {{count}} Images",
         "deleteImagePermanent": "Deleted images cannot be restored.",
+        "deleteVideo_one": "Delete Video",
+        "deleteVideo_other": "Delete {{count}} Videos",
+        "deleteVideoPermanent": "Deleted videos cannot be restored.",
+        "playVideo": "Play video",
+        "closeVideoPlayer": "Close video player",
+        "copyVideoFrame": "Copy Frame",
         "displayBoardSearch": "Board Search",
-        "displaySearch": "Image Search",
+        "displaySearch": "Gallery Search",
         "download": "Download",
         "exitBoardSearch": "Exit Board Search",
-        "exitSearch": "Exit Image Search",
+        "exitSearch": "Exit Gallery Search",
         "featuresWillReset": "If you delete this image, those features will immediately be reset.",
         "galleryImageSize": "Image Size",
         "gallerySettings": "Gallery Settings",
         "go": "Go",
         "image": "image",
-        "imagesTab": "Images you've created and saved within Invoke.",
-        "imagesSettings": "Gallery Images Settings",
+        "imagesTab": "Images/Videos you've created and saved within Invoke.",
+        "imagesSettings": "Gallery Images/Videos Settings",
         "jump": "Jump",
         "loading": "Loading",
         "loadingGallery": "Loading gallery...",
         "loadingMetadata": "Loading metadata...",
         "newestFirst": "Newest First",
-        "noImagesFound": "No images found",
+        "noImagesFound": "No images/videos found",
         "oldestFirst": "Oldest First",
         "sortDirection": "Sort Direction",
-        "showStarredImagesFirst": "Show Starred Images First",
+        "showStarredImagesFirst": "Show Starred Images/Videos First",
         "usePagedGalleryView": "Use Paged Gallery View",
         "noImageSelected": "No Image Selected",
         "noImagesInGallery": "No Images to Display",
         "starImage": "Star",
+        "starImage_one": "Star Image",
+        "starImage_other": "Star {{count}} Images",
         "unstarImage": "Unstar",
+        "unstarImage_one": "Unstar Image",
+        "unstarImage_other": "Unstar {{count}} Images",
+        "starVideo_one": "Star Video",
+        "starVideo_other": "Star {{count}} Videos",
+        "unstarVideo_one": "Unstar Video",
+        "unstarVideo_other": "Unstar {{count}} Videos",
+        "downloadImage_one": "Download Image",
+        "downloadImage_other": "Download {{count}} Images",
+        "downloadVideo_one": "Download Video",
+        "downloadVideo_other": "Download {{count}} Videos",
         "unableToLoad": "Unable to load Gallery",
         "deleteSelection": "Delete Selection",
         "downloadSelection": "Download Selection",
@@ -571,7 +623,8 @@
         "openViewer": "Open Viewer",
         "closeViewer": "Close Viewer",
         "move": "Move",
-        "useForPromptGeneration": "Use for Prompt Generation"
+        "useForPromptGeneration": "Use for Prompt Generation",
+        "deleteMediaPermanent": "Deleted images/videos cannot be restored."
     },
     "hotkeys": {
         "hotkeys": "Hotkeys",
@@ -585,7 +638,7 @@
         "resetToDefault": "Reset to Default",
         "resetAll": "Reset All to Default",
         "resetAllConfirmation": "Are you sure you want to reset all hotkeys to their default values? This cannot be undone.",
-        "enterHotkeys": "Enter hotkey(s), separated by commas",
+        "enterHotkeys": "Enter hotkeys, separated by commas",
         "save": "Save",
         "cancel": "Cancel",
         "modifiers": "Modifiers",
@@ -691,7 +744,7 @@
             },
             "selectBboxTool": {
                 "title": "Bbox Tool",
-                "desc": "Select the bounding box tool."
+                "desc": "Tap to select the bounding box tool, or hold to use it temporarily."
             },
             "decrementToolWidth": {
                 "title": "Decrement Tool Width",
@@ -714,8 +767,8 @@
                 "desc": "Select the move tool."
             },
             "selectRectTool": {
-                "title": "Rect Tool",
-                "desc": "Select the rect tool."
+                "title": "Shapes Tool",
+                "desc": "Select the shapes tool."
             },
             "selectLassoTool": {
                 "title": "Lasso Tool",
@@ -760,6 +813,14 @@
             "resetSelected": {
                 "title": "Reset Layer",
                 "desc": "Reset the selected layer. Only applies to Inpaint Mask and Regional Guidance."
+            },
+            "mergeDown": {
+                "title": "Merge Layer Down",
+                "desc": "Merge the selected layer into the layer directly below it."
+            },
+            "mergeVisible": {
+                "title": "Merge All Visible Layers",
+                "desc": "Merge all visible layers of the selected layer type."
             },
             "undo": {
                 "title": "Undo",
@@ -932,7 +993,7 @@
             "title": "Gallery",
             "selectAllOnPage": {
                 "title": "Select All On Page",
-                "desc": "Select all images on the current page."
+                "desc": "Select all images/videos on the current page."
             },
             "clearSelection": {
                 "title": "Clear Selection",
@@ -972,16 +1033,21 @@
             },
             "deleteSelection": {
                 "title": "Delete",
-                "desc": "Delete all selected images. By default, you will be prompted to confirm deletion. If the images are currently in use in the app, you will be warned."
+                "desc": "Delete all selected images/videos. By default, you will be prompted to confirm deletion. If the images/videos are currently in use in the app, you will be warned."
             },
             "starImage": {
-                "title": "Star/Unstar Image",
-                "desc": "Star or unstar the selected image."
+                "title": "Star/Unstar Image/Video",
+                "desc": "Star or unstar the selected image or video."
             }
         }
     },
     "lora": {
         "weight": "Weight",
+        "startingWeight": "Starting Weight",
+        "weightMin": "Min Weight",
+        "weightMax": "Max Weight",
+        "weightMinMustBeLessThanMax": "Min weight must be less than max weight",
+        "weightOutOfRange": "Starting weight must be within the min/max range",
         "removeLoRA": "Remove LoRA"
     },
     "metadata": {
@@ -994,10 +1060,27 @@
         "dypeScale": "$t(parameters.dypeScale)",
         "dypeExponent": "$t(parameters.dypeExponent)",
         "generationMode": "Generation Mode",
+        "geminiTemperature": "Gemini Temperature",
+        "geminiThinkingLevel": "Gemini Thinking Level",
+        "openaiQuality": "OpenAI Quality",
+        "openaiBackground": "OpenAI Background",
+        "openaiInputFidelity": "OpenAI Input Fidelity",
+        "seedreamWatermark": "Seedream Watermark",
+        "seedreamOptimizePrompt": "Seedream Optimize Prompt",
         "guidance": "Guidance",
         "height": "Height",
+        "hiDiffusion": "HiDiffusion",
+        "hiDiffusionRauNet": "HiDiffusion: RAU-Net",
+        "hiDiffusionWindowAttn": "HiDiffusion: Window Attention",
+        "hiDiffusionT1Ratio": "HiDiffusion: T1 Ratio",
+        "hiDiffusionT2Ratio": "HiDiffusion: T2 Ratio",
         "imageDetails": "Image Details",
         "imageDimensions": "Image Dimensions",
+        "imageSize": "Image Size",
+        "krea2Qwen3VlEncoder": "Qwen3-VL Encoder",
+        "krea2RebalanceEnabled": "Conditioning Rebalance Enabled",
+        "krea2RebalanceMultiplier": "Rebalance Multiplier",
+        "krea2RebalanceWeights": "Rebalance Per-Layer Weights",
         "metadata": "Metadata",
         "model": "Model",
         "negativePrompt": "Negative Prompt",
@@ -1006,6 +1089,7 @@
         "noRecallParameters": "No parameters to recall found",
         "parameterSet": "Parameter {{parameter}} set",
         "parsingFailed": "Parsing Failed",
+        "mistralEncoder": "Mistral Encoder",
         "positivePrompt": "Positive Prompt",
         "qwen3Encoder": "Qwen3 Encoder",
         "qwen3Source": "Qwen3 Source",
@@ -1021,6 +1105,7 @@
         "seed": "Seed",
         "steps": "Steps",
         "strength": "Image to image strength",
+        "t5Encoder": "T5 Encoder",
         "Threshold": "Noise Threshold",
         "vae": "VAE",
         "width": "Width",
@@ -1030,11 +1115,14 @@
     "modelManager": {
         "active": "active",
         "actions": "Bulk Actions",
-        "deleteModelsConfirm": "Are you sure you want to delete {{count}} model(s)? This action cannot be undone.",
+        "deleteModelsConfirm_one": "Are you sure you want to delete {{count}} model? This action cannot be undone.",
+        "deleteModelsConfirm_other": "Are you sure you want to delete {{count}} models? This action cannot be undone.",
         "deleteWarning": "Models in your Invoke models directory will be permanently deleted from disk.",
-        "modelsDeleted": "Successfully deleted {{count}} model(s)",
+        "modelsDeleted_one": "Successfully deleted {{count}} model",
+        "modelsDeleted_other": "Successfully deleted {{count}} models",
         "modelsDeleteFailed": "Failed to delete models",
-        "someModelsFailedToDelete": "{{count}} model(s) could not be deleted",
+        "someModelsFailedToDelete_one": "{{count}} model could not be deleted",
+        "someModelsFailedToDelete_other": "{{count}} models could not be deleted",
         "modelsDeletedPartial": "Partially completed",
         "someModelsDeleted": "{{deleted}} deleted, {{failed}} failed",
         "modelsDeleteError": "Error deleting models",
@@ -1069,11 +1157,14 @@
         "reidentifyUnknown": "Unable to identify model",
         "reidentifyError": "Error reidentifying model",
         "reidentifyModels": "Reidentify Models",
-        "reidentifyModelsConfirm": "Are you sure you want to reidentify {{count}} model(s)? This will re-probe their weights files to determine the correct format and settings.",
+        "reidentifyModelsConfirm_one": "Are you sure you want to reidentify {{count}} model? This will re-probe its weights file to determine the correct format and settings.",
+        "reidentifyModelsConfirm_other": "Are you sure you want to reidentify {{count}} models? This will re-probe their weights files to determine the correct format and settings.",
         "reidentifyWarning": "This will reset any custom settings you may have applied to these models.",
-        "modelsReidentified": "Successfully reidentified {{count}} model(s)",
+        "modelsReidentified_one": "Successfully reidentified {{count}} model",
+        "modelsReidentified_other": "Successfully reidentified {{count}} models",
         "modelsReidentifyFailed": "Failed to reidentify models",
-        "someModelsFailedToReidentify": "{{count}} model(s) could not be reidentified",
+        "someModelsFailedToReidentify_one": "{{count}} model could not be reidentified",
+        "someModelsFailedToReidentify_other": "{{count}} models could not be reidentified",
         "modelsReidentifiedPartial": "Partially completed",
         "someModelsReidentified": "{{succeeded}} reidentified, {{failed}} failed",
         "modelsReidentifyError": "Error reidentifying models",
@@ -1096,7 +1187,9 @@
         "convertToDiffusersHelpText5": "Please make sure you have enough disk space. Models generally vary between 2GB-7GB in size.",
         "convertToDiffusersHelpText6": "Do you wish to convert this model?",
         "cpuOnly": "CPU Only",
+        "fp8Storage": "FP8 Storage (Save VRAM)",
         "runOnCpu": "Run text encoder model on CPU only",
+        "runVaeOnCpu": "Run VAE model on CPU only",
         "noDefaultSettings": "No default settings configured for this model. Visit the Model Manager to add default settings.",
         "defaultSettings": "Default Settings",
         "defaultSettingsSaved": "Default Settings Saved",
@@ -1115,6 +1208,25 @@
         "fileSize": "File Size",
         "filterModels": "Filter models",
         "fluxRedux": "FLUX Redux",
+        "externalImageGenerator": "External Image Generator",
+        "externalProviders": "External Providers",
+        "externalSetupTitle": "External Providers Setup",
+        "externalSetupDescription": "Connect an API key to enable external image generation. External starter models auto-install when a provider is configured.",
+        "externalInstallDefaults": "Auto-install starter models",
+        "externalProvidersUnavailable": "External providers are not available in this build.",
+        "externalSetupFooter": "An API key is required. External providers use remote APIs; usage may incur provider-side costs.",
+        "externalProviderCardDescription": "Configure {{providerId}} credentials for external image generation.",
+        "externalApiKey": "API Key",
+        "externalApiKeyPlaceholder": "Paste your API key",
+        "externalApiKeyPlaceholderSet": "API key configured",
+        "externalApiKeyHelper": "Stored in api_keys.yaml in your InvokeAI root directory.",
+        "externalBaseUrl": "Base URL (optional)",
+        "externalOverrideBaseUrl": "Override Base URL",
+        "externalBaseUrlPlaceholder": "https://...",
+        "externalBaseUrlHelper": "Override the default API base URL if needed.",
+        "externalResetHelper": "Clear API key and base URL.",
+        "externalProviderSaveFailed": "Failed to save external provider configuration.",
+        "externalProviderResetFailed": "Failed to reset external provider configuration.",
         "height": "Height",
         "huggingFace": "HuggingFace",
         "huggingFacePlaceholder": "owner/model-name",
@@ -1147,7 +1259,7 @@
         "nAlreadyInstalled": "{{count}} already installed",
         "installQueue": "Install Queue",
         "inplaceInstall": "In-place install",
-        "inplaceInstallDesc": "Install models without moving the files. When using the model, it will be loaded from its original location. If disabled, the model file(s) will be moved into the Invoke-managed models directory during installation.",
+        "inplaceInstallDesc": "Install models without moving the files. When using the model, it will be loaded from its original location. If disabled, the model files will be moved into the Invoke-managed models directory during installation.",
         "install": "Install",
         "installAll": "Install All",
         "installRepo": "Install Repo",
@@ -1181,7 +1293,31 @@
         "modelType": "Model Type",
         "modelUpdated": "Model Updated",
         "modelUpdateFailed": "Model Update Failed",
+        "sortByName": "Name",
+        "sortByBase": "Base",
+        "sortBySize": "Size",
+        "sortByDateAdded": "Date Added",
+        "sortByDateModified": "Date Modified",
+        "sortByPath": "Path",
+        "sortByType": "Type",
+        "sortByFormat": "Format",
+        "sortDefault": "Default",
         "name": "Name",
+        "externalProvider": "External Provider",
+        "externalCapabilities": "External Capabilities",
+        "externalDefaults": "External Defaults",
+        "providerId": "Provider ID",
+        "providerModelId": "Provider Model ID",
+        "supportedModes": "Supported Modes",
+        "supportsNegativePrompt": "Supports Negative Prompt",
+        "supportsReferenceImages": "Supports Reference Images",
+        "supportsSeed": "Supports Seed",
+        "supportsGuidance": "Supports Guidance",
+        "maxImagesPerRequest": "Max Images Per Request",
+        "maxReferenceImages": "Max Reference Images",
+        "maxImageWidth": "Max Image Width",
+        "maxImageHeight": "Max Image Height",
+        "numImages": "Num Images",
         "modelPickerFallbackNoModelsInstalled": "No models installed.",
         "modelPickerFallbackNoModelsInstalled2": "Visit the <LinkComponent>Model Manager</LinkComponent> to install models.",
         "modelPickerFallbackNoModelsInstalledNonAdmin": "No models installed. Ask your InvokeAI administrator (<AdminEmailLink />) to install some models.",
@@ -1210,6 +1346,7 @@
         "settings": "Settings",
         "simpleModelPlaceholder": "URL or path to a local file or diffusers folder",
         "source": "Source",
+        "sourceUrl": "Source URL",
         "sigLip": "SigLIP",
         "spandrelImageToImage": "Image to Image (Spandrel)",
         "starterBundles": "Starter Bundles",
@@ -1226,6 +1363,7 @@
             "urlDescription": "Install models from a URL or local file path. Perfect for specific models you want to add.",
             "huggingFaceDescription": "Browse and install models directly from HuggingFace repositories.",
             "scanFolderDescription": "Scan a local folder to automatically detect and install models.",
+            "externalDescription": "Connect a Gemini or OpenAI API key to enable external generation. Usage may incur provider-side costs.",
             "recommendedModels": "Recommended Models",
             "exploreStarter": "Or browse all available starter models",
             "quickStart": "Quick Start Bundles",
@@ -1237,20 +1375,21 @@
         },
         "controlLora": "Control LoRA",
         "llavaOnevision": "LLaVA OneVision",
+        "textLLM": "Text LLM",
         "syncModels": "Sync Models",
         "syncModelsTooltip": "Identify and remove unused model files in the InvokeAI root directory.",
         "syncModelsDirectory": "Synchronize Models Directory",
         "noOrphanedModels": "The models directory is synchronized. No orphaned files found.",
         "orphanedModelsFound": "Orphaned Models Found",
         "orphanedModelsDescription": "The following model directories are not referenced in the database and can be safely deleted:",
-        "foundOrphanedModels": "Found {{count}} orphaned model directory",
+        "foundOrphanedModels_one": "Found {{count}} orphaned model directory",
         "foundOrphanedModels_other": "Found {{count}} orphaned model directories",
-        "filesCount": "{{count}} file",
+        "filesCount_one": "{{count}} file",
         "filesCount_other": "{{count}} files",
-        "deleteSelected": "Delete {{count}} selected",
+        "deleteSelected_one": "Delete {{count}} selected",
         "deleteSelected_other": "Delete {{count}} selected",
         "deselectAll": "Deselect All",
-        "orphanedModelsDeleted": "Successfully deleted {{count}} orphaned model",
+        "orphanedModelsDeleted_one": "Successfully deleted {{count}} orphaned model",
         "orphanedModelsDeleted_other": "Successfully deleted {{count}} orphaned models",
         "orphanedModelsDeleteErrors": "Some models could not be deleted",
         "orphanedModelsDeleteFailed": "Failed to delete orphaned models",
@@ -1264,29 +1403,65 @@
         "selectModelToView": "Select a model to view its details",
         "typePhraseHere": "Type phrase here",
         "t5Encoder": "T5 Encoder",
+        "gemma2Encoder": "Gemma-2 Encoder",
+        "pidDecoder": "PiD Decoder",
+        "pidMode": "PiD Decode",
+        "pidModeOff": "Off",
+        "pidModeFit": "On (Fit to size)",
+        "pidModeNative": "On (Native 4×)",
+        "pidSteps": "PiD Steps",
         "qwen3Encoder": "Qwen3 Encoder",
+        "qwenVLEncoder": "Qwen2.5-VL Encoder",
+        "mistralEncoder": "Mistral Encoder",
+        "qwen3VLEncoder": "Qwen3-VL Encoder",
         "animaVae": "VAE",
         "animaVaePlaceholder": "Select Anima-compatible VAE",
         "animaQwen3Encoder": "Qwen3 0.6B Encoder",
         "animaQwen3EncoderPlaceholder": "Select Qwen3 0.6B encoder",
-        "animaT5Encoder": "T5-XXL Encoder",
-        "animaT5EncoderPlaceholder": "Select T5-XXL encoder",
+        "animaInpaintAdapter": "Inpaint Adapter",
+        "animaInpaintAdapterPlaceholder": "Select inpaint adapter (optional)",
+        "animaInpaintAdapterHelper": "Only used when inpainting or outpainting on Canvas.",
+        "animaInpaintAdapterWeight": "Adapter Weight",
         "zImageVae": "VAE (optional)",
         "zImageVaePlaceholder": "From VAE source model",
         "zImageQwen3Encoder": "Qwen3 Encoder (optional)",
         "zImageQwen3EncoderPlaceholder": "From Qwen3 source model",
         "zImageQwen3Source": "Qwen3 & VAE Source Model",
         "zImageQwen3SourcePlaceholder": "Required if VAE/Encoder empty",
+        "krea2Vae": "VAE (optional)",
+        "krea2VaePlaceholder": "From Krea-2 diffusers model",
+        "krea2Qwen3VlEncoder": "Qwen3-VL Encoder (optional)",
+        "krea2Qwen3VlEncoderPlaceholder": "From Krea-2 diffusers model",
         "flux2KleinVae": "VAE (optional)",
-        "flux2KleinVaePlaceholder": "From main model",
+        "flux2KleinVaePlaceholder": "From diffusers model",
+        "flux2KleinVaeNoModelPlaceholder": "No diffusers model available",
         "flux2KleinQwen3Encoder": "Qwen3 Encoder (optional)",
-        "flux2KleinQwen3EncoderPlaceholder": "From main model",
+        "flux2KleinQwen3EncoderPlaceholder": "From diffusers model",
+        "flux2KleinQwen3EncoderNoModelPlaceholder": "No diffusers model available",
+        "flux2DevVae": "FLUX.2 [dev] VAE",
+        "flux2DevVaePlaceholder": "Auto (from Diffusers source)",
+        "flux2DevVaeNoModelPlaceholder": "Select a FLUX.2 VAE model",
+        "flux2DevMistralEncoder": "FLUX.2 [dev] Mistral Encoder",
+        "flux2DevMistralEncoderPlaceholder": "Auto (from Diffusers source)",
+        "flux2DevMistralEncoderNoModelPlaceholder": "Select a Mistral text encoder",
         "qwenImageComponentSource": "VAE/Encoder Source (Diffusers)",
-        "qwenImageComponentSourcePlaceholder": "Required for GGUF models",
+        "qwenImageComponentSourcePlaceholder": "GGUF models require this unless a standalone VAE & Encoder is installed",
+        "qwenImageVae": "VAE",
+        "qwenImageVaePlaceholder": "From VAE/Encoder Source",
+        "qwenImageQwenVLEncoder": "Qwen2.5-VL Encoder",
+        "qwenImageQwenVLEncoderPlaceholder": "From VAE/Encoder Source",
         "qwenImageQuantization": "Encoder Quantization",
         "qwenImageQuantizationNone": "None (bf16)",
         "qwenImageQuantizationInt8": "8-bit (int8)",
         "qwenImageQuantizationNf4": "4-bit (nf4)",
+        "wanT5Encoder": "Wan2.2 T5 Encoder",
+        "wanT5EncoderPlaceholder": "From VAE/Encoder Source",
+        "wanVae": "VAE",
+        "wanVaePlaceholder": "From VAE/Encoder Source",
+        "wanComponentSource": "VAE/Encoder Source (Diffusers)",
+        "wanComponentSourcePlaceholder": "GGUF Wan models require a Diffusers Wan source for VAE + UMT5-XXL",
+        "wanTransformerLowNoise": "Transformer (Low Noise)",
+        "wanTransformerLowNoisePlaceholder": "Add for full detail",
         "upcastAttention": "Upcast Attention",
         "uploadImage": "Upload Image",
         "urlOrLocalPath": "URL or Local Path",
@@ -1326,6 +1501,10 @@
         "noCompatibleLoRAs": "No Compatible LoRAs"
     },
     "nodes": {
+        "extractVideoRange": {
+            "dropVideoPrompt": "Connect a video to preview the selected frame.",
+            "missingFps": "Cannot preview frames: input video has no fps metadata."
+        },
         "arithmeticSequence": "Arithmetic Sequence",
         "linearDistribution": "Linear Distribution",
         "uniformRandomDistribution": "Uniform Random Distribution",
@@ -1371,6 +1550,8 @@
         "currentImageDescription": "Displays the current image in the Node Editor",
         "downloadWorkflow": "Download Workflow JSON",
         "downloadWorkflowError": "Error downloading workflow",
+        "downloadWorkflowImage": "Download Workflow Image",
+        "downloadWorkflowImageError": "Error downloading workflow image",
         "edge": "Edge",
         "edit": "Edit",
         "editMode": "Edit in Workflow Editor",
@@ -1396,6 +1577,12 @@
         "loadWorkflow": "Load Workflow",
         "noWorkflows": "No Workflows",
         "noMatchingWorkflows": "No Matching Workflows",
+        "savedWorkflowChoose": "Choose a workflow",
+        "savedWorkflowDefaultBadge": "Default",
+        "savedWorkflowMissing": "Missing or inaccessible workflow",
+        "savedWorkflowUnsupported": "Unsupported",
+        "savedWorkflowSelectExposedFields": "Select a workflow with exposed form fields",
+        "savedWorkflowUpdating": "Updating...",
         "noWorkflow": "No Workflow",
         "noWorkflowToSave": "No workflow to save",
         "unableToUpdateNode": "Node update failed: node {{node}} of type {{type}} (may require deleting and recreating)",
@@ -1499,6 +1686,7 @@
         "internalDesc": "This invocation is used internally by Invoke. It may have breaking changes during app updates and may be removed at any time.",
         "specialDesc": "This invocation some special handling in the app. For example, Batch nodes are used to queue multiple graphs from a single workflow.",
         "imageAccessError": "Unable to find image {{image_name}}, resetting to default",
+        "videoAccessError": "Unable to find video {{video_name}}, resetting to default",
         "boardAccessError": "Unable to find board {{board_id}}, resetting to default",
         "modelAccessError": "Unable to find model {{key}}, resetting to default",
         "saveToGallery": "Save To Gallery",
@@ -1525,6 +1713,14 @@
     },
     "parameters": {
         "aspect": "Aspect",
+        "samplerPreset": "Sampler Preset",
+        "colorPalette": "Color Palette",
+        "ideogram4Caption": "Structured Caption",
+        "ideogram4SamplerPresets": {
+            "quality": "Quality ({{steps}} steps)",
+            "default": "Default ({{steps}} steps)",
+            "turbo": "Turbo ({{steps}} steps)"
+        },
         "duration": "Duration",
         "lockAspectRatio": "Lock Aspect Ratio",
         "swapDimensions": "Swap Dimensions",
@@ -1537,6 +1733,11 @@
         "cfgScale": "CFG Scale",
         "cfgRescaleMultiplier": "CFG Rescale Multiplier",
         "clipSkip": "CLIP Skip",
+        "hiDiffusion": "HiDiffusion",
+        "hiDiffusionRauNet": "HiDiffusion: RAU-Net",
+        "hiDiffusionWindowAttn": "HiDiffusion: Window Attention",
+        "hiDiffusionT1Ratio": "HiDiffusion: T1 Ratio",
+        "hiDiffusionT2Ratio": "HiDiffusion: T2 Ratio",
         "coherenceMode": "Mode",
         "coherenceEdgeSize": "Edge Size",
         "coherenceMinDenoise": "Min Denoise",
@@ -1544,19 +1745,20 @@
         "copyImage": "Copy Image",
         "denoisingStrength": "Denoising Strength",
         "disabledNoRasterContent": "Disabled (No Raster Content)",
+        "disabledNotSupported": "Not supported by model",
         "downloadImage": "Download Image",
         "general": "General",
         "guidance": "Guidance",
         "height": "Height",
         "imageFit": "Fit Initial Image To Output Size",
-        "images": "Images",
+        "images": "Images/Videos",
         "images_withCount_one": "Image",
-        "images_withCount_other": "Images",
+        "images_withCount_other": "Images/Videos",
         "infillMethod": "Infill Method",
         "infillColorValue": "Fill Color",
         "info": "Info",
         "invoke": {
-            "addingImagesTo": "Adding images to",
+            "addingImagesTo": "Adding images/videos to",
             "boardNotWritable": "You do not have write access to board \"{{boardName}}\". Select a board you own or switch to Uncategorized.",
             "modelDisabledForTrial": "Generating with {{modelName}} is not available on trial accounts. Visit your account settings to upgrade.",
             "invoke": "Invoke",
@@ -1582,14 +1784,30 @@
             "noStartingFrameImage": "No starting frame image",
             "noT5EncoderModelSelected": "No T5 Encoder model selected for FLUX generation",
             "noFLUXVAEModelSelected": "No VAE model selected for FLUX generation",
+            "noPidDecoderModelSelected": "No PiD decoder model selected",
+            "noGemma2EncoderModelSelected": "No Gemma-2 encoder model selected (required by PiD)",
+            "pidScaleBeforeProcessingMustBeOff": "Turn off Scale Before Processing (set it to None) to use PiD decode",
+            "pidIncompatibleWithRefiner": "PiD decode is not compatible with the SDXL Refiner. Disable one of them.",
             "noCLIPEmbedModelSelected": "No CLIP Embed model selected for FLUX generation",
             "noQwen3EncoderModelSelected": "No Qwen3 Encoder model selected for FLUX2 Klein generation",
+            "noFlux2KleinVaeModelSelected": "No VAE selected. Non-diffusers FLUX.2 Klein models require a standalone VAE",
+            "noFlux2KleinQwen3EncoderModelSelected": "No Qwen3 Encoder selected. Non-diffusers FLUX.2 Klein models require a standalone Qwen3 Encoder",
+            "noFlux2DevVaeModelSelected": "No VAE selected. Non-diffusers FLUX.2 [dev] models require a standalone FLUX.2 VAE",
+            "noFlux2DevMistralEncoderModelSelected": "No Mistral Encoder selected. Non-diffusers FLUX.2 [dev] models require a standalone Mistral text encoder",
             "noQwenImageComponentSourceSelected": "GGUF Qwen Image models require a Diffusers Component Source for VAE/encoder",
+            "noWanComponentSourceSelected": "Single-file Wan 2.2 models require a Diffusers Component Source for VAE/encoder",
+            "incompatibleWanVae": "The selected VAE does not match the Wan transformer. TI2V-5B needs the 48-channel Wan 2.2 VAE; A14B needs the 16-channel Wan 2.1 VAE.",
+            "incompatibleWanComponentSource": "The selected Component Source does not match the Wan transformer. Pick a Diffusers Wan model of the same family (TI2V-5B or A14B).",
+            "incompatibleWanLowNoiseExpert": "The Transformer (Low Noise) model is a different Wan variant from the main transformer. Both experts must be the same variant.",
+            "duplicateWanTransformer": "The same model is selected as both Transformer and Transformer (Low Noise). An A14B expert pair needs two different models.",
             "noZImageVaeSourceSelected": "No VAE source: Select VAE (FLUX) or Qwen3 Source model",
             "noZImageQwen3EncoderSourceSelected": "No Qwen3 Encoder source: Select Qwen3 Encoder or Qwen3 Source model",
+            "zImageQwen3EncoderIncompatible": "Selected Qwen3 Encoder is incompatible with Z-Image: select a Qwen3 4B encoder",
+            "noKrea2VaeModelSelected": "Non-diffusers Krea-2: select a VAE in Advanced settings",
+            "noKrea2Qwen3VlEncoderModelSelected": "Non-diffusers Krea-2: select a Qwen3-VL Encoder in Advanced settings",
+            "krea2RebalanceWeightsInvalid": "Krea-2 Conditioning Rebalance weights must be exactly 12 finite comma-separated numbers",
             "noAnimaVaeModelSelected": "No Anima VAE model selected",
             "noAnimaQwen3EncoderModelSelected": "No Anima Qwen3 Encoder model selected",
-            "noAnimaT5EncoderModelSelected": "No Anima T5 Encoder model selected",
             "fluxModelIncompatibleBboxWidth": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), bbox width is {{width}}",
             "fluxModelIncompatibleBboxHeight": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), bbox height is {{height}}",
             "fluxModelIncompatibleScaledBboxWidth": "$t(parameters.invoke.fluxRequiresDimensionsToBeMultipleOf16), scaled bbox width is {{width}}",
@@ -1599,7 +1817,7 @@
             "modelIncompatibleScaledBboxWidth": "Scaled bbox width is {{width}} but {{model}} requires multiple of {{multiple}}",
             "modelIncompatibleScaledBboxHeight": "Scaled bbox height is {{height}} but {{model}} requires multiple of {{multiple}}",
             "fluxModelMultipleControlLoRAs": "Can only use 1 Control LoRA at a time",
-            "incompatibleLoRAs": "Incompatible LoRA(s) added",
+            "incompatibleLoRAs": "Incompatible LoRAs added",
             "canvasIsFiltering": "Canvas is busy (filtering)",
             "canvasIsTransforming": "Canvas is busy (transforming)",
             "canvasIsRasterizing": "Canvas is busy (rasterizing)",
@@ -1624,6 +1842,7 @@
         "scaledHeight": "Scaled H",
         "scaledWidth": "Scaled W",
         "scheduler": "Scheduler",
+        "ernieImagePromptEnhancer": "Prompt Enhancer",
         "dypePreset": "DyPE",
         "dypeScale": "DyPE λs",
         "dypeExponent": "DyPE λt",
@@ -1634,12 +1853,17 @@
         "seedVarianceEnabled": "Seed Variance Enhancer",
         "seedVarianceStrength": "Variance Strength",
         "seedVarianceRandomizePercent": "Randomize Percent",
+        "krea2RebalanceEnabled": "Conditioning Rebalance",
+        "krea2RebalanceMultiplier": "Rebalance Multiplier",
+        "krea2RebalanceWeights": "Per-Layer Weights (12)",
+        "krea2RebalanceWeightsPlaceholder": "1.0,1.0,1.0,1.0,1.0,1.0,1.0,2.5,5.0,1.1,4.0,1.0",
         "imageActions": "Image Actions",
         "sendToCanvas": "Send To Canvas",
         "sendToUpscale": "Send To Upscale",
         "showOptionsPanel": "Show Side Panel (O or T)",
         "shift": "Shift",
         "shuffle": "Shuffle Seed",
+        "wanGuidanceScaleLowNoise": "CFG (Low)",
         "steps": "Steps",
         "strength": "Strength",
         "symmetry": "Symmetry",
@@ -1661,6 +1885,35 @@
         "boxBlur": "Box Blur",
         "staged": "Staged",
         "resolution": "Resolution",
+        "imageSize": "Image Size",
+        "quality": "Quality",
+        "qualityOptions": {
+            "auto": "Auto",
+            "high": "High",
+            "medium": "Medium",
+            "low": "Low"
+        },
+        "background": "Background",
+        "backgroundOptions": {
+            "auto": "Auto",
+            "transparent": "Transparent",
+            "opaque": "Opaque"
+        },
+        "inputFidelity": "Input Fidelity",
+        "inputFidelityOptions": {
+            "default": "Default",
+            "low": "Low",
+            "high": "High"
+        },
+        "temperature": "Temperature",
+        "thinkingLevel": "Thinking Level",
+        "thinkingLevelOptions": {
+            "default": "Default",
+            "minimal": "Minimal",
+            "high": "High"
+        },
+        "watermark": "Watermark",
+        "optimizePrompt": "Optimize Prompt",
         "modelDisabledForTrial": "Generating with {{modelName}} is not available on trial accounts. Visit your <LinkComponent>account settings</LinkComponent> to upgrade."
     },
     "dynamicPrompts": {
@@ -1709,12 +1962,45 @@
         "informationalPopoversDisabledDesc": "Informational popovers have been disabled. Enable them in Settings.",
         "enableModelDescriptions": "Enable Model Descriptions in Dropdowns",
         "enableHighlightFocusedRegions": "Highlight Focused Regions",
+        "middleClickOpenInNewTab": "Use Middle Click to Open Images/Videos in New Tab",
         "modelDescriptionsDisabled": "Model Descriptions in Dropdowns Disabled",
         "modelDescriptionsDisabledDesc": "Model descriptions in dropdowns have been disabled. Enable them in Settings.",
         "enableInvisibleWatermark": "Enable Invisible Watermark",
         "enableNSFWChecker": "Enable NSFW Checker",
         "general": "General",
         "generation": "Generation",
+        "generationDevices": "Generation Devices",
+        "generationDevicesAuto": "Auto",
+        "generationDevicesHelp": "Select which devices to use for parallel generation, one session per device. \"Auto\" uses every available GPU — unless the legacy 'device' setting in invokeai.yaml pins a specific device, in which case only that device is used. An explicit selection here overrides 'device'.",
+        "generationDevicesRestart": "Restart InvokeAI for changes to take effect.",
+        "generationDevicesSaveFailed": "Failed to save Generation Devices",
+        "imageSubfolderStrategy": "Image Subfolder Strategy",
+        "imageSubfolderStrategyDate": "Date",
+        "imageSubfolderStrategyFlat": "Flat",
+        "imageSubfolderStrategyHash": "Hash",
+        "imageSubfolderStrategySaveFailed": "Failed to save Image Subfolder Strategy",
+        "imageSubfolderStrategyType": "Type",
+        "imageSubfolderStrategyUnknown": "Unknown ({{strategy}})",
+        "imageStorageMaintenance": "Image Storage Maintenance",
+        "imageStorageMaintenanceOperationMove": "Move Images",
+        "imageStorageMaintenanceOperationNone": "None",
+        "imageStorageMaintenanceOperationRecovery": "Recovery",
+        "imageStorageMaintenanceRecover": "Recover",
+        "imageStorageMaintenanceRecoveryFailed": "Failed to start Image Storage Maintenance recovery",
+        "imageStorageMaintenanceStart": "Start Move",
+        "imageStorageMaintenanceStartFailed": "Failed to start Image Storage Maintenance",
+        "imageStorageMaintenanceStateCommitted": "Committed",
+        "imageStorageMaintenanceStateError": "Error",
+        "imageStorageMaintenanceStateMoved": "Moved",
+        "imageStorageMaintenanceStateMoving": "Moving",
+        "imageStorageMaintenanceStateNone": "No jobs",
+        "imageStorageMaintenanceStatePlanned": "Planned",
+        "imageStorageMaintenanceStatusIncomplete_one": "{{count}} image still needs moving",
+        "imageStorageMaintenanceStatusIncomplete_other": "{{count}} images still need moving",
+        "imageStorageMaintenanceStatusIdle": "Status: {{state}}",
+        "imageStorageMaintenanceStatusNeedsRecovery": "Recovery needed for job {{jobId}}",
+        "imageStorageMaintenanceStatusRunning": "Running: {{operation}}",
+        "imageStorageMaintenanceStatusUnavailable": "Status unavailable",
         "maxQueueHistory": "Max Queue History",
         "maxQueueHistorySaveFailed": "Failed to save Max Queue History",
         "models": "Models",
@@ -1722,8 +2008,8 @@
         "prompt": "Prompt",
         "resetComplete": "Web UI has been reset.",
         "resetWebUI": "Reset Web UI",
-        "resetWebUIDesc1": "Resetting the web UI only resets the browser's local cache of your images and remembered settings. It does not delete any images from disk.",
-        "resetWebUIDesc2": "If images aren't showing up in the gallery or something else isn't working, please try resetting before submitting an issue on GitHub.",
+        "resetWebUIDesc1": "Resetting the web UI only resets the browser's local cache of your images/videos and remembered settings. It does not delete any images/videos from disk.",
+        "resetWebUIDesc2": "If images/videos aren't showing up in the gallery or something else isn't working, please try resetting before submitting an issue on GitHub.",
         "showDetailedInvocationProgress": "Show Progress Details",
         "showProgressInViewer": "Show Progress Images in Viewer",
         "ui": "User Interface",
@@ -1737,7 +2023,11 @@
         "intermediatesCleared_one": "Cleared {{count}} Intermediate",
         "intermediatesCleared_other": "Cleared {{count}} Intermediates",
         "intermediatesClearedFailed": "Problem Clearing Intermediates",
-        "reloadingIn": "Reloading in"
+        "reloadingIn": "Reloading in",
+        "externalProviders": "External Providers",
+        "externalProviderConfigured": "Configured",
+        "externalProviderNotConfigured": "API Key Required",
+        "externalProviderNotConfiguredHint": "Add your API key in Model Manager or the server config to enable this provider."
     },
     "toast": {
         "addedToBoard": "Added to board {{name}}'s assets",
@@ -1767,6 +2057,33 @@
         "imageSavingFailed": "Image Saving Failed",
         "imageUploaded": "Image Uploaded",
         "imageUploadFailed": "Image Upload Failed",
+        "customFontLoadFailed": "Custom Font Failed to Load",
+        "customFontLoadFailedDesc": "Could not load custom font: {{fontName}}.",
+        "customFontStillLoading": "Custom Font Still Loading",
+        "customFontStillLoadingDesc": "Text was not committed because the selected custom font is still loading. Try again in a moment.",
+        "customFontUnavailableDesc": "Text was not committed because the selected custom font could not be loaded. Choose another font or check the font file.",
+        "downloadsInterrupted": "Your session ended while downloads were being prepared. Run the download again after signing in.",
+        "imagesFailedToDownload": "{{count}} image could not be prepared for download.",
+        "imagesFailedToDownload_other": "{{count}} images could not be prepared for download.",
+        "imagesFailedToUpdate": "{{count}} image could not be updated.",
+        "imagesFailedToUpdate_other": "{{count}} images could not be updated.",
+        "imageStorageMaintenanceActive": "Image storage maintenance is active. Recover it before retrying the upload.",
+        "videoUploaded": "Video Uploaded",
+        "videoUploadFailed": "Video Upload Failed",
+        "videoPlaybackFailed": "Unable to Play Video",
+        "videoPlaybackFailedDesc": "The video may use an unsupported codec or may no longer be available.",
+        "videoDeleteFailed": "Failed to Delete Videos",
+        "videoDeleteFailedDesc": "The delete request failed; no videos were deleted.",
+        "videoDeletePartial": "{{count}} video could not be deleted.",
+        "videoDeletePartial_other": "{{count}} videos could not be deleted.",
+        "videosFailedToUpdate": "{{count}} video could not be updated.",
+        "videosFailedToUpdate_other": "{{count}} videos could not be updated.",
+        "videosFailedToMove": "{{count}} video could not be moved.",
+        "videosFailedToMove_other": "{{count}} videos could not be moved.",
+        "mediaDeleteFailed": "Failed to Delete Media",
+        "mediaDeleteFailedDesc": "A delete request failed. Some media may not have been deleted.",
+        "mediaDeletePartial": "{{count}} media item could not be deleted.",
+        "mediaDeletePartial_other": "{{count}} media items could not be deleted.",
         "importFailed": "Import Failed",
         "importSuccessful": "Import Successful",
         "invalidUpload": "Invalid Upload",
@@ -1774,6 +2091,7 @@
         "layerSavedToAssets": "Layer Saved to Assets",
         "loadedWithWarnings": "Workflow Loaded with Warnings",
         "modelAddedSimple": "Model Added to Queue",
+        "modelDefaultsLoaded": "Model Defaults Loaded",
         "modelImportCanceled": "Model Import Canceled",
         "outOfMemoryError": "Out of Memory Error",
         "outOfMemoryErrorDescLocal": "Follow our <LinkComponent>Low VRAM guide</LinkComponent> to reduce OOMs.",
@@ -1791,6 +2109,7 @@
         "problemCopyingLayer": "Unable to Copy Layer",
         "problemSavingLayer": "Unable to Save Layer",
         "problemDownloadingImage": "Unable to Download Image",
+        "problemDownloadingMedia": "Unable to Download Media",
         "noRasterLayers": "No Raster Layers Found",
         "noRasterLayersDesc": "Create at least one raster layer to export to PSD",
         "noActiveRasterLayers": "No Active Raster Layers",
@@ -1817,10 +2136,11 @@
         "setNodeField": "Set as node field",
         "somethingWentWrong": "Something Went Wrong",
         "uploadFailed": "Upload failed",
-        "imagesWillBeAddedTo": "Uploaded images will be added to board {{boardName}}'s assets.",
+        "itemsWillBeAddedTo": "Uploaded items will be added to board {{boardName}}'s assets.",
         "uploadFailedInvalidUploadDesc_withCount_one": "Must be maximum of 1 PNG, JPEG or WEBP image.",
         "uploadFailedInvalidUploadDesc_withCount_other": "Must be maximum of {{count}} PNG, JPEG or WEBP images.",
         "uploadFailedInvalidUploadDesc": "Must be PNG, JPEG or WEBP images.",
+        "uploadFailedInvalidMediaUploadDesc": "Must be PNG, JPEG or WEBP images, or MP4 videos.",
         "workflowLoaded": "Workflow Loaded",
         "problemRetrievingWorkflow": "Problem Retrieving Workflow",
         "workflowDeleted": "Workflow Deleted",
@@ -1832,6 +2152,8 @@
         "imagenIncompatibleGenerationMode": "Google {{model}} supports Text to Image only. Use other models for Image to Image, Inpainting and Outpainting tasks.",
         "chatGPT4oIncompatibleGenerationMode": "ChatGPT 4o supports Text to Image and Image to Image only. Use other models Inpainting and Outpainting tasks.",
         "fluxKontextIncompatibleGenerationMode": "FLUX Kontext does not support generation from images placed on the canvas. Re-try using the Reference Image section and disable any Raster Layers.",
+        "pidUnsupportedMode": "PiD decode currently supports Text to Image and Image to Image only. Disable PiD for Inpaint/Outpaint.",
+        "pidScaleBeforeProcessingOff": "Turn off Scale Before Processing (set it to None) to use PiD decode.",
         "problemUnpublishingWorkflow": "Problem Unpublishing Workflow",
         "problemUnpublishingWorkflowDescription": "There was a problem unpublishing the workflow. Please try again.",
         "workflowUnpublished": "Workflow Unpublished",
@@ -1848,6 +2170,41 @@
         "invalidBboxDesc": "The bounding box has no valid dimensions"
     },
     "popovers": {
+        "hidiffusion": {
+            "heading": "HiDiffusion",
+            "paragraphs": [
+                "Enables HiDiffusion denoising for higher-resolution generation.",
+                "Try at 1536px or higher for the most visible effect."
+            ]
+        },
+        "hidiffusionRauNet": {
+            "heading": "HiDiffusion: RAU-Net",
+            "paragraphs": [
+                "Enables RAU-Net blocks used by HiDiffusion.",
+                "Can improve structure and detail at higher resolutions."
+            ]
+        },
+        "hidiffusionWindowAttn": {
+            "heading": "HiDiffusion: Window Attention",
+            "paragraphs": [
+                "Enables windowed attention used by HiDiffusion.",
+                "Can boost local detail, but may affect global coherence."
+            ]
+        },
+        "hidiffusionT1Ratio": {
+            "heading": "HiDiffusion: T1 Ratio",
+            "paragraphs": [
+                "Controls the early switch point for HiDiffusion (T1).",
+                "Lower values switch earlier; higher values preserve global structure longer."
+            ]
+        },
+        "hidiffusionT2Ratio": {
+            "heading": "HiDiffusion: T2 Ratio",
+            "paragraphs": [
+                "Controls the late switch point for HiDiffusion (T2).",
+                "Higher values keep window attention active longer."
+            ]
+        },
         "clipSkip": {
             "heading": "CLIP Skip",
             "paragraphs": [
@@ -1899,6 +2256,15 @@
                 "0.5: Gentler schedule for resolutions just above native (1024px)."
             ]
         },
+        "pidMode": {
+            "heading": "PiD Decode (Super-Resolution Decoder)",
+            "paragraphs": [
+                "PiD replaces the standard VAE decode with NVIDIA's Pixel Diffusion Decoder, a diffusion-based 4x super-resolution decoder. It requires a PiD decoder model and a Gemma-2 caption encoder.",
+                "Fit: generate at your chosen resolution, PiD decodes it 4x, then downscales back to that size - extra detail at the same output size, and it composites onto the canvas (works for Image to Image too).",
+                "Native (4x): your dimensions are the 4x target. Generation runs at a quarter of them (e.g. 512 -> 2048) and PiD's full 4x output is used directly. The PiD decoders are trained for 2K output (512px sources), with 2K-to-4K variants for 4K.",
+                "Because PiD's diffusion decode reconstructs detail, you can usually lower the generation Steps to save time. 'Scale Before Processing' must be set to None while PiD is enabled."
+            ]
+        },
         "seedVarianceEnhancer": {
             "heading": "Seed Variance Enhancer",
             "paragraphs": [
@@ -1918,6 +2284,48 @@
             "paragraphs": [
                 "Percentage of embedding values that receive noise (1-100%).",
                 "Lower values create more selective noise patterns, while 100% affects all values equally."
+            ]
+        },
+        "krea2ConditioningRebalance": {
+            "heading": "Conditioning Rebalance",
+            "paragraphs": [
+                "Krea-2 stacks 12 text-encoder layers per token. This reweights those layers and applies an overall multiplier to push the model harder toward your prompt, countering the quality dilution of the distilled Turbo model.",
+                "Enable this to improve prompt adherence when the model ignores parts of your prompt."
+            ]
+        },
+        "krea2RebalanceMultiplier": {
+            "heading": "Rebalance Multiplier",
+            "paragraphs": [
+                "Overall gain applied to the conditioning after per-layer weighting. Higher values push harder toward the prompt.",
+                "Default is 4.0. Very high values may over-saturate or distort the output."
+            ]
+        },
+        "krea2RebalanceWeights": {
+            "heading": "Per-Layer Weights",
+            "paragraphs": [
+                "Comma-separated gains for the 12 tapped encoder layers (exactly 12 values). Later layers carry more semantic detail.",
+                "The default emphasizes specific layers (e.g. 2.5, 5, 4) found to improve prompt adherence."
+            ]
+        },
+        "krea2SeedVarianceEnhancer": {
+            "heading": "Seed Variance Enhancer",
+            "paragraphs": [
+                "Distilled few-step models like Krea-2-Turbo can produce nearly identical images across different seeds. This adds seed-based noise to the text embeddings to increase variation while staying reproducible.",
+                "Enable this to get more diverse results when exploring seeds, at some cost to prompt adherence."
+            ]
+        },
+        "krea2SeedVarianceStrength": {
+            "heading": "Variance Strength",
+            "paragraphs": [
+                "Noise strength as a multiplier of the embedding's standard deviation, so it behaves consistently regardless of the embedding scale (including whether Conditioning Rebalance is on).",
+                "0 is off, 0.1 is subtle, 0.5 is strong. Higher values give more variety but drift further from the prompt."
+            ]
+        },
+        "krea2SeedVarianceRandomizePercent": {
+            "heading": "Randomize Percent",
+            "paragraphs": [
+                "Percentage of embedding values that receive noise (0-100%); 0 disables.",
+                "Lower values create more selective perturbations, while 100% affects all values."
             ]
         },
         "compositingMaskBlur": {
@@ -2096,7 +2504,7 @@
         "paramDenoisingStrength": {
             "heading": "Denoising Strength",
             "paragraphs": [
-                "Controls how much the generated image varies from the raster layer(s).",
+                "Controls how much the generated image varies from the raster layers.",
                 "Lower strength stays closer to the combined visible raster layers. Higher strength relies more on the global prompt.",
                 "When there are no raster layers with visible content, this setting is ignored."
             ]
@@ -2278,7 +2686,7 @@
         "fluxDevLicense": {
             "heading": "Non-Commercial License",
             "paragraphs": [
-                "This model is licensed for non-commercial use only. FLUX.1 [dev] models use the FLUX.1 [dev] Non-Commercial License, and FLUX.2 Klein 9B uses the FLUX.2 Non-Commercial License."
+                "This model is licensed for non-commercial use only. FLUX.1 [dev] models use the FLUX.1 [dev] Non-Commercial License, FLUX.2 Klein 9B uses the FLUX.2 Non-Commercial License, and Ideogram 4 uses the Ideogram 4 Non-Commercial License."
             ]
         },
         "optimizedDenoising": {
@@ -2292,6 +2700,20 @@
             "paragraphs": [
                 "When enabled, only the text encoder component will run on CPU instead of GPU.",
                 "This saves VRAM for the denoiser while only slightly impacting performance. The conditioning outputs are automatically moved to GPU for the denoiser."
+            ]
+        },
+        "cpuOnlyVae": {
+            "heading": "CPU Only",
+            "paragraphs": [
+                "When enabled, the VAE will run on CPU instead of GPU.",
+                "This saves VRAM during decoding, but VAE decoding will be slower. The decoded image is automatically moved back to the correct device."
+            ]
+        },
+        "fp8Storage": {
+            "heading": "FP8 Storage",
+            "paragraphs": [
+                "Stores model weights in FP8 format in VRAM, reducing memory usage by approximately 50% compared to FP16.",
+                "During inference, weights are cast layer-by-layer to the compute precision (FP16/BF16), so image quality is preserved. Works on all CUDA GPUs, and on Intel GPUs that support FP8 storage."
             ]
         }
     },
@@ -2317,6 +2739,17 @@
         "noRecentWorkflows": "No Recent Workflows",
         "private": "Private",
         "shared": "Shared",
+        "callable": "Callable",
+        "savedWorkflowCompatibility": {
+            "missingWorkflowReturn": "The workflow must contain a Workflow Return node.",
+            "multipleWorkflowReturn": "The workflow may contain only one Workflow Return node.",
+            "unsupportedNode": "The workflow contains a node that Call Saved Workflow does not support.",
+            "unsupportedBatchInput": "The workflow contains batch input wiring that Call Saved Workflow does not support.",
+            "invalidGraph": "The workflow graph is invalid and cannot be called.",
+            "invalidInputs": "The workflow has invalid exposed inputs and cannot be called.",
+            "exceedsCapacity": "The workflow would create more child executions than the queue currently allows.",
+            "unknown": "The workflow cannot currently be used by Call Saved Workflow."
+        },
         "published": "Published",
         "browseWorkflows": "Browse Workflows",
         "deselectAll": "Deselect All",
@@ -2434,6 +2867,7 @@
         }
     },
     "controlLayers": {
+        "krea2StyleStrength": "Style Strength",
         "regional": "Regional",
         "global": "Global",
         "canvas": "Canvas",
@@ -2604,6 +3038,10 @@
         "text": {
             "font": "Font",
             "size": "Size",
+            "lineHeight": "Spacing",
+            "lineHeightDense": "Dense",
+            "lineHeightNormal": "Normal",
+            "lineHeightSpacious": "Spacious",
             "bold": "Bold",
             "italic": "Italic",
             "underline": "Underline",
@@ -2611,11 +3049,11 @@
             "alignLeft": "Align Left",
             "alignCenter": "Align Center",
             "alignRight": "Align Right",
-            "px": "px",
-            "lineHeight": "Spacing",
-            "lineHeightDense": "Dense",
-            "lineHeightNormal": "Normal",
-            "lineHeightSpacious": "Spacious"
+            "customFonts": "User Fonts",
+            "builtInFonts": "Built-in Fonts",
+            "missingFont": "Missing Font",
+            "fontLoadFailed": "failed to load",
+            "px": "px"
         },
         "newCanvasFromImage": "New Canvas from Image",
         "newImg2ImgCanvasFromImage": "New Img2Img from Image",
@@ -2679,6 +3117,8 @@
         "logDebugInfo": "Log Debug Info",
         "locked": "Locked",
         "unlocked": "Unlocked",
+        "transparencyLocked": "Transparency Locked",
+        "transparencyUnlocked": "Transparency Unlocked",
         "deleteSelected": "Delete Selected",
         "stagingOnCanvas": "Staging images on",
         "replaceLayer": "Replace Layer",
@@ -2715,9 +3155,12 @@
             "rgNoPromptsOrIPAdapters": "no text prompts or Reference Images",
             "rgNegativePromptNotSupported": "Negative Prompt not supported for selected base model",
             "rgReferenceImagesNotSupported": "regional Reference Images not supported for selected base model",
+            "krea2OnlyOneReferenceImage": "Krea-2 style reference uses only one image — this one is ignored",
             "rgAutoNegativeNotSupported": "Auto-Negative not supported for selected base model",
             "rgNoRegion": "no region drawn",
+            "ideogram4Txt2ImgOnly": "Ideogram 4 is text-to-image only; raster layers and inpaint masks are not supported",
             "fluxFillIncompatibleWithControlLoRA": "Control LoRA is not compatible with FLUX Fill",
+            "controlAdapterDuplicateAnimaLLLiteModel": "each Anima control model can only be used by one Control Layer",
             "bboxHidden": "Bounding box is hidden (shift+o to toggle)"
         },
         "errors": {
@@ -2775,9 +3218,48 @@
             "polygon": "Polygon",
             "polygonHint": "Click to add points, click the first point to close."
         },
+        "shape": {
+            "rect": "Rect",
+            "oval": "Oval"
+        },
+        "modifierHints": {
+            "keys": {
+                "control": "Ctrl",
+                "command": "Cmd",
+                "option": "Option",
+                "alt": "Alt",
+                "shift": "Shift",
+                "space": "Space",
+                "wheel": "Wheel",
+                "arrows": "Arrows",
+                "enter": "Enter",
+                "esc": "Esc"
+            },
+            "labels": {
+                "pan": "Pan",
+                "moveShape": "Move shape",
+                "pickColor": "Pick color",
+                "straightLine": "Straight line",
+                "resizeBrush": "Resize brush",
+                "resizeEraser": "Resize eraser",
+                "erase": "Erase",
+                "snap45Degrees": "Snap to 45deg",
+                "lockAspectRatio": "Lock ratio",
+                "unlockAspectRatio": "Unlock ratio",
+                "scaleFromCenter": "Scale from center",
+                "fineGrid": "Fine grid",
+                "commitText": "Commit",
+                "newLine": "New line",
+                "cancelText": "Cancel",
+                "dragText": "Drag text",
+                "snapRotation": "Snap rotation",
+                "nudgeSelection": "Nudge selection"
+            }
+        },
         "tool": {
             "brush": "Brush",
             "eraser": "Eraser",
+            "shapes": "Shapes",
             "rectangle": "Rectangle",
             "lasso": "Lasso",
             "gradient": "Gradient",
@@ -2986,7 +3468,8 @@
             "isolatedLayerPreview": "Isolated Layer Preview",
             "isolatedLayerPreviewDesc": "Whether to show only this layer when performing operations like filtering or transforming.",
             "invertBrushSizeScrollDirection": "Invert Scroll for Brush Size",
-            "pressureSensitivity": "Pressure Sensitivity"
+            "pressureAffectsWidth": "Pressure Affects Width",
+            "pressureAffectsBrushOpacity": "Pressure Affects Opacity"
         },
         "HUD": {
             "bbox": "Bbox",
@@ -3051,6 +3534,26 @@
             "switchOnStartDesc": "Switch on start",
             "switchOnFinish": "On Finish",
             "switchOnFinishDesc": "Switch on finish"
+        },
+        "snapshot": {
+            "snapshots": "Save or Load Canvas Snapshot",
+            "saveSnapshot": "Save Snapshot",
+            "restoreSnapshot": "Restore Snapshot",
+            "snapshotNamePlaceholder": "Snapshot name",
+            "save": "Save",
+            "delete": "Delete",
+            "snapshotSaved": "Snapshot \"{{name}}\" saved",
+            "snapshotRestored": "Snapshot \"{{name}}\" restored",
+            "snapshotDeleted": "Snapshot \"{{name}}\" deleted",
+            "snapshotSaveFailed": "Failed to save snapshot",
+            "snapshotRestoreFailed": "Failed to restore snapshot",
+            "snapshotDeleteFailed": "Failed to delete snapshot",
+            "snapshotMissingImages_one": "{{count}} image referenced by this snapshot no longer exists and will appear as a placeholder",
+            "snapshotMissingImages_other": "{{count}} images referenced by this snapshot no longer exist and will appear as placeholders",
+            "snapshotIncompatible": "This snapshot was created with a different version and is no longer compatible",
+            "overwriteSnapshotTitle": "Overwrite snapshot?",
+            "overwriteSnapshotMessage": "A snapshot named \"{{name}}\" already exists. Overwrite it?",
+            "overwrite": "Overwrite"
         }
     },
     "upscaling": {
@@ -3126,6 +3629,25 @@
         "selectPreset": "Select Style Preset",
         "noMatchingPresets": "No matching presets"
     },
+    "systemPrompts": {
+        "systemPrompt": "System Prompt",
+        "selectSystemPrompt": "Select system prompt...",
+        "manageSystemPrompts": "Manage system prompts",
+        "newSystemPrompt": "New System Prompt",
+        "editSystemPrompt": "Edit System Prompt",
+        "name": "Name",
+        "content": "Content",
+        "contentPlaceholder": "Enter the system prompt that instructs the LLM how to expand the user's prompt...",
+        "deletePrompt": "Delete System Prompt",
+        "deletePromptConfirm": "Are you sure you want to delete this system prompt? This cannot be undone.",
+        "promptDeleted": "System prompt deleted",
+        "unableToDeletePrompt": "Unable to delete system prompt",
+        "unableToSavePrompt": "Unable to save system prompt",
+        "noPromptsYet": "No system prompts yet. Create one to get started.",
+        "systemBadge": "System",
+        "sharedBadge": "Shared",
+        "shareWithEveryone": "Share with everyone (visible to all users)"
+    },
     "ui": {
         "tabs": {
             "generate": "Generate",
@@ -3137,6 +3659,8 @@
             "queue": "Queue",
             "upscaling": "Upscaling",
             "upscalingTab": "$t(ui.tabs.upscaling) $t(common.tab)",
+            "customNodes": "Nodes",
+            "customNodesTab": "$t(ui.tabs.customNodes) $t(common.tab)",
             "gallery": "Gallery"
         },
         "panels": {
@@ -3243,6 +3767,7 @@
             "models": "Models",
             "config": "Config",
             "canvas": "Canvas",
+            "canvas-workflow-integration": "Canvas Workflow Integration",
             "generation": "Generation",
             "workflows": "Workflows",
             "system": "System",
@@ -3252,10 +3777,10 @@
         }
     },
     "newUserExperience": {
-        "toGetStartedLocal": "To get started, make sure to download or import models needed to run Invoke. Then, enter a prompt in the box and click <StrongComponent>Invoke</StrongComponent> to generate your first image. Select a prompt template to improve results. You can choose to save your images directly to the <StrongComponent>Gallery</StrongComponent> or edit them to the <StrongComponent>Canvas</StrongComponent>.",
-        "toGetStarted": "To get started, enter a prompt in the box and click <StrongComponent>Invoke</StrongComponent> to generate your first image. Select a prompt template to improve results. You can choose to save your images directly to the <StrongComponent>Gallery</StrongComponent> or edit them to the <StrongComponent>Canvas</StrongComponent>.",
+        "toGetStartedLocal": "To get started, make sure to download or import models needed to run Invoke. Then, enter a prompt in the box and click <StrongComponent>Invoke</StrongComponent> to generate your first image. Select a prompt template to improve results. You can choose to save your images/videos directly to the <StrongComponent>Gallery</StrongComponent> or edit them to the <StrongComponent>Canvas</StrongComponent>.",
+        "toGetStarted": "To get started, enter a prompt in the box and click <StrongComponent>Invoke</StrongComponent> to generate your first image. Select a prompt template to improve results. You can choose to save your images/videos directly to the <StrongComponent>Gallery</StrongComponent> or edit them to the <StrongComponent>Canvas</StrongComponent>.",
         "toGetStartedWorkflow": "To get started, fill in the fields on the left and press <StrongComponent>Invoke</StrongComponent> to generate your image. Want to explore more workflows? Click the <StrongComponent>folder icon</StrongComponent> next to the workflow title to see a list of other templates you can try.",
-        "toGetStartedNonAdmin": "To get started, ask your InvokeAI administrator (<AdminEmailLink />) to install the AI models needed to run Invoke. Then, enter a prompt in the box and click <StrongComponent>Invoke</StrongComponent> to generate your first image. Select a prompt template to improve results. You can choose to save your images directly to the <StrongComponent>Gallery</StrongComponent> or edit them to the <StrongComponent>Canvas</StrongComponent>.",
+        "toGetStartedNonAdmin": "To get started, ask your InvokeAI administrator (<AdminEmailLink />) to install the AI models needed to run Invoke. Then, enter a prompt in the box and click <StrongComponent>Invoke</StrongComponent> to generate your first image. Select a prompt template to improve results. You can choose to save your images/videos directly to the <StrongComponent>Gallery</StrongComponent> or edit them to the <StrongComponent>Canvas</StrongComponent>.",
         "gettingStartedSeries": "Want more guidance? Check out our <LinkComponent>Getting Started Series</LinkComponent> for tips on unlocking the full potential of the Invoke Studio.",
         "lowVRAMMode": "For best performance, follow our <LinkComponent>Low VRAM guide</LinkComponent>.",
         "noModelsInstalled": "It looks like you don't have any models installed! You can <DownloadStarterModelsButton>download a starter model bundle</DownloadStarterModelsButton> or <ImportModelsButton>import models</ImportModelsButton>.",
@@ -3264,13 +3789,15 @@
     "whatsNew": {
         "whatsNewInInvoke": "What's New in Invoke",
         "items": [
-            "Multi-user mode supports multiple isolated users on the same server.",
-            "Enhanced support for Z-Image and FLUX.2 Models.",
-            "Multiple user interface enhancements and new canvas features."
+            "New model types: Krea.2-Turbo/Raw, Ideogram 4, Ernie",
+            "Video generation with Wan 2.2",
+            "Parallel generation on systems with multiple GPUs",
+            "Anima controlnets and inpainting mode",
+            "Performance improvements and bug fixes"
         ],
-        "takeUserSurvey": "📣 Let us know how you like InvokeAI. Take our User Experience Survey!",
         "readReleaseNotes": "Read Release Notes",
-        "watchRecentReleaseVideos": "Watch Recent Release Videos",
+        "readTheDocs": "Read the Docs",
+        "readDocumentation": "Read Invoke Documentation",
         "watchUiUpdatesOverview": "Watch UI Updates Overview"
     },
     "cropper": {
@@ -3300,5 +3827,35 @@
                 "description": "Deep dive sessions exploring advanced Invoke features, creative workflows, and community discussions."
             }
         }
+    },
+    "customNodes": {
+        "title": "Custom Nodes",
+        "installTitle": "Install Node Pack",
+        "gitUrl": "Git Repository URL",
+        "gitUrlLabel": "Repository URL",
+        "gitUrlPlaceholder": "https://github.com/user/node-pack.git",
+        "install": "Install",
+        "installing": "Installing",
+        "installSuccess": "Node pack installed",
+        "installFailed": "Installation failed",
+        "installError": "An unexpected error occurred during installation.",
+        "securityWarning": "Custom nodes execute code on your system. Only install node packs from authors you trust. Malicious nodes could harm your system or compromise your data.",
+        "installDescription": "Clones the repository into your nodes directory. Workflow files (.json) are imported into your library. Python dependencies (requirements.txt or pyproject.toml) are NOT installed automatically — follow the node pack's documentation to install them manually.",
+        "dependenciesRequiredTitle": "Manual dependency install required",
+        "dependenciesRequiredDescription": "'{{name}}' includes a {{file}}. Follow the node pack's documentation to install its Python dependencies before using its nodes.",
+        "uninstall": "Uninstall",
+        "reload": "Reload",
+        "reloading": "Reloading",
+        "noNodePacks": "No custom node packs installed.",
+        "scanFolder": "Scan Folder",
+        "scanFolderDescription": "Node packs placed in the nodes directory are automatically detected at startup. Use the Reload button to detect newly added packs without restarting.",
+        "nodesDirectory": "Nodes directory",
+        "installQueue": "Install Log",
+        "queueEmpty": "No recent install activity.",
+        "name": "Name",
+        "message": "Message",
+        "nodeCount_one": "{{count}} node",
+        "nodeCount_other": "{{count}} nodes",
+        "uninstalled": "Uninstalled"
     }
 }

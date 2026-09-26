@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Box, Flex, IconButton } from '@invoke-ai/ui-library';
-import { useAppStore } from 'app/store/storeHooks';
 import { typedMemo } from 'common/util/typedMemo';
 import type {
   CollectionMetadataHandler,
@@ -10,6 +9,8 @@ import type {
 } from 'features/metadata/parsing';
 import {
   ImageMetadataHandlers,
+  isCollectionMetadataHandler,
+  isUnrecallableMetadataHandler,
   useCollectionMetadataDatum,
   useSingleMetadataDatum,
   useUnrecallableMetadataDatum,
@@ -22,6 +23,72 @@ type Props = {
   metadata?: unknown;
 };
 
+type ImageMetadataActionHandler =
+  | UnrecallableMetadataHandler<any>
+  | SingleMetadataHandler<any>
+  | CollectionMetadataHandler<any[]>;
+
+export const IMAGE_METADATA_ACTION_HANDLERS: ImageMetadataActionHandler[] = [
+  ImageMetadataHandlers.GenerationMode,
+  ImageMetadataHandlers.PositivePrompt,
+  ImageMetadataHandlers.NegativePrompt,
+  ImageMetadataHandlers.MainModel,
+  ImageMetadataHandlers.VAEModel,
+  ImageMetadataHandlers.T5EncoderModel,
+  ImageMetadataHandlers.Width,
+  ImageMetadataHandlers.Height,
+  ImageMetadataHandlers.Seed,
+  ImageMetadataHandlers.Steps,
+  ImageMetadataHandlers.Scheduler,
+  ImageMetadataHandlers.CLIPSkip,
+  ImageMetadataHandlers.CFGScale,
+  ImageMetadataHandlers.CFGRescaleMultiplier,
+  ImageMetadataHandlers.Guidance,
+  ImageMetadataHandlers.FluxDypePreset,
+  ImageMetadataHandlers.FluxDypeScale,
+  ImageMetadataHandlers.FluxDypeExponent,
+  ImageMetadataHandlers.DenoisingStrength,
+  ImageMetadataHandlers.SeamlessX,
+  ImageMetadataHandlers.SeamlessY,
+  ImageMetadataHandlers.RefinerModel,
+  ImageMetadataHandlers.RefinerCFGScale,
+  ImageMetadataHandlers.RefinerPositiveAestheticScore,
+  ImageMetadataHandlers.RefinerNegativeAestheticScore,
+  ImageMetadataHandlers.RefinerScheduler,
+  ImageMetadataHandlers.RefinerDenoisingStart,
+  ImageMetadataHandlers.RefinerSteps,
+  ImageMetadataHandlers.QwenImageComponentSource,
+  ImageMetadataHandlers.QwenImageQuantization,
+  ImageMetadataHandlers.QwenImageShift,
+  ImageMetadataHandlers.ZImageShift,
+  ImageMetadataHandlers.Ideogram4SamplerPreset,
+  ImageMetadataHandlers.Ideogram4Steps,
+  ImageMetadataHandlers.Ideogram4GuidanceScale,
+  ImageMetadataHandlers.Ideogram4Mu,
+  ImageMetadataHandlers.Ideogram4ColorPalette,
+  ImageMetadataHandlers.Ideogram4Caption,
+  ImageMetadataHandlers.CanvasLayers,
+  ImageMetadataHandlers.RefImages,
+  ImageMetadataHandlers.Flux1VAEModel,
+  ImageMetadataHandlers.Flux2VAEModel,
+  ImageMetadataHandlers.KleinQwen3EncoderModel,
+  ImageMetadataHandlers.Flux2DevMistralEncoderModel,
+  ImageMetadataHandlers.ZImageVAEModel,
+  ImageMetadataHandlers.ZImageQwen3EncoderModel,
+  ImageMetadataHandlers.ZImageQwen3SourceModel,
+  ImageMetadataHandlers.AnimaVAEModel,
+  ImageMetadataHandlers.AnimaQwen3EncoderModel,
+  ImageMetadataHandlers.Krea2VAEModel,
+  ImageMetadataHandlers.Krea2Qwen3VlEncoderModel,
+  ImageMetadataHandlers.Krea2SeedVarianceEnabled,
+  ImageMetadataHandlers.Krea2SeedVarianceStrength,
+  ImageMetadataHandlers.Krea2SeedVarianceRandomizePercent,
+  ImageMetadataHandlers.Krea2RebalanceEnabled,
+  ImageMetadataHandlers.Krea2RebalanceMultiplier,
+  ImageMetadataHandlers.Krea2RebalanceWeights,
+  ImageMetadataHandlers.LoRAs,
+];
+
 export const ImageMetadataActions = memo((props: Props) => {
   const { metadata } = props;
 
@@ -31,39 +98,15 @@ export const ImageMetadataActions = memo((props: Props) => {
 
   return (
     <Flex flexDir="column" ps={8}>
-      <UnrecallableMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.GenerationMode} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.PositivePrompt} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.NegativePrompt} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.MainModel} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.VAEModel} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.Width} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.Height} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.Seed} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.Steps} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.Scheduler} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.CLIPSkip} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.CFGScale} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.CFGRescaleMultiplier} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.Guidance} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.FluxDypePreset} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.FluxDypeScale} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.FluxDypeExponent} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.DenoisingStrength} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.SeamlessX} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.SeamlessY} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefinerModel} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefinerCFGScale} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefinerPositiveAestheticScore} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefinerNegativeAestheticScore} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefinerScheduler} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefinerDenoisingStart} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefinerSteps} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.QwenImageComponentSource} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.QwenImageQuantization} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.QwenImageShift} />
-      <SingleMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.CanvasLayers} />
-      <CollectionMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.RefImages} />
-      <CollectionMetadataDatum metadata={metadata} handler={ImageMetadataHandlers.LoRAs} />
+      {IMAGE_METADATA_ACTION_HANDLERS.map((handler) => {
+        if (isUnrecallableMetadataHandler(handler)) {
+          return <UnrecallableMetadataDatum key={handler.type} metadata={metadata} handler={handler} />;
+        }
+        if (isCollectionMetadataHandler(handler)) {
+          return <CollectionMetadataDatum key={handler.type} metadata={metadata} handler={handler} />;
+        }
+        return <SingleMetadataDatum key={handler.type} metadata={metadata} handler={handler} />;
+      })}
     </Flex>
   );
 });
@@ -101,29 +144,38 @@ UnrecallableMetadataParsed.displayName = 'UnrecallableMetadataParsed';
 
 const SingleMetadataDatum = typedMemo(
   <T,>({ metadata, handler }: { metadata: unknown; handler: SingleMetadataHandler<T> }) => {
-    const { data } = useSingleMetadataDatum(metadata, handler);
+    // `recall` comes from the hook rather than being `handler.recall`: the hook re-runs the handler's gate
+    // before dispatching, so a row left over from a base switch cannot write into an inactive slot.
+    const { data, recall } = useSingleMetadataDatum(metadata, handler);
 
     if (!data.isParsed) {
       return null;
     }
 
     if (data.isSuccess) {
-      return <SingleMetadataParsed data={data} handler={handler} />;
+      return <SingleMetadataParsed data={data} handler={handler} recall={recall} />;
     }
   }
 );
 SingleMetadataDatum.displayName = 'SingleMetadataDatum';
 
 const SingleMetadataParsed = typedMemo(
-  <T,>({ data, handler }: { data: ParsedSuccessData<T>; handler: SingleMetadataHandler<T> }) => {
+  <T,>({
+    data,
+    handler,
+    recall,
+  }: {
+    data: ParsedSuccessData<T>;
+    handler: SingleMetadataHandler<T>;
+    recall: (value: T) => void;
+  }) => {
     const { t } = useTranslation();
-    const store = useAppStore();
 
     const { LabelComponent, ValueComponent } = handler;
 
     const onClick = useCallback(() => {
-      handler.recall(data.value, store);
-    }, [data.value, handler, store]);
+      recall(data.value);
+    }, [data.value, recall]);
 
     return (
       <Flex gap={2}>
@@ -146,7 +198,8 @@ SingleMetadataParsed.displayName = 'SingleMetadataParsed';
 
 const CollectionMetadataDatum = typedMemo(
   <T extends any[]>({ metadata, handler }: { metadata: unknown; handler: CollectionMetadataHandler<T> }) => {
-    const { data } = useCollectionMetadataDatum(metadata, handler);
+    // See `SingleMetadataDatum`: the hook's `recallOne` re-validates, `handler.recallOne` does not.
+    const { data, recallOne } = useCollectionMetadataDatum(metadata, handler);
 
     if (!data.isParsed) {
       return null;
@@ -156,7 +209,7 @@ const CollectionMetadataDatum = typedMemo(
       return (
         <>
           {data.value.map((value, i) => (
-            <CollectionMetadataParsed key={i} value={value} handler={handler} />
+            <CollectionMetadataParsed key={i} value={value} handler={handler} recallOne={recallOne} />
           ))}
         </>
       );
@@ -166,15 +219,22 @@ const CollectionMetadataDatum = typedMemo(
 CollectionMetadataDatum.displayName = 'CollectionMetadataDatum';
 
 const CollectionMetadataParsed = typedMemo(
-  <T extends any[]>({ value, handler }: { value: T[number]; handler: CollectionMetadataHandler<T> }) => {
+  <T extends any[]>({
+    value,
+    handler,
+    recallOne,
+  }: {
+    value: T[number];
+    handler: CollectionMetadataHandler<T>;
+    recallOne: (value: T[number]) => void;
+  }) => {
     const { t } = useTranslation();
-    const store = useAppStore();
 
     const { LabelComponent, ValueComponent } = handler;
 
     const onClick = useCallback(() => {
-      handler.recallOne(value, store);
-    }, [handler, store, value]);
+      recallOne(value);
+    }, [recallOne, value]);
 
     return (
       <Flex gap={2}>

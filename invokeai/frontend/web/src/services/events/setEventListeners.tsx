@@ -2,8 +2,10 @@ import { Flex, Text } from '@invoke-ai/ui-library';
 import { logger } from 'app/logging/logger';
 import { socketConnected } from 'app/store/middleware/listenerMiddleware/listeners/socketConnected';
 import type { AppStore } from 'app/store/store';
-import { deepClone } from 'common/util/deepClone';
-import { forEach, isNil, round } from 'es-toolkit/compat';
+import { parseify } from 'common/util/serialize';
+import { isNil, round } from 'es-toolkit/compat';
+import { selectCurrentUser } from 'features/auth/store/authSlice';
+import { getDefaultRefImageConfig } from 'features/controlLayers/hooks/addLayerHooks';
 import { allEntitiesDeleted, controlLayerRecalled } from 'features/controlLayers/store/canvasSlice';
 import { canvasWorkflowIntegrationProcessingCompleted } from 'features/controlLayers/store/canvasWorkflowIntegrationSlice';
 import { loraAllDeleted, loraRecalled } from 'features/controlLayers/store/lorasSlice';
@@ -25,25 +27,38 @@ import type {
 } from 'features/controlLayers/store/types';
 import { getControlLayerState, getReferenceImageState } from 'features/controlLayers/store/util';
 import { $nodeExecutionStates, upsertExecutionState } from 'features/nodes/hooks/useNodeExecutionState';
-import { zNodeStatus } from 'features/nodes/types/invocation';
+import { fieldValueReset } from 'features/nodes/store/nodesSlice';
+import { selectNodesSlice } from 'features/nodes/store/selectors';
 import { modelSelected } from 'features/parameters/store/actions';
-import ErrorToastDescription, { getTitle } from 'features/toast/ErrorToastDescription';
 import { toast, toastApi } from 'features/toast/toast';
 import { t } from 'i18next';
-import { LRUCache } from 'lru-cache';
 import { Trans } from 'react-i18next';
 import type { ApiTagDescription } from 'services/api';
-import { api, LIST_ALL_TAG, LIST_TAG } from 'services/api';
+import { api, LIST_TAG } from 'services/api';
 import { imagesApi } from 'services/api/endpoints/images';
 import { modelsApi } from 'services/api/endpoints/models';
 import { queueApi } from 'services/api/endpoints/queue';
-import { buildOnInvocationComplete } from 'services/events/onInvocationComplete';
+import { getEventScope } from 'services/events/eventScope';
+import { buildOnForeignInvocationComplete, buildOnInvocationComplete } from 'services/events/onInvocationComplete';
 import { buildOnModelInstallError, DiscordLink, GitHubIssuesLink } from 'services/events/onModelInstallError';
+import {
+  buildOnNonOwnerQueueItemStatusChanged,
+  buildOnQueueItemStatusChanged,
+} from 'services/events/onQueueItemStatusChanged';
+import { QUEUE_CHANGED_TAGS } from 'services/events/queueCacheTags';
 import type { ClientToServerEvents, ServerToClientEvents } from 'services/events/types';
+import { createWorkflowExecutionCoordinator } from 'services/events/workflowExecutionCoordinator';
 import type { Socket } from 'socket.io-client';
 import type { JsonObject } from 'type-fest';
 
-import { $lastProgressEvent } from './stores';
+import {
+  $lastProgressEvent,
+  $loadingModelsCount,
+  clearAllProgressEvents,
+  clearLLMTaskState,
+  setLLMTaskState,
+  setProgressEvent,
+} from './stores';
 
 const log = logger('events');
 
@@ -58,13 +73,35 @@ const selectModelInstalls = modelsApi.endpoints.listModelInstalls.select();
 /**
  * Sets up event listeners for the socketio client. Some components will set up their own listeners. These are the ones
  * that have app-wide implications.
+ *
+ * Returns a disposer. It must be called when this socket goes away — a reconnect with new auth, a
+ * logout, an account switch — because the completion handler can hold pending refetches for outputs
+ * of *this* session, and they dispatch into whatever store is current when they fire.
  */
-export const setEventListeners = ({ socket, store, setIsConnected }: SetEventListenersArg) => {
+export const setEventListeners = ({ socket, store, setIsConnected }: SetEventListenersArg): (() => void) => {
   const { dispatch, getState } = store;
 
-  // We can have race conditions where we receive a progress event for a queue item that has already finished. Easiest
-  // way to handle this is to keep track of finished queue items in a cache and ignore progress events for those.
-  const finishedQueueItemIds = new LRUCache<number, boolean>({ max: 100 });
+  const completedInvocationKeysByItemId = new Map<number, Set<string>>();
+  const onInvocationComplete = buildOnInvocationComplete(getState, dispatch, completedInvocationKeysByItemId);
+  const workflowExecutionCoordinator = createWorkflowExecutionCoordinator({
+    clearCanvasWorkflowIntegrationProcessing: () => dispatch(canvasWorkflowIntegrationProcessingCompleted()),
+    completedInvocationKeysByItemId,
+    getAllNodeExecutionStates: () => $nodeExecutionStates.get(),
+    getCurrentUserId: () => selectCurrentUser(getState())?.user_id ?? null,
+    getNodeExecutionState: (nodeId) => $nodeExecutionStates.get()[nodeId],
+    logReconciliationError: (error, itemId) => {
+      log.debug({ error: parseify(error) }, `Unable to reconcile workflow queue item ${itemId}`);
+    },
+    onInvocationComplete,
+    reconcileQueueItem: (itemId) =>
+      dispatch(queueApi.endpoints.getQueueItem.initiate(itemId, { forceRefetch: true, subscribe: false })),
+    setNodeExecutionState: (nodeId, state) => $nodeExecutionStates.setKey(nodeId, state),
+    upsertNodeExecutionState: upsertExecutionState,
+  });
+
+  const onForeignInvocationComplete = buildOnForeignInvocationComplete(dispatch);
+  const onQueueItemStatusChanged = buildOnQueueItemStatusChanged(dispatch, workflowExecutionCoordinator);
+  const onNonOwnerQueueItemStatusChanged = buildOnNonOwnerQueueItemStatusChanged(dispatch);
 
   socket.on('connect', () => {
     log.debug('Connected');
@@ -73,12 +110,16 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
     socket.emit('subscribe_queue', { queue_id: 'default' });
     socket.emit('subscribe_bulk_download', { bulk_download_id: 'default' });
     $lastProgressEvent.set(null);
+    clearAllProgressEvents();
+    $loadingModelsCount.set(0);
   });
 
   socket.on('connect_error', (error) => {
     log.debug('Connect error');
     setIsConnected(false);
     $lastProgressEvent.set(null);
+    clearAllProgressEvents();
+    $loadingModelsCount.set(0);
     if (error && error.message) {
       const data: string | undefined = (error as unknown as { data: string | undefined }).data;
       if (data === 'ERR_UNAUTHENTICATED') {
@@ -94,29 +135,107 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
 
   socket.on('disconnect', () => {
     log.debug('Disconnected');
+    workflowExecutionCoordinator.cancelPendingWorkflowReconciliations();
     $lastProgressEvent.set(null);
+    clearAllProgressEvents();
+    $loadingModelsCount.set(0);
     setIsConnected(false);
   });
 
+  const invalidateWorkflowLibrary = () => {
+    dispatch(
+      api.util.invalidateTags([
+        { type: 'Workflow', id: LIST_TAG },
+        'WorkflowTags',
+        'WorkflowTagCounts',
+        'WorkflowCategoryCounts',
+      ])
+    );
+  };
+
+  const clearSavedWorkflowSelection = (workflowId: string) => {
+    const nodes = selectNodesSlice(getState()).nodes;
+
+    for (const node of nodes) {
+      if (node.type !== 'invocation' || node.data.type !== 'call_saved_workflow') {
+        continue;
+      }
+
+      if (node.data.inputs.workflow_id?.value !== workflowId) {
+        continue;
+      }
+
+      dispatch(
+        fieldValueReset({
+          nodeId: node.id,
+          fieldName: 'workflow_id',
+          value: '',
+        })
+      );
+    }
+  };
+
+  socket.on('workflow_created', (data) => {
+    log.debug({ data }, 'Workflow created');
+    invalidateWorkflowLibrary();
+  });
+
+  socket.on('workflow_updated', (data) => {
+    log.debug({ data }, 'Workflow updated');
+    invalidateWorkflowLibrary();
+  });
+
+  socket.on('workflow_deleted', (data) => {
+    log.debug({ data }, 'Workflow deleted');
+    invalidateWorkflowLibrary();
+    clearSavedWorkflowSelection(data.workflow_id);
+  });
+
+  socket.on('workflow_access_revoked', (data) => {
+    log.debug({ data }, 'Workflow access revoked');
+    invalidateWorkflowLibrary();
+    const currentUser = selectCurrentUser(getState());
+    if (currentUser?.is_admin || currentUser?.user_id === data.user_id) {
+      return;
+    }
+    clearSavedWorkflowSelection(data.workflow_id);
+  });
+
+  // In multiuser mode, admins are subscribed to the "admin" socket room and receive invocation
+  // and queue item events for *every* user, carrying that user's real user_id. Another user's
+  // events must not drive this client's personal state: the workflow execution coordinator, node
+  // execution states, canvas workflow integration processing, completed-invocation bookkeeping,
+  // or $lastProgressEvent. Ownership is decided here at the listener — before the coordinator
+  // records anything — so each handler only ever sees the events it owns:
+  //
+  // - Foreign invocation_started/progress/error are dropped. (The backend already routes progress
+  //   to the owner's room only; the client-side check is defense in depth.)
+  // - A foreign invocation_complete downgrades to a cache-invalidation-only gallery refresh so an
+  //   admin viewing another user's board stays fresh without optimistic cache work or DTO fetches.
+  // - A non-owner queue_item_status_changed (sanitized companion or admin-room copy) only
+  //   invalidates queue tags.
+  //
+  // In single-user mode there is no authenticated user and every event is 'own'.
   socket.on('invocation_started', (data) => {
-    if (finishedQueueItemIds.has(data.item_id)) {
+    if (getEventScope(getState, data) !== 'own') {
+      log.trace({ data } as JsonObject, `Ignoring invocation_started for another user (${data.user_id})`);
       return;
     }
     const { invocation_source_id, invocation } = data;
     log.debug({ data } as JsonObject, `Invocation started (${invocation.type}, ${invocation_source_id})`);
-    const nes = deepClone($nodeExecutionStates.get()[invocation_source_id]);
-    if (nes) {
-      nes.status = zNodeStatus.enum.IN_PROGRESS;
-      upsertExecutionState(nes.nodeId, nes);
-    }
+    workflowExecutionCoordinator.onInvocationStarted(data);
   });
 
   socket.on('invocation_progress', (data) => {
-    if (finishedQueueItemIds.has(data.item_id)) {
+    if (getEventScope(getState, data) !== 'own') {
+      log.trace({ data } as JsonObject, `Ignoring invocation_progress for another user (${data.user_id})`);
+      return;
+    }
+    if (!workflowExecutionCoordinator.onInvocationProgress(data)) {
       log.trace({ data } as JsonObject, `Received event for already-finished queue item ${data.item_id}`);
       return;
     }
-    const { invocation_source_id, invocation, image, origin, percentage, message } = data;
+    const { invocation_source_id, invocation, percentage, message } = data;
 
     let _message = 'Invocation progress';
     if (message) {
@@ -130,45 +249,26 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
     log.trace({ data } as JsonObject, _message);
 
     $lastProgressEvent.set(data);
-
-    if (origin === 'workflows') {
-      const nes = deepClone($nodeExecutionStates.get()[invocation_source_id]);
-      if (nes) {
-        nes.status = zNodeStatus.enum.IN_PROGRESS;
-        nes.progress = percentage;
-        nes.progressImage = image ?? null;
-        upsertExecutionState(nes.nodeId, nes);
-      }
-    }
+    setProgressEvent(data);
   });
 
   socket.on('invocation_error', (data) => {
-    if (finishedQueueItemIds.has(data.item_id)) {
-      log.trace({ data } as JsonObject, `Received event for already-finished queue item ${data.item_id}`);
+    if (getEventScope(getState, data) !== 'own') {
+      log.trace({ data } as JsonObject, `Ignoring invocation_error for another user (${data.user_id})`);
       return;
     }
-    const { invocation_source_id, invocation, error_type, error_message, error_traceback } = data;
+    const { invocation_source_id, invocation } = data;
     log.error({ data } as JsonObject, `Invocation error (${invocation.type}, ${invocation_source_id})`);
-    const nes = deepClone($nodeExecutionStates.get()[invocation_source_id]);
-    if (nes) {
-      nes.status = zNodeStatus.enum.FAILED;
-      nes.progress = null;
-      nes.progressImage = null;
-      nes.error = {
-        error_type,
-        error_message,
-        error_traceback,
-      };
-      upsertExecutionState(nes.nodeId, nes);
-    }
-    // Clear canvas workflow integration processing state on error
-    if (data.origin === 'canvas_workflow_integration') {
-      dispatch(canvasWorkflowIntegrationProcessingCompleted());
-    }
+    workflowExecutionCoordinator.onInvocationError(data);
   });
 
-  const onInvocationComplete = buildOnInvocationComplete(getState, dispatch, finishedQueueItemIds);
-  socket.on('invocation_complete', onInvocationComplete);
+  socket.on('invocation_complete', (data) => {
+    if (getEventScope(getState, data) === 'own') {
+      workflowExecutionCoordinator.onInvocationComplete(data);
+    } else {
+      onForeignInvocationComplete(data);
+    }
+  });
 
   socket.on('model_load_started', (data) => {
     const { config, submodel_type } = data;
@@ -183,6 +283,7 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
     const message = `Model load started: ${name} (${extras.join(', ')})`;
 
     log.debug({ data }, message);
+    $loadingModelsCount.set($loadingModelsCount.get() + 1);
   });
 
   socket.on('model_load_complete', (data) => {
@@ -197,6 +298,7 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
     const message = `Model load complete: ${name} (${extras.join(', ')})`;
 
     log.debug({ data }, message);
+    $loadingModelsCount.set(Math.max(0, $loadingModelsCount.get() - 1));
   });
 
   socket.on('download_started', (data) => {
@@ -378,158 +480,65 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
   });
 
   socket.on('queue_item_status_changed', (data) => {
-    if (finishedQueueItemIds.has(data.item_id)) {
-      log.trace({ data }, `Received event for already-finished queue item ${data.item_id}`);
-      return;
-    }
-
-    // we've got new status for the queue item, batch and queue
-    const {
-      item_id,
-      status,
-      batch_status,
-      error_type,
-      error_message,
-      destination,
-      started_at,
-      updated_at,
-      completed_at,
-      error_traceback,
-    } = data;
-
-    log.debug({ data }, `Queue item ${item_id} status updated: ${status}`);
-
-    // // Update this specific queue item in the list of queue items
-    dispatch(
-      queueApi.util.updateQueryData('getQueueItem', item_id, (draft) => {
-        draft.status = status;
-        draft.started_at = started_at;
-        draft.updated_at = updated_at;
-        draft.completed_at = completed_at;
-        draft.error_type = error_type;
-        draft.error_message = error_message;
-        draft.error_traceback = error_traceback;
-      })
-    );
-
-    // Optimistically update the listAllQueueItems cache for this destination so the canvas
-    // staging area immediately reflects status changes without waiting for a tag-based refetch
-    if (destination) {
-      dispatch(
-        queueApi.util.updateQueryData('listAllQueueItems', { destination }, (draft) => {
-          const item = draft.find((i) => i.item_id === item_id);
-          if (item) {
-            item.status = status;
-            item.started_at = started_at;
-            item.updated_at = updated_at;
-            item.completed_at = completed_at;
-            item.error_type = error_type;
-            item.error_message = error_message;
-            item.error_traceback = error_traceback;
-          }
-        })
-      );
-    }
-
-    // Invalidate caches for things we cannot easily update
-    // Invalidate SessionQueueStatus to refetch with user-specific counts
-    const tagsToInvalidate: ApiTagDescription[] = [
-      'CurrentSessionQueueItem',
-      'NextSessionQueueItem',
-      'InvocationCacheStatus',
-      'SessionQueueStatus',
-      'SessionQueueItemIdList',
-      { type: 'SessionQueueItem', id: item_id },
-      { type: 'SessionQueueItem', id: LIST_TAG },
-      { type: 'SessionQueueItem', id: LIST_ALL_TAG },
-      { type: 'BatchStatus', id: batch_status.batch_id },
-    ];
-    if (destination) {
-      tagsToInvalidate.push({ type: 'QueueCountsByDestination', id: destination });
-    }
-    dispatch(queueApi.util.invalidateTags(tagsToInvalidate));
-
-    if (status === 'in_progress') {
-      forEach($nodeExecutionStates.get(), (nes) => {
-        if (!nes) {
-          return;
-        }
-        const clone = deepClone(nes);
-        clone.status = zNodeStatus.enum.PENDING;
-        clone.error = null;
-        clone.progress = null;
-        clone.progressImage = null;
-        clone.outputs = [];
-        $nodeExecutionStates.setKey(clone.nodeId, clone);
-      });
-    } else if (status === 'completed' || status === 'failed' || status === 'canceled') {
-      finishedQueueItemIds.set(item_id, true);
-      if (status === 'failed' && error_type) {
-        toast({
-          id: `INVOCATION_ERROR_${error_type}`,
-          title: getTitle(error_type),
-          status: 'error',
-          duration: null,
-          updateDescription: true,
-          description: <ErrorToastDescription errorType={error_type} errorMessage={error_message} />,
-        });
-      }
-      // If the queue item is completed, failed, or cancelled, we want to clear the last progress event
-      $lastProgressEvent.set(null);
+    if (getEventScope(getState, data) === 'own') {
+      onQueueItemStatusChanged(data);
+    } else {
+      onNonOwnerQueueItemStatusChanged(data);
     }
   });
 
   socket.on('queue_cleared', (data) => {
     log.debug({ data }, 'Queue cleared');
+    // Clearing the queue deletes the in-progress item without emitting a per-item terminal status
+    // event, so the progress bars must be reset here — and the coordinator must mark the deleted
+    // tracked items terminal so a trailing invocation_progress event cannot repopulate the bar.
+    // The coordinator scopes a user-scoped clear (multiuser mode) to that user's items — on an
+    // admin client that may be a subset of the tracked items; on another user's client it is
+    // none of them — and reports whether the clear applied to any tracked item, so the progress
+    // bars are only reset when the clear could have deleted the items behind them. Per-item bars
+    // for items the clear did not delete repopulate on their next invocation_progress event. The
+    // queue tags below always need refreshing.
+    if (workflowExecutionCoordinator.onQueueCleared(data)) {
+      $lastProgressEvent.set(null);
+      clearAllProgressEvents();
+    }
     dispatch(
       queueApi.util.invalidateTags([
-        'SessionQueueStatus',
+        ...QUEUE_CHANGED_TAGS,
         'SessionProcessorStatus',
         'BatchStatus',
-        'CurrentSessionQueueItem',
-        'NextSessionQueueItem',
         'QueueCountsByDestination',
-        'SessionQueueItemIdList',
-        { type: 'SessionQueueItem', id: LIST_TAG },
-        { type: 'SessionQueueItem', id: LIST_ALL_TAG },
       ])
     );
   });
 
   socket.on('batch_enqueued', (data) => {
     log.debug({ data }, 'Batch enqueued');
-    dispatch(
-      queueApi.util.invalidateTags([
-        'SessionQueueStatus',
-        'CurrentSessionQueueItem',
-        'NextSessionQueueItem',
-        'QueueCountsByDestination',
-        'SessionQueueItemIdList',
-        { type: 'SessionQueueItem', id: LIST_TAG },
-        { type: 'SessionQueueItem', id: LIST_ALL_TAG },
-      ])
-    );
+    dispatch(queueApi.util.invalidateTags([...QUEUE_CHANGED_TAGS, 'QueueCountsByDestination']));
   });
+
+  // Bulk queue item events (retried/canceled) are the only signal other clients get for a bulk
+  // operation, which changes many rows in one SQL statement and emits no per-item
+  // queue_item_status_changed. Owners receive their own item ids, admins receive all of them,
+  // and other users receive a sanitized companion with no ids — in every case, refetch the
+  // queue caches so lists and badge counts update.
+  const invalidateQueueTagsForBulkItemEvent = (itemIds: number[]) => {
+    const tagsToInvalidate: ApiTagDescription[] = [...QUEUE_CHANGED_TAGS, 'BatchStatus', 'QueueCountsByDestination'];
+    // Invalidate each affected item specifically
+    for (const itemId of itemIds) {
+      tagsToInvalidate.push({ type: 'SessionQueueItem', id: itemId });
+    }
+    dispatch(queueApi.util.invalidateTags(tagsToInvalidate));
+  };
 
   socket.on('queue_items_retried', (data) => {
     log.debug({ data }, 'Queue items retried');
-    const tagsToInvalidate: ApiTagDescription[] = [
-      'SessionQueueStatus',
-      'BatchStatus',
-      'CurrentSessionQueueItem',
-      'NextSessionQueueItem',
-      'QueueCountsByDestination',
-      'SessionQueueItemIdList',
-      { type: 'SessionQueueItem', id: LIST_TAG },
-      { type: 'SessionQueueItem', id: LIST_ALL_TAG },
-    ];
-    // Invalidate each retried item specifically
-    if (data.retried_item_ids) {
-      for (const itemId of data.retried_item_ids) {
-        tagsToInvalidate.push({ type: 'SessionQueueItem', id: itemId });
-      }
-    }
-    dispatch(queueApi.util.invalidateTags(tagsToInvalidate));
+    invalidateQueueTagsForBulkItemEvent(data.retried_item_ids ?? []);
+  });
+
+  socket.on('queue_items_canceled', (data) => {
+    log.debug({ data }, 'Queue items canceled');
+    invalidateQueueTagsForBulkItemEvent(data.canceled_item_ids);
   });
 
   socket.on('recall_parameters_updated', (data) => {
@@ -736,110 +745,198 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
         }
       }
 
-      // Handle IP Adapters as Reference Images
-      if (data.parameters.ip_adapters !== undefined && Array.isArray(data.parameters.ip_adapters)) {
-        log.debug(`Processing ${data.parameters.ip_adapters.length} IP adapter(s)`);
+      // Handle IP Adapters and model-free reference images together.
+      //
+      // Both ip_adapters and reference_images feed into the same refImages
+      // Redux slice.  Previously they were dispatched as two independent
+      // Promise.all chains — the first with replace:true, the second with
+      // replace:false — which created a race: if a previous recall's
+      // reference-image promises were still in-flight they could resolve
+      // after the clear and re-append stale entries, doubling the list.
+      //
+      // Fix: collect every promise into a single array and dispatch exactly
+      // once with replace:true after all of them settle.
+      {
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const ipAdaptersArr: any[] = Array.isArray(data.parameters.ip_adapters)
+          ? (data.parameters.ip_adapters as any[])
+          : [];
+        const refImagesArr: any[] = Array.isArray(data.parameters.reference_images)
+          ? (data.parameters.reference_images as any[])
+          : [];
+        /* eslint-enable @typescript-eslint/no-explicit-any */
 
-        // If the list is explicitly empty, clear existing reference images
-        if (data.parameters.ip_adapters.length === 0) {
-          dispatch(refImagesRecalled({ entities: [], replace: true }));
-          log.info('Cleared all IP adapter reference images');
-        } else {
-          // Build promises for all IP adapters, then dispatch once with replace: true
-          const ipAdapterPromises = data.parameters.ip_adapters
-            .filter((cfg) => cfg.model_key && typeof cfg.model_key === 'string')
-            .map(async (adapterConfig) => {
-              try {
-                const modelConfig = await dispatch(
-                  modelsApi.endpoints.getModelConfig.initiate(adapterConfig.model_key!)
-                ).unwrap();
+        const hasIpAdapters = data.parameters.ip_adapters !== undefined;
+        const hasRefImages = data.parameters.reference_images !== undefined;
+        // Append mode (POST /api/v1/recall/{queue_id}?append=true): add the
+        // recalled reference images to the existing list instead of replacing
+        // it. The backend passes the flag inside the parameters dict.
+        const append = data.parameters.append === true;
 
-                // Pre-fetch the image DTO if an image is provided, to avoid validation errors
-                if (adapterConfig.image?.image_name) {
-                  try {
-                    await dispatch(imagesApi.endpoints.getImageDTO.initiate(adapterConfig.image.image_name)).unwrap();
-                  } catch (imageError) {
-                    log.warn(
-                      `Could not pre-fetch image ${adapterConfig.image.image_name}, continuing anyway: ${imageError}`
+        if (hasIpAdapters || hasRefImages) {
+          const allRefImagePromises: Promise<RefImageState | null>[] = [];
+
+          // --- IP Adapters ---
+          if (hasIpAdapters && ipAdaptersArr.length > 0) {
+            log.debug(`Processing ${ipAdaptersArr.length} IP adapter(s)`);
+
+            const ipAdapterPromises = ipAdaptersArr
+              .filter((cfg: any) => cfg.model_key && typeof cfg.model_key === 'string') // eslint-disable-line @typescript-eslint/no-explicit-any
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .map(async (adapterConfig: any): Promise<RefImageState | null> => {
+                try {
+                  const modelConfig = await dispatch(
+                    modelsApi.endpoints.getModelConfig.initiate(adapterConfig.model_key!)
+                  ).unwrap();
+
+                  // Pre-fetch the image DTO if an image is provided, to avoid validation errors
+                  if (adapterConfig.image?.image_name) {
+                    try {
+                      await dispatch(imagesApi.endpoints.getImageDTO.initiate(adapterConfig.image.image_name)).unwrap();
+                    } catch (imageError) {
+                      log.warn(
+                        `Could not pre-fetch image ${adapterConfig.image.image_name}, continuing anyway: ${imageError}`
+                      );
+                    }
+                  }
+
+                  // Build RefImageState using helper function - supports both ip_adapter and flux_redux
+                  const imageData = adapterConfig.image
+                    ? {
+                        original: {
+                          image: {
+                            image_name: adapterConfig.image.image_name,
+                            width: adapterConfig.image.width ?? 512,
+                            height: adapterConfig.image.height ?? 512,
+                          },
+                        },
+                      }
+                    : null;
+
+                  const isFluxRedux = modelConfig.type === 'flux_redux';
+                  const refImageState = getReferenceImageState(`recalled-ref-image-${Date.now()}-${Math.random()}`, {
+                    isEnabled: true,
+                    config: isFluxRedux
+                      ? {
+                          type: 'flux_redux',
+                          image: imageData,
+                          model: {
+                            key: modelConfig.key,
+                            hash: modelConfig.hash,
+                            name: modelConfig.name,
+                            base: modelConfig.base,
+                            type: modelConfig.type,
+                          },
+                          imageInfluence: (adapterConfig.image_influence as FLUXReduxImageInfluence) || 'highest',
+                        }
+                      : {
+                          type: 'ip_adapter',
+                          image: imageData,
+                          model: {
+                            key: modelConfig.key,
+                            hash: modelConfig.hash,
+                            name: modelConfig.name,
+                            base: modelConfig.base,
+                            type: modelConfig.type,
+                          },
+                          weight: typeof adapterConfig.weight === 'number' ? adapterConfig.weight : 1.0,
+                          beginEndStepPct: [
+                            typeof adapterConfig.begin_step_percent === 'number' ? adapterConfig.begin_step_percent : 0,
+                            typeof adapterConfig.end_step_percent === 'number' ? adapterConfig.end_step_percent : 1,
+                          ] as [number, number],
+                          method: (adapterConfig.method as IPMethodV2) || 'full',
+                          clipVisionModel: 'ViT-H',
+                        },
+                  });
+
+                  if (isFluxRedux) {
+                    log.debug(`Built FLUX Redux ref image state: ${modelConfig.name}`);
+                  } else {
+                    log.debug(
+                      `Built IP adapter ref image state: ${modelConfig.name} (weight: ${typeof adapterConfig.weight === 'number' ? adapterConfig.weight : 1.0})`
                     );
                   }
+                  if (adapterConfig.image?.image_name) {
+                    log.debug(
+                      `IP adapter image: outputs/images/${adapterConfig.image.image_name} (${adapterConfig.image.width}x${adapterConfig.image.height})`
+                    );
+                  }
+
+                  return refImageState;
+                } catch (error) {
+                  log.error(`Failed to load IP adapter ${adapterConfig.model_key}: ${error}`);
+                  return null;
+                }
+              });
+
+            allRefImagePromises.push(...ipAdapterPromises);
+          }
+
+          // --- Model-free reference images (FLUX.2 Klein, FLUX Kontext, Qwen Image Edit) ---
+          // These feed the reference image directly into the main model rather than going
+          // through an IP Adapter, so the backend sends them without a model_key and we
+          // pick the right config type via getDefaultRefImageConfig() based on the main
+          // model that is currently selected in the UI.
+          if (hasRefImages && refImagesArr.length > 0) {
+            log.debug(`Processing ${refImagesArr.length} reference image(s)`);
+
+            const referenceImagePromises = refImagesArr
+              .filter((cfg: any) => cfg.image?.image_name && typeof cfg.image.image_name === 'string') // eslint-disable-line @typescript-eslint/no-explicit-any
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .map(async (refConfig: any): Promise<RefImageState | null> => {
+                const imageName = refConfig.image.image_name as string;
+                try {
+                  // Pre-fetch the image DTO so ref image validation succeeds.
+                  await dispatch(imagesApi.endpoints.getImageDTO.initiate(imageName)).unwrap();
+                } catch (imageError) {
+                  log.warn(`Could not pre-fetch reference image ${imageName}, continuing anyway: ${imageError}`);
                 }
 
-                // Build RefImageState using helper function - supports both ip_adapter and flux_redux
-                const imageData = adapterConfig.image
-                  ? {
-                      original: {
-                        image: {
-                          image_name: adapterConfig.image.image_name,
-                          width: adapterConfig.image.width ?? 512,
-                          height: adapterConfig.image.height ?? 512,
-                        },
-                      },
-                    }
-                  : null;
+                // Pick the config flavor (flux2 / flux_kontext / ip_adapter fallback) that
+                // matches the currently-selected main model.
+                const baseConfig = getDefaultRefImageConfig(getState);
+                const imageData = {
+                  original: {
+                    image: {
+                      image_name: imageName,
+                      width: typeof refConfig.image.width === 'number' ? refConfig.image.width : 512,
+                      height: typeof refConfig.image.height === 'number' ? refConfig.image.height : 512,
+                    },
+                  },
+                };
 
-                const isFluxRedux = modelConfig.type === 'flux_redux';
-                const refImageState = getReferenceImageState(`recalled-ref-image-${Date.now()}-${Math.random()}`, {
+                return getReferenceImageState(`recalled-ref-image-${Date.now()}-${Math.random()}`, {
                   isEnabled: true,
-                  config: isFluxRedux
-                    ? {
-                        type: 'flux_redux',
-                        image: imageData,
-                        model: {
-                          key: modelConfig.key,
-                          hash: modelConfig.hash,
-                          name: modelConfig.name,
-                          base: modelConfig.base,
-                          type: modelConfig.type,
-                        },
-                        imageInfluence: (adapterConfig.image_influence as FLUXReduxImageInfluence) || 'highest',
-                      }
-                    : {
-                        type: 'ip_adapter',
-                        image: imageData,
-                        model: {
-                          key: modelConfig.key,
-                          hash: modelConfig.hash,
-                          name: modelConfig.name,
-                          base: modelConfig.base,
-                          type: modelConfig.type,
-                        },
-                        weight: typeof adapterConfig.weight === 'number' ? adapterConfig.weight : 1.0,
-                        beginEndStepPct: [
-                          typeof adapterConfig.begin_step_percent === 'number' ? adapterConfig.begin_step_percent : 0,
-                          typeof adapterConfig.end_step_percent === 'number' ? adapterConfig.end_step_percent : 1,
-                        ] as [number, number],
-                        method: (adapterConfig.method as IPMethodV2) || 'full',
-                        clipVisionModel: 'ViT-H',
-                      },
+                  config: { ...baseConfig, image: imageData },
                 });
+              });
 
-                if (isFluxRedux) {
-                  log.debug(`Built FLUX Redux ref image state: ${modelConfig.name}`);
-                } else {
-                  log.debug(
-                    `Built IP adapter ref image state: ${modelConfig.name} (weight: ${typeof adapterConfig.weight === 'number' ? adapterConfig.weight : 1.0})`
-                  );
-                }
-                if (adapterConfig.image?.image_name) {
-                  log.debug(
-                    `IP adapter image: outputs/images/${adapterConfig.image.image_name} (${adapterConfig.image.width}x${adapterConfig.image.height})`
-                  );
-                }
+            allRefImagePromises.push(...referenceImagePromises);
+          }
 
-                return refImageState;
-              } catch (error) {
-                log.error(`Failed to load IP adapter ${adapterConfig.model_key}: ${error}`);
-                return null;
+          // Single dispatch after all IP adapter + reference image promises settle.
+          // replace:true (the default) clears stale entries from a previous
+          // recall; append mode instead pushes onto the existing list and
+          // deliberately dispatches nothing when no valid states resolved, so
+          // a failed append can never wipe the user's current reference images.
+          Promise.all(allRefImagePromises).then((results) => {
+            const validStates = results.filter((state): state is RefImageState => state !== null);
+            if (append) {
+              if (validStates.length > 0) {
+                dispatch(refImagesRecalled({ entities: validStates, replace: false }));
+                log.info(
+                  `Appended ${validStates.length} reference image(s) (IP adapters + model-free) to existing list`
+                );
               }
-            });
-
-          // Wait for all IP adapters to load, then dispatch with replace: true
-          Promise.all(ipAdapterPromises).then((refImageStates) => {
-            const validStates = refImageStates.filter((state): state is RefImageState => state !== null);
+              return;
+            }
+            dispatch(refImagesRecalled({ entities: validStates, replace: true }));
             if (validStates.length > 0) {
-              dispatch(refImagesRecalled({ entities: validStates, replace: true }));
-              log.info(`Applied ${validStates.length} IP adapter(s), replacing existing list`);
+              log.info(
+                `Applied ${validStates.length} reference image(s) (IP adapters + model-free), replacing existing list`
+              );
+            } else {
+              log.info('Cleared all reference images');
             }
           });
         }
@@ -905,7 +1002,6 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
       title: t('gallery.bulkDownloadReady'),
       status: 'success',
       description: (
-        // eslint-disable-next-line react/jsx-no-bind -- not a component render; no re-render cost
         <Text as="button" onClick={handleDownload} textDecoration="underline" cursor="pointer">
           {t('gallery.clickToDownload')}
         </Text>
@@ -930,4 +1026,30 @@ export const setEventListeners = ({ socket, store, setIsConnected }: SetEventLis
       duration: null,
     });
   });
+
+  socket.on('llm_task_progress', (data) => {
+    log.trace({ data } as JsonObject, 'LLM task progress');
+    setLLMTaskState(data.task_id, { status: 'progress', payload: data });
+  });
+
+  // Completion/error clear the entry rather than storing a terminal state. Socket
+  // delivery is ordered but independent of the HTTP response, so storing a state here
+  // could re-create an entry after the mutation's finally already cleared it, leaking
+  // one orphan per request. The error text surfaces to the user via the RTK Query toast.
+  socket.on('llm_task_complete', (data) => {
+    log.trace({ data } as JsonObject, 'LLM task complete');
+    clearLLMTaskState(data.task_id);
+  });
+
+  socket.on('llm_task_error', (data) => {
+    log.warn({ data } as JsonObject, 'LLM task error');
+    clearLLMTaskState(data.task_id);
+  });
+
+  return () => {
+    // Ends this socket's session for the completion handler: its queued refetches are dropped, and
+    // anything it already has in flight is barred from dispatching into whatever session replaces
+    // this one.
+    onInvocationComplete.dispose();
+  };
 };

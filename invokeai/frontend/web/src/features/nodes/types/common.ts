@@ -11,6 +11,12 @@ type ImageFieldCollection = z.infer<typeof zImageFieldCollection>;
 export const isImageFieldCollection = (field: unknown): field is ImageFieldCollection =>
   zImageFieldCollection.safeParse(field).success;
 
+export const zVideoField = z.object({
+  video_name: z.string().trim().min(1),
+});
+type VideoField = z.infer<typeof zVideoField>;
+export const isVideoField = (field: unknown): field is VideoField => zVideoField.safeParse(field).success;
+
 export const zBoardField = z.object({
   board_id: z.string().trim().min(1),
 });
@@ -18,6 +24,10 @@ export type BoardField = z.infer<typeof zBoardField>;
 
 export const zStylePresetField = z.object({
   style_preset_id: z.string().trim().min(1),
+});
+
+export const zSystemPromptField = z.object({
+  system_prompt_id: z.string().trim().min(1),
 });
 
 export const zColorField = z.object({
@@ -41,6 +51,7 @@ export const zSchedulerField = z.enum([
   'dpmpp_3m',
   'dpmpp_2m_sde',
   'dpmpp_sde',
+  'er_sde',
   'heun',
   'kdpm_2',
   'lms',
@@ -72,7 +83,13 @@ export const zFluxSchedulerField = z.enum(['euler', 'heun', 'lcm']);
 // Note: LCM is only supported for Z-Image Turbo, not for Z-Image Base (undistilled)
 export const zZImageSchedulerField = z.enum(['euler', 'heun', 'lcm']);
 // Anima scheduler options (same flow-matching schedulers, defined separately to avoid coupling)
-export const zAnimaSchedulerField = z.enum(['euler', 'heun', 'lcm']);
+export const zAnimaSchedulerField = z.enum(['euler', 'heun', 'dpmpp_2m', 'dpmpp_2m_sde', 'er_sde', 'lcm']);
+
+// ERNIE-Image scheduler options (Flow Matching schedulers, same as Flux/Z-Image)
+export const zErnieImageSchedulerField = z.enum(['euler', 'heun', 'lcm']);
+// Ideogram 4 sampler presets. Each bundles step count, the per-step guidance schedule (with a polish
+// tail), and the logit-normal schedule mean/std. V4_QUALITY_48 is the reference default.
+export const zIdeogram4SamplerPresetField = z.enum(['V4_QUALITY_48', 'V4_DEFAULT_20', 'V4_TURBO_12']);
 
 // Flux DyPE (Dynamic Position Extrapolation) preset options for high-resolution generation
 export const zFluxDypePresetField = z.enum(['off', 'manual', 'auto', 'area', '4k']);
@@ -97,7 +114,12 @@ export const zBaseModelType = z.enum([
   'cogview4',
   'qwen-image',
   'z-image',
+  'ernie-image',
+  'krea-2',
+  'ideogram-4',
+  'external',
   'anima',
+  'wan',
   'unknown',
 ]);
 export type BaseModelType = z.infer<typeof zBaseModelType>;
@@ -111,7 +133,11 @@ export const zMainModelBase = z.enum([
   'cogview4',
   'qwen-image',
   'z-image',
+  'ernie-image',
+  'krea-2',
+  'ideogram-4',
   'anima',
+  'wan',
 ]);
 type MainModelBase = z.infer<typeof zMainModelBase>;
 export const isMainModelBase = (base: unknown): base is MainModelBase => zMainModelBase.safeParse(base).success;
@@ -120,6 +146,7 @@ export const zModelType = z.enum([
   'vae',
   'lora',
   'llava_onevision',
+  'text_llm',
   'control_lora',
   'controlnet',
   't2i_adapter',
@@ -130,21 +157,32 @@ export const zModelType = z.enum([
   'spandrel_image_to_image',
   't5_encoder',
   'qwen3_encoder',
+  'qwen_vl_encoder',
+  'mistral_encoder',
+  'qwen3_vl_encoder',
+  'wan_t5_encoder',
+  'gemma2_encoder',
   'clip_embed',
   'siglip',
   'flux_redux',
+  'prompt_enhancer',
+  'external_image_generator',
+  'pid_decoder',
   'unknown',
 ]);
 export type ModelType = z.infer<typeof zModelType>;
 export const zSubModelType = z.enum([
   'unet',
   'transformer',
+  'transformer_2',
   'text_encoder',
   'text_encoder_2',
   'text_encoder_3',
   'tokenizer',
   'tokenizer_2',
   'tokenizer_3',
+  'pe',
+  'pe_tokenizer',
   'vae',
   'vae_decoder',
   'vae_encoder',
@@ -155,18 +193,30 @@ export const zSubModelType = z.enum([
 export const zClipVariantType = z.enum(['large', 'gigantic']);
 export const zModelVariantType = z.enum(['normal', 'inpaint', 'depth']);
 export const zFluxVariantType = z.enum(['dev', 'dev_fill', 'schnell']);
-export const zFlux2VariantType = z.enum(['klein_4b', 'klein_9b', 'klein_9b_base']);
+export const zFlux2VariantType = z.enum(['klein_4b', 'klein_4b_base', 'klein_9b', 'klein_9b_base', 'dev']);
 export const zZImageVariantType = z.enum(['turbo', 'zbase']);
+export const zKrea2VariantType = z.enum(['krea2_turbo', 'krea2_base']);
 const zQwenImageVariantType = z.enum(['generate', 'edit']);
+const zWanVariantType = z.enum(['t2v_a14b', 'i2v_a14b', 'ti2v_5b']);
+/** Wan LoRA variant — identifies which model FAMILY (inner_dim) a LoRA
+ *  targets. A14B = inner_dim 5120 (both T2V and I2V), 5B = inner_dim 3072. */
+const zWanLoRAVariantType = z.enum(['a14b', '5b']);
 export const zQwen3VariantType = z.enum(['qwen3_4b', 'qwen3_8b', 'qwen3_06b']);
+const zMistralVariantType = z.enum(['cow_mistral3_small', 'mistral3_24b']);
+const zPiDDecoderVariantType = z.enum(['res2k_sr4x', 'res2kto4k_sr4x']);
 export const zAnyModelVariant = z.union([
   zModelVariantType,
   zClipVariantType,
   zFluxVariantType,
   zFlux2VariantType,
   zZImageVariantType,
+  zKrea2VariantType,
   zQwenImageVariantType,
+  zWanVariantType,
+  zWanLoRAVariantType,
   zQwen3VariantType,
+  zMistralVariantType,
+  zPiDDecoderVariantType,
 ]);
 export type AnyModelVariant = z.infer<typeof zAnyModelVariant>;
 export const zModelFormat = z.enum([
@@ -181,9 +231,16 @@ export const zModelFormat = z.enum([
   'invokeai',
   't5_encoder',
   'qwen3_encoder',
+  'qwen_vl_encoder',
+  'mistral_encoder',
+  'qwen3_vl_encoder',
+  'wan_t5_encoder',
+  'gemma2_encoder',
   'bnb_quantized_int8b',
   'bnb_quantized_nf4b',
   'gguf_quantized',
+  'sdnq_quantized',
+  'external_api',
   'unknown',
 ]);
 export type ModelFormat = z.infer<typeof zModelFormat>;
@@ -197,6 +254,17 @@ export const zModelIdentifierField = z.object({
   submodel_type: zSubModelType.nullish(),
 });
 export type ModelIdentifierField = z.infer<typeof zModelIdentifierField>;
+
+// Frontend-only identifier for external API models (not part of the backend schema)
+export const zExternalModelIdentifierField = z.object({
+  key: z.string().min(1),
+  hash: z.string().min(1),
+  name: z.string().min(1),
+  base: z.literal('external'),
+  type: z.literal('external_image_generator'),
+  submodel_type: zSubModelType.nullish(),
+});
+
 // #endregion
 
 // #region Control Adapters

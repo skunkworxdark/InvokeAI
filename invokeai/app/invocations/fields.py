@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, TypeAdapter
 from pydantic.fields import _Unset
@@ -49,6 +49,7 @@ class UIType(str, Enum, metaclass=MetaEnum):
     # region Misc Field Types
     Scheduler = "SchedulerField"
     Any = "AnyField"
+    SavedWorkflow = "SavedWorkflowField"
     # endregion
 
     # region Internal Field Types
@@ -140,6 +141,7 @@ class UIComponent(str, Enum, metaclass=MetaEnum):
     None_ = "none"
     Textarea = "textarea"
     Slider = "slider"
+    VideoFrameIndex = "video-frame-index"
 
 
 class FieldDescriptions:
@@ -147,6 +149,11 @@ class FieldDescriptions:
     denoising_end = "When to stop denoising, expressed a percentage of total steps"
     cfg_scale = "Classifier-Free Guidance scale"
     cfg_rescale_multiplier = "Rescale multiplier for CFG guidance, used for models trained with zero-terminal SNR"
+    hidiffusion = "Apply HiDiffusion (RAU-Net + MSW-MSA) for higher-resolution denoising"
+    hidiffusion_raunet = "Apply HiDiffusion RAU-Net blocks"
+    hidiffusion_window_attn = "Apply HiDiffusion window attention blocks"
+    hidiffusion_t1_ratio = "Override HiDiffusion early switch threshold (T1 ratio)"
+    hidiffusion_t2_ratio = "Override HiDiffusion late switch threshold (T2 ratio)"
     scheduler = "Scheduler to use during inference"
     positive_cond = "Positive conditioning tensor"
     negative_cond = "Negative conditioning tensor"
@@ -155,6 +162,8 @@ class FieldDescriptions:
     t5_encoder = "T5 tokenizer and text encoder"
     glm_encoder = "GLM (THUDM) tokenizer and text encoder"
     qwen3_encoder = "Qwen3 tokenizer and text encoder"
+    qwen3_vl_encoder = "Qwen3-VL tokenizer and text encoder"
+    mistral_encoder = "Mistral tokenizer/processor and text encoder"
     clip_embed_model = "CLIP Embed loader"
     clip_g_model = "CLIP-G Embed loader"
     unet = "UNet (scheduler, LoRAs)"
@@ -171,8 +180,13 @@ class FieldDescriptions:
     sd3_model = "SD3 model (MMDiTX) to load"
     cogview4_model = "CogView4 model (Transformer) to load"
     z_image_model = "Z-Image model (Transformer) to load"
+    flux2_dev_model = "FLUX.2 [dev] model (Transformer) to load"
+    krea2_model = "Krea-2 model (Transformer) to load"
     qwen_image_model = "Qwen Image Edit model (Transformer) to load"
     qwen_vl_encoder = "Qwen2.5-VL tokenizer, processor and text/vision encoder"
+    wan_model = "Wan 2.2 model (Transformer) to load"
+    wan_t5_encoder = "UMT5-XXL tokenizer and text encoder for Wan 2.2"
+    wan_ref_image = "Reference-image (VAE-latent) conditioning for Wan 2.2 I2V."
     sdxl_main_model = "SDXL Main model (UNet, VAE, CLIP1, CLIP2) to load"
     sdxl_refiner_model = "SDXL Refiner Main Modde (UNet, VAE, CLIP2) to load"
     onnx_main_model = "ONNX Main model (UNet, VAE, CLIP) to load"
@@ -229,6 +243,7 @@ class FieldDescriptions:
     instantx_control_mode = "The control mode for InstantX ControlNet union models. Ignored for other ControlNet models. The standard mapping is: canny (0), tile (1), depth (2), blur (3), pose (4), gray (5), low quality (6). Negative values will be treated as 'None'."
     flux_redux_conditioning = "FLUX Redux conditioning tensor"
     vllm_model = "The VLLM model to use"
+    text_llm_model = "The text language model to use for text generation"
     flux_fill_conditioning = "FLUX Fill conditioning tensor"
     flux_kontext_conditioning = "FLUX Kontext conditioning (reference image)"
 
@@ -237,6 +252,12 @@ class ImageField(BaseModel):
     """An image primitive field"""
 
     image_name: str = Field(description="The name of the image")
+
+
+class VideoField(BaseModel):
+    """A video primitive field"""
+
+    video_name: str = Field(description="The name of the video")
 
 
 class BoardField(BaseModel):
@@ -249,6 +270,12 @@ class StylePresetField(BaseModel):
     """A style preset primitive field"""
 
     style_preset_id: str = Field(description="The id of the style preset")
+
+
+class SystemPromptField(BaseModel):
+    """A system prompt primitive field"""
+
+    system_prompt_id: str = Field(description="The id of the system prompt")
 
 
 class DenoiseMaskField(BaseModel):
@@ -342,10 +369,69 @@ class ZImageConditioningField(BaseModel):
     )
 
 
+class ErnieImageConditioningField(BaseModel):
+    """An ERNIE-Image conditioning tensor primitive value."""
+
+    conditioning_name: str = Field(description="The name of conditioning tensor")
+
+
+class Ideogram4ConditioningField(BaseModel):
+    """An Ideogram 4 conditioning tensor primitive value"""
+
+    conditioning_name: str = Field(description="The name of conditioning tensor")
+
+
 class QwenImageConditioningField(BaseModel):
     """A Qwen Image Edit conditioning tensor primitive value"""
 
     conditioning_name: str = Field(description="The name of conditioning tensor")
+
+
+class Krea2ConditioningField(BaseModel):
+    """A Krea-2 conditioning tensor primitive value"""
+
+    conditioning_name: str = Field(description="The name of conditioning tensor")
+    mask: Optional[TensorField] = Field(
+        default=None,
+        description="The mask associated with this conditioning tensor for regional prompting. "
+        "Excluded regions should be set to False, included regions should be set to True.",
+    )
+
+
+class Krea2StyleReferenceField(BaseModel):
+    """Style-reference conditioning for Krea-2 shared-KV reference attention.
+
+    Carries the VAE-encoded reference latents plus the tuning parameters that shape how strongly, and in
+    which frequency bands, the reference influences the target. The reference must be encoded at exactly
+    the denoise node's resolution, so the dims travel with it for an early, legible mismatch error.
+
+    Only ``style_strength`` is meant for everyday use; it modulates several of the others. The remainder
+    are exposed for tuning and should be left at their defaults.
+    """
+
+    reference_latents_name: str = Field(description="Name of the saved [1, 16, 1, H/8, W/8] reference latents.")
+    width: int = Field(description="Image width the reference was encoded at (must match denoise width).")
+    height: int = Field(description="Image height the reference was encoded at (must match denoise height).")
+    style_strength: float = Field(
+        default=1.0,
+        description="Overall style strength. 0 makes the denoise node skip the reference entirely.",
+    )
+    blocks: str = Field(default="7-27", description="Transformer blocks the reference is injected into.")
+    ref_k_strength: float = Field(default=1.06, description="Multiplier on the reference key path.")
+    adain_strength: float = Field(default=0.85, description="Reference statistics applied to the target Q/K.")
+    value_mode: Literal["target", "raw_reference", "ref_mean", "target_adain", "target_adain_plus_ref"] = Field(
+        default="target_adain_plus_ref", description="How the reference value vectors are constructed."
+    )
+    value_adain_strength: float = Field(
+        default=0.65,
+        description="Reference statistics applied to the target value path. Has no effect while ref_value_mix is 1.0.",
+    )
+    ref_value_mix: float = Field(default=1.0, description="How much raw reference value signal is kept.")
+    high_scale_start: float = Field(default=1.04, description="High-frequency reference key scale at step 0.")
+    high_scale_end: float = Field(default=0.0, description="High-frequency reference key scale at the last step.")
+    low_scale_start: float = Field(default=1.0, description="Low-frequency reference key scale at step 0.")
+    low_scale_end: float = Field(default=1.10, description="Low-frequency reference key scale at the last step.")
+    beta: float = Field(default=2.5, description="Exponent of the high-to-low frequency falloff curve.")
 
 
 class AnimaConditioningField(BaseModel):
@@ -360,6 +446,39 @@ class AnimaConditioningField(BaseModel):
         default=None,
         description="The mask associated with this conditioning tensor for regional prompting. "
         "Excluded regions should be set to False, included regions should be set to True.",
+    )
+
+
+class WanConditioningField(BaseModel):
+    """A Wan 2.2 conditioning tensor primitive value.
+
+    Wan conditioning is the UMT5-XXL hidden state for the prompt plus an attention
+    mask marking valid (non-padding) tokens.
+    """
+
+    conditioning_name: str = Field(description="The name of conditioning tensor")
+
+
+class WanRefImageConditioningField(BaseModel):
+    """Reference-image conditioning for Wan 2.2 I2V.
+
+    Carries the 20-channel VAE-latent condition tensor (4-channel first-frame
+    mask + 16-channel ref-image latents). The denoise loop concatenates this
+    to the 16-channel noise latents along the channel dim each step, producing
+    the 36-channel input the I2V-A14B transformer expects.
+
+    Also carries the spatial dims and frame count used to encode the image so
+    the denoise node can sanity-check the user's width/height/num_frames — a
+    latent temporal-dim mismatch is hard to debug from the downstream error.
+    """
+
+    condition_tensor_name: str = Field(description="Name of the saved [1, 20, T_lat, H/8, W/8] condition tensor.")
+    width: int = Field(description="Image width used during VAE encoding (matches denoise width).")
+    height: int = Field(description="Image height used during VAE encoding (matches denoise height).")
+    num_frames: int = Field(
+        default=1,
+        description="Pixel-frame count the condition was built for. 1 for single-frame I2V "
+        "(image output), 81+ for video.",
     )
 
 
@@ -455,6 +574,7 @@ class InputFieldJSONSchemaExtra(BaseModel):
     ui_model_type: Optional[list[ModelType]] = None
     ui_model_variant: Optional[list[ClipVariantType | ModelVariantType]] = None
     ui_model_format: Optional[list[ModelFormat]] = None
+    ui_model_provider_id: Optional[list[str]] = None
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -636,6 +756,7 @@ def InputField(
     ui_model_type: Optional[ModelType | list[ModelType]] = None,
     ui_model_variant: Optional[ClipVariantType | ModelVariantType | list[ClipVariantType | ModelVariantType]] = None,
     ui_model_format: Optional[ModelFormat | list[ModelFormat]] = None,
+    ui_model_provider_id: Optional[str | list[str]] = None,
 ) -> Any:
     """
     Creates an input field for an invocation.
@@ -685,6 +806,11 @@ def InputField(
         `ui_model_format=ModelFormat.Diffusers` will show only models in the diffusers format. This arg is only valid
         if this Input field is annotated as a `ModelIdentifierField`.
 
+        ui_model_provider_id: Specifies the external provider id(s) to filter the model list by in the Workflow Editor.
+        For example, `ui_model_provider_id="openai"` will show only models registered under the OpenAI external provider.
+        This arg is only valid if this Input field is annotated as a `ModelIdentifierField` and the target models are
+        external API models.
+
         ui_choice_labels: Specifies the labels to use for the choices in an enum field. If omitted, the enum values
         will be used. This arg is only valid if the field is annotated with as a `Literal`. For example,
         `Literal["choice1", "choice2", "choice3"]` with `ui_choice_labels={"choice1": "Choice 1", "choice2": "Choice 2",
@@ -724,6 +850,11 @@ def InputField(
             json_schema_extra_.ui_model_format = ui_model_format
         else:
             json_schema_extra_.ui_model_format = [ui_model_format]
+    if ui_model_provider_id is not None:
+        if isinstance(ui_model_provider_id, list):
+            json_schema_extra_.ui_model_provider_id = ui_model_provider_id
+        else:
+            json_schema_extra_.ui_model_provider_id = [ui_model_provider_id]
     if ui_type is not None:
         json_schema_extra_.ui_type = ui_type
 

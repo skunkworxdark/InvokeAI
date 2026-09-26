@@ -1,11 +1,14 @@
+import type { FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
+import { getUserScopedQueueCounts } from 'features/queue/store/userScopedQueueCounts';
 import queryString from 'query-string';
 import type { components, paths } from 'services/api/schema';
 import type {
-  GetQueueItemDTOsByItemIdsArgs,
-  GetQueueItemDTOsByItemIdsResult,
   GetQueueItemIdsArgs,
   GetQueueItemIdsResult,
+  GetQueueItemSummariesByItemIdsArgs,
+  GetQueueItemSummariesByItemIdsResult,
 } from 'services/api/types';
+import { getQueueStatusWithObservedEvents } from 'services/events/queueStatusEvents';
 import stableHash from 'stable-hash';
 import type { Param0 } from 'tsafe';
 
@@ -152,6 +155,9 @@ export const queueApi = api.injectEndpoints({
         url: buildQueueUrl('status'),
         method: 'GET',
       }),
+      transformResponse: (
+        response: paths['/api/v1/queue/{queue_id}/status']['get']['responses']['200']['content']['application/json']
+      ) => getQueueStatusWithObservedEvents(response),
       providesTags: ['SessionQueueStatus', 'FetchOnReconnect'],
     }),
     getBatchStatus: build.query<
@@ -326,24 +332,70 @@ export const queueApi = api.injectEndpoints({
         { type: 'SessionQueueItemIdList', id: stableHash(queryArgs) },
       ],
     }),
-    getQueueItemDTOsByItemIds: build.mutation<GetQueueItemDTOsByItemIdsResult, GetQueueItemDTOsByItemIdsArgs>({
+    /**
+     * The list rows render from summaries, not from full queue items: a full item carries its
+     * session graph and workflow, which is megabytes per screenful of rows and is needed by
+     * nothing the list draws. The detail view fetches the full item itself via `getQueueItem`
+     * when a row is expanded.
+     *
+     * Fetched one id at a time so that each row is an independently invalidatable cache entry,
+     * exactly like `getQueueItem`. `getQueueItemSummariesByItemIds` primes many of these entries
+     * in one request; this query is what refetches a single one after an invalidation.
+     */
+    getQueueItemSummary: build.query<GetQueueItemSummariesByItemIdsResult[number], number>({
+      queryFn: async (item_id, _api, _extraOptions, baseQuery) => {
+        const result = await baseQuery({
+          url: buildQueueUrl('item_summaries_by_ids'),
+          method: 'POST',
+          body: { item_ids: [item_id] },
+        });
+        if (result.error) {
+          return { error: result.error };
+        }
+        const summary = (result.data as GetQueueItemSummariesByItemIdsResult)[0];
+        if (!summary) {
+          // The route omits ids it cannot find rather than erroring, which happens when an item is
+          // deleted between the id list being fetched and this row scrolling into view. Surface it
+          // as the 404 `getQueueItem` would give, so the row falls back to its placeholder instead
+          // of caching `undefined` as if it were an item.
+          return {
+            error: { status: 404, data: `Queue item ${item_id} not found` } satisfies FetchBaseQueryError,
+          };
+        }
+        return { data: summary };
+      },
+      // Same tags getQueueItem provides, so every existing per-item invalidation — socket status
+      // events, cancel, delete, retry — refreshes the list row as well, with nothing to wire up.
+      providesTags: (result) => {
+        const tags: ApiTagDescription[] = ['FetchOnReconnect'];
+        if (result) {
+          tags.push({ type: 'SessionQueueItem', id: result.item_id });
+          tags.push({ type: 'BatchStatus', id: result.batch_id });
+        }
+        return tags;
+      },
+    }),
+    getQueueItemSummariesByItemIds: build.mutation<
+      GetQueueItemSummariesByItemIdsResult,
+      GetQueueItemSummariesByItemIdsArgs
+    >({
       query: (body) => ({
-        url: buildQueueUrl('items_by_ids'),
+        url: buildQueueUrl('item_summaries_by_ids'),
         method: 'POST',
         body,
       }),
-      // Don't provide cache tags - we'll manually upsert into individual getQueueItem caches
+      // Don't provide cache tags - we'll manually upsert into individual getQueueItemSummary caches
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
-          const { data: queueItems } = await queryFulfilled;
+          const { data: summaries } = await queryFulfilled;
 
-          // Upsert each queue item into the individual item cache
+          // Upsert each summary into the individual item cache
           const updates: Param0<typeof queueApi.util.upsertQueryEntries> = [];
-          for (const queueItem of queueItems) {
+          for (const summary of summaries) {
             updates.push({
-              endpointName: 'getQueueItem',
-              arg: queueItem.item_id,
-              value: queueItem,
+              endpointName: 'getQueueItemSummary',
+              arg: summary.item_id,
+              value: summary,
             });
           }
           dispatch(queueApi.util.upsertQueryEntries(updates));
@@ -408,7 +460,7 @@ export const {
   useGetQueueStatusQuery,
   useGetQueueItemQuery,
   useGetQueueItemIdsQuery,
-  useGetQueueItemDTOsByItemIdsMutation,
+  useGetQueueItemSummariesByItemIdsMutation,
   useCancelQueueItemMutation,
   useCancelQueueItemsByDestinationMutation,
   useGetCurrentQueueItemQuery,
@@ -429,5 +481,8 @@ export const enqueueMutationFixedCacheKeyOptions = {
 
 export const useIsGenerationInProgress = () => {
   const { data } = useGetQueueStatusQuery();
-  return data && data.queue.in_progress > 0;
+  // In multiuser mode the global in_progress count includes other users' generations; this hook
+  // drives personal UI (the progress workspace tabs), so it must react only to the current
+  // user's own activity.
+  return data !== undefined && getUserScopedQueueCounts(data.queue).inProgress > 0;
 };

@@ -2,12 +2,22 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from invokeai.backend.model_manager.configs.external_api import (
+    ExternalApiModelDefaultSettings,
+    ExternalImageSize,
+    ExternalModelCapabilities,
+    ExternalModelPanelSchema,
+    ExternalResolutionPreset,
+)
 from invokeai.backend.model_manager.taxonomy import (
     AnyVariant,
     BaseModelType,
+    Krea2VariantType,
     ModelFormat,
     ModelType,
+    PiDDecoderVariantType,
     QwenImageVariantType,
+    WanVariantType,
 )
 
 
@@ -20,6 +30,9 @@ class StarterModelWithoutDependencies(BaseModel):
     format: Optional[ModelFormat] = None
     variant: Optional[AnyVariant] = None
     is_installed: bool = False
+    capabilities: ExternalModelCapabilities | None = None
+    default_settings: ExternalApiModelDefaultSettings | None = None
+    panel_schema: ExternalModelPanelSchema | None = None
     # allows us to track what models a user has installed across name changes within starter models
     # if you update a starter model name, please add the old one to this list for that starter model
     previous_names: list[str] = []
@@ -91,6 +104,24 @@ t5_8b_quantized_encoder = StarterModel(
     format=ModelFormat.BnbQuantizedLlmInt8b,
 )
 
+t5_gguf_q3_k_s_encoder = StarterModel(
+    name="t5_gguf_q3_k_s_encoder",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/city96/t5-v1_1-xxl-encoder-gguf/resolve/main/t5-v1_1-xxl-encoder-Q3_K_S.gguf",
+    description="T5-XXL text encoder, GGUF Q3_K_S quantized (used in FLUX pipelines). Smallest size for low VRAM, lower quality. ~2.1GB",
+    type=ModelType.T5Encoder,
+    format=ModelFormat.GGUFQuantized,
+)
+
+t5_gguf_q6_k_encoder = StarterModel(
+    name="t5_gguf_q6_k_encoder",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/city96/t5-v1_1-xxl-encoder-gguf/resolve/main/t5-v1_1-xxl-encoder-Q6_K.gguf",
+    description="T5-XXL text encoder, GGUF Q6_K quantized (used in FLUX pipelines). Near-lossless quality. ~3.9GB",
+    type=ModelType.T5Encoder,
+    format=ModelFormat.GGUFQuantized,
+)
+
 clip_l_encoder = StarterModel(
     name="clip-vit-large-patch14",
     base=BaseModelType.Any,
@@ -114,6 +145,116 @@ flux_vae = StarterModel(
     source="black-forest-labs/FLUX.1-schnell::ae.safetensors",
     description="FLUX VAE compatible with both schnell and dev variants.",
     type=ModelType.VAE,
+)
+# endregion
+
+
+# region PiD (Pixel Diffusion Decoder)
+# PiD's pretrained decoders condition on Gemma-2-2b-it caption embeddings (2304-dim). NVIDIA references the ungated
+# mirror Efficient-Large-Model/gemma-2-2b-it. It is shared across all PiD backbones, so it is a dependency of each
+# decoder below (and offered standalone here so it can be installed once).
+gemma2_2b_encoder = StarterModel(
+    name="Gemma 2 2B (PiD caption encoder)",
+    base=BaseModelType.Any,
+    source="Efficient-Large-Model/gemma-2-2b-it",
+    description="Gemma-2-2b-it text encoder that PiD uses to condition its diffusion decode on a caption. ~5GB",
+    type=ModelType.Gemma2Encoder,
+    format=ModelFormat.Gemma2Encoder,
+)
+
+# NVIDIA PiD decoders (https://huggingface.co/nvidia/PiD). Code is Apache-2.0; weights are NSCLv1 (non-commercial /
+# research). Each is a 4x super-resolution decoder that replaces the regular VAE decode and needs the Gemma-2 encoder.
+pid_decoder_flux_2k = StarterModel(
+    name="PiD Decoder FLUX (2K)",
+    base=BaseModelType.Flux,
+    source="nvidia/PiD::checkpoints/PiD_res2k_sr4x_official_flux_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for FLUX latents, 2K target preset (e.g. 512 -> 2048). ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
+)
+pid_decoder_flux_2kto4k = StarterModel(
+    name="PiD Decoder FLUX (2K to 4K)",
+    base=BaseModelType.Flux,
+    source="nvidia/PiD::checkpoints_deprecated/PiD_res2kto4k_sr4x_official_flux_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for FLUX latents, 2K-to-4K preset (legacy architecture; NVIDIA's newer v1.5 checkpoint uses a different network that is not yet supported). ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2kTo4k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
+)
+# FLUX.2 Klein shares one 32-channel VAE across the 4B and 9B variants, so a single decoder per preset covers both.
+# The 128-channel packed latent is unambiguous (unlike the 16ch FLUX/SD3 case), so no directory-name disambiguation
+# is needed for the config probe.
+pid_decoder_flux2_2k = StarterModel(
+    name="PiD Decoder FLUX.2 (2K)",
+    base=BaseModelType.Flux2,
+    source="nvidia/PiD::checkpoints/PiD_res2k_sr4x_official_flux2_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for FLUX.2 Klein latents, 2K target preset (e.g. 512 -> 2048). ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
+)
+pid_decoder_flux2_2kto4k = StarterModel(
+    name="PiD Decoder FLUX.2 (2K to 4K)",
+    base=BaseModelType.Flux2,
+    source="nvidia/PiD::checkpoints_deprecated/PiD_res2kto4k_sr4x_official_flux2_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for FLUX.2 Klein latents, 2K-to-4K preset (legacy architecture; NVIDIA's newer v1.5 checkpoint uses a different network that is not yet supported). ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2kTo4k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
+)
+# SD3 uses a 16-channel latent, architecturally identical to FLUX.1. The config probe disambiguates via the
+# checkpoint's directory name (`…official_sd3_distill…`); if the HF single-file download drops that name, the
+# explicit base=StableDiffusion3 override the installer sends is trusted instead (see pid_decoder.py::_validate_base).
+pid_decoder_sd3_2k = StarterModel(
+    name="PiD Decoder SD3 (2K)",
+    base=BaseModelType.StableDiffusion3,
+    source="nvidia/PiD::checkpoints/PiD_res2k_sr4x_official_sd3_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for SD3 latents, 2K target preset (e.g. 512 -> 2048). ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
+)
+pid_decoder_sd3_2kto4k = StarterModel(
+    name="PiD Decoder SD3 (2K to 4K)",
+    base=BaseModelType.StableDiffusion3,
+    source="nvidia/PiD::checkpoints/PiD_res2kto4k_sr4x_official_sd3_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for SD3 latents, 2K-to-4K preset for higher-resolution output. ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2kTo4k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
+)
+# SDXL uses a 4-channel latent, which is unambiguous (no FLUX/SD3-style directory-name disambiguation needed).
+# NVIDIA ships only the 2K-to-4K preset for SDXL (no plain 2K checkpoint).
+pid_decoder_sdxl_2kto4k = StarterModel(
+    name="PiD Decoder SDXL (2K to 4K)",
+    base=BaseModelType.StableDiffusionXL,
+    source="nvidia/PiD::checkpoints/PiD_res2kto4k_sr4x_official_sdxl_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for SDXL latents, 2K-to-4K preset. ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2kTo4k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
+)
+# Qwen-Image uses a 16-channel latent (ambiguous with FLUX/SD3). The config probe disambiguates via the checkpoint's
+# directory name (`…official_qwenimage_distill…`); if the HF single-file download drops it, the explicit
+# base=QwenImage override the installer sends is trusted instead (see pid_decoder.py::_validate_base). Only the
+# 2K-to-4K preset exists.
+pid_decoder_qwenimage_2kto4k = StarterModel(
+    name="PiD Decoder Qwen-Image (2K to 4K)",
+    base=BaseModelType.QwenImage,
+    source="nvidia/PiD::checkpoints_deprecated/PiD_res2kto4k_sr4x_official_qwenimage_distill_4step/model_ema_bf16.pth",
+    description="NVIDIA PiD 4x super-resolution decoder for Qwen-Image latents, 2K-to-4K preset (legacy architecture; NVIDIA's newer v1.5 checkpoint uses a different network that is not yet supported). ~5GB",
+    type=ModelType.PiDDecoder,
+    format=ModelFormat.Checkpoint,
+    variant=PiDDecoderVariantType.Res2kTo4k_Sr4x,
+    dependencies=[gemma2_2b_encoder],
 )
 # endregion
 
@@ -150,6 +291,15 @@ flux_dev = StarterModel(
     description="FLUX dev transformer in bfloat16. Total size with dependencies: ~33GB",
     type=ModelType.Main,
     dependencies=[t5_base_encoder, flux_vae, clip_l_encoder],
+)
+flux_schnell_sdnq = StarterModel(
+    name="FLUX.1 schnell (SDNQ uint4 + SVD)",
+    base=BaseModelType.Flux,
+    source="Disty0/FLUX.1-schnell-SDNQ-uint4-svd-r32",
+    description="FLUX.1 schnell quantized via SDNQ to uint4 + SVD rank 32. Full self-contained "
+    "Flux pipeline (transformer + T5 + CLIP + VAE). ~15GB",
+    type=ModelType.Main,
+    format=ModelFormat.SDNQQuantized,
 )
 flux_kontext = StarterModel(
     name="FLUX.1 Kontext dev",
@@ -656,6 +806,38 @@ cogview4 = StarterModel(
 )
 # endregion
 
+# region Qwen Image components (shared between Edit and txt2img variants)
+qwen_image_vae = StarterModel(
+    name="Qwen Image VAE",
+    base=BaseModelType.QwenImage,
+    source="Qwen/Qwen-Image-Edit-2511::vae/diffusion_pytorch_model.safetensors",
+    description="Qwen Image VAE (AutoencoderKLQwenImage), shared between the Edit and txt2img variants. "
+    "Use with GGUF transformers to avoid downloading the full ~40GB Diffusers pipeline. (~250MB)",
+    type=ModelType.VAE,
+    format=ModelFormat.Checkpoint,
+)
+
+qwen_vl_encoder_fp8 = StarterModel(
+    name="Qwen2.5-VL Encoder (fp8 scaled)",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+    description="ComfyUI's single-file FP8-scaled Qwen2.5-VL 7B encoder. Bundles the language model and "
+    "visual tower; tokenizer/processor are fetched from HuggingFace on first use. (~7GB)",
+    type=ModelType.QwenVLEncoder,
+    format=ModelFormat.Checkpoint,
+)
+
+qwen_vl_encoder_diffusers = StarterModel(
+    name="Qwen2.5-VL Encoder (Diffusers)",
+    base=BaseModelType.Any,
+    source="Qwen/Qwen-Image-Edit-2511::text_encoder+tokenizer+processor",
+    description="Full-precision Qwen2.5-VL 7B encoder in Diffusers folder layout (text_encoder + tokenizer + processor). "
+    "Larger than the fp8 variant but no on-the-fly dequantization. (~16GB)",
+    type=ModelType.QwenVLEncoder,
+    format=ModelFormat.QwenVLEncoder,
+)
+# endregion
+
 # region Qwen Image Edit
 qwen_image_edit = StarterModel(
     name="Qwen Image Edit 2511",
@@ -674,6 +856,7 @@ qwen_image_edit_gguf_q4_k_m = StarterModel(
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
     variant=QwenImageVariantType.Edit,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_edit_gguf_q2_k = StarterModel(
@@ -684,6 +867,7 @@ qwen_image_edit_gguf_q2_k = StarterModel(
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
     variant=QwenImageVariantType.Edit,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_edit_gguf_q6_k = StarterModel(
@@ -694,6 +878,7 @@ qwen_image_edit_gguf_q6_k = StarterModel(
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
     variant=QwenImageVariantType.Edit,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_edit_gguf_q8_0 = StarterModel(
@@ -704,6 +889,7 @@ qwen_image_edit_gguf_q8_0 = StarterModel(
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
     variant=QwenImageVariantType.Edit,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_edit_lightning_4step = StarterModel(
@@ -740,6 +926,7 @@ qwen_image_gguf_q4_k_m = StarterModel(
     description="Qwen Image 2512 - Q4_K_M quantized transformer. Good quality/size balance. (~13GB)",
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_gguf_q2_k = StarterModel(
@@ -749,6 +936,7 @@ qwen_image_gguf_q2_k = StarterModel(
     description="Qwen Image 2512 - Q2_K heavily quantized transformer. Smallest size, lower quality. (~7.5GB)",
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_gguf_q6_k = StarterModel(
@@ -758,6 +946,7 @@ qwen_image_gguf_q6_k = StarterModel(
     description="Qwen Image 2512 - Q6_K quantized transformer. Near-lossless quality. (~17GB)",
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_gguf_q8_0 = StarterModel(
@@ -767,6 +956,7 @@ qwen_image_gguf_q8_0 = StarterModel(
     description="Qwen Image 2512 - Q8_0 quantized transformer. Highest quality quantization. (~22GB)",
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
+    dependencies=[qwen_image_vae, qwen_vl_encoder_fp8],
 )
 
 qwen_image_lightning_4step = StarterModel(
@@ -809,13 +999,47 @@ flux_redux = StarterModel(
 )
 # endregion
 
-# region LlavaOnevisionModel
+# region LlavaOnevisionModel (vision-language models for Image-to-Prompt)
 llava_onevision = StarterModel(
     name="LLaVA Onevision Qwen2 0.5B",
     base=BaseModelType.Any,
     source="llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-    description="LLaVA Onevision VLLM model",
+    description="LLaVA Onevision vision-language model (~1 GB). Lightweight default for the Image-to-Prompt feature.",
     type=ModelType.LlavaOnevision,
+)
+
+llava_onevision_7b = StarterModel(
+    name="LLaVA Onevision Qwen2 7B",
+    base=BaseModelType.Any,
+    source="llava-hf/llava-onevision-qwen2-7b-ov-hf",
+    description="LLaVA Onevision 7B vision-language model. Larger, higher-quality alternative for Image-to-Prompt. (~16 GB)",
+    type=ModelType.LlavaOnevision,
+)
+# endregion
+
+# region TextLLM (causal language models for Prompt Expansion)
+qwen2_5_1_5b_instruct = StarterModel(
+    name="Qwen2.5-1.5B-Instruct",
+    base=BaseModelType.Any,
+    source="Qwen/Qwen2.5-1.5B-Instruct",
+    description="Qwen2.5 1.5B instruction-tuned LLM. Recommended default for the Prompt Expansion feature — small and fast. (~3 GB)",
+    type=ModelType.TextLLM,
+)
+
+qwen2_5_3b_instruct = StarterModel(
+    name="Qwen2.5-3B-Instruct",
+    base=BaseModelType.Any,
+    source="Qwen/Qwen2.5-3B-Instruct",
+    description="Qwen2.5 3B instruction-tuned LLM. Better prompt expansion quality at the cost of more VRAM. (~6 GB)",
+    type=ModelType.TextLLM,
+)
+
+smollm2_1_7b_instruct = StarterModel(
+    name="SmolLM2-1.7B-Instruct",
+    base=BaseModelType.Any,
+    source="HuggingFaceTB/SmolLM2-1.7B-Instruct",
+    description="SmolLM2 1.7B instruction-tuned LLM (Apache-2.0). Alternative to Qwen for prompt expansion. (~3 GB)",
+    type=ModelType.TextLLM,
 )
 # endregion
 
@@ -897,6 +1121,26 @@ flux2_klein_9b_fp8 = StarterModel(
     dependencies=[flux2_vae, flux2_klein_qwen3_8b_encoder],
 )
 
+flux2_klein_4b_sdnq = StarterModel(
+    name="FLUX.2 Klein 4B (SDNQ dynamic 4-bit)",
+    base=BaseModelType.Flux2,
+    source="Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
+    description="FLUX.2 Klein 4B quantized via SDNQ to dynamic uint4/int5 mixed precision. "
+    "Full self-contained Flux2KleinPipeline (transformer + Qwen3 4B + AutoencoderKLFlux2). ~5GB",
+    type=ModelType.Main,
+    format=ModelFormat.SDNQQuantized,
+)
+
+flux2_klein_9b_sdnq = StarterModel(
+    name="FLUX.2 Klein 9B (SDNQ dynamic 4-bit + SVD)",
+    base=BaseModelType.Flux2,
+    source="Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32",
+    description="FLUX.2 Klein 9B quantized via SDNQ to dynamic uint4/int5 + SVD rank 32. "
+    "Full self-contained Flux2KleinPipeline. ~13GB",
+    type=ModelType.Main,
+    format=ModelFormat.SDNQQuantized,
+)
+
 flux2_klein_4b_gguf_q4 = StarterModel(
     name="FLUX.2 Klein 4B (GGUF Q4)",
     base=BaseModelType.Flux2,
@@ -935,6 +1179,145 @@ flux2_klein_9b_gguf_q8 = StarterModel(
     type=ModelType.Main,
     format=ModelFormat.GGUFQuantized,
     dependencies=[flux2_vae, flux2_klein_qwen3_8b_encoder],
+)
+# endregion
+
+# region FLUX.2 [dev]
+#
+# FLUX.2 [dev] is BFL's 32B guidance-distilled rectified-flow model. The bf16
+# transformer alone is ~64 GB, so most users want the GGUF quantizations from
+# the curated `gguf-org/flux2-dev-gguf` repo (the same repo also ships the
+# matching "cow-mistral3-small" text encoder — a FLUX.2-specific 30-layer
+# Mistral distillation that BFL trained the joint attention against; the
+# README notes "Q2 works, but use a higher tier encoder for better prompt
+# adherence"). All FLUX.2 [dev] releases are governed by the FLUX.2
+# Non-Commercial License.
+
+# --- Text encoders ---
+# FLUX.2 [dev] reads Mistral hidden states at indices (10, 20, 30). Two encoders work:
+#   - The 40-layer Mistral Small 3 (24B) that BFL ships as the canonical
+#     FLUX.2-dev/text_encoder — the default; loads fine but has visibly weaker prompt
+#     adherence because those indices land at different relative depths.
+#   - The 30-layer "cow-mistral3-small" distillation — recommended for best adherence
+#     (on a 30-layer model the indices hit 1/3, 2/3, last, matching what the joint
+#     attention was trained against). The gguf-org cow GGUFs and Comfy-Org's safetensors
+#     are the same 30-layer cow weights, just packaged differently.
+
+# Comfy-Org safetensors (single-file, 30-layer cow, with embedded Tekken tokenizer).
+# Higher precision than the cow GGUFs and avoids the Tekken-via-HF-Hub fetch.
+flux2_dev_comfy_mistral_fp8 = StarterModel(
+    name="FLUX.2 [dev] Mistral Encoder (Comfy FP8)",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_fp8.safetensors",
+    description="Comfy-Org FP8 of BFL's 30-layer cow-mistral3-small. Best quality/size for prompt adherence; embeds Tekken tokenizer (no HF fetch needed). ~18GB",
+    type=ModelType.MistralEncoder,
+)
+
+flux2_dev_comfy_mistral_bf16 = StarterModel(
+    name="FLUX.2 [dev] Mistral Encoder (Comfy BF16)",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_bf16.safetensors",
+    description="Comfy-Org BF16 of BFL's 30-layer cow-mistral3-small. Reference precision; embeds Tekken tokenizer. ~35.6GB",
+    type=ModelType.MistralEncoder,
+)
+
+# gguf-org cow GGUF variants (30-layer cow, llama.cpp packaging, also embed Tekken).
+# Lower memory footprint than the Comfy safetensors but slightly lower fidelity.
+flux2_dev_cow_mistral_q4 = StarterModel(
+    name="FLUX.2 [dev] cow Mistral Encoder (GGUF Q4)",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/cow-mistral3-small-q4_0.gguf",
+    description="cow-mistral3-small Q4_0 — 30-layer cow distillation BFL trained against. ~11.6GB",
+    type=ModelType.MistralEncoder,
+    format=ModelFormat.GGUFQuantized,
+)
+
+flux2_dev_cow_mistral_q8 = StarterModel(
+    name="FLUX.2 [dev] cow Mistral Encoder (GGUF Q8)",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/cow-mistral3-small-q8_0.gguf",
+    description="cow-mistral3-small Q8_0 — best prompt adherence among cow GGUF quants. ~20GB",
+    type=ModelType.MistralEncoder,
+    format=ModelFormat.GGUFQuantized,
+)
+
+flux2_dev_cow_mistral_iq4_xs = StarterModel(
+    name="FLUX.2 [dev] cow Mistral Encoder (GGUF IQ4_XS)",
+    base=BaseModelType.Any,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/cow-mistral3-small-iq4_xs.gguf",
+    description="cow-mistral3-small IQ4_XS — smallest usable quant with reasonable adherence. ~11.1GB",
+    type=ModelType.MistralEncoder,
+    format=ModelFormat.GGUFQuantized,
+)
+
+# --- Diffusers transformer ---
+flux2_dev_diffusers = StarterModel(
+    name="FLUX.2 [dev] (Diffusers)",
+    base=BaseModelType.Flux2,
+    source="black-forest-labs/FLUX.2-dev",
+    description="FLUX.2 [dev] full Diffusers pipeline - includes transformer, VAE, and Mistral text encoder. ~80GB. Non-Commercial License.",
+    type=ModelType.Main,
+)
+
+flux2_dev_diffusers_nf4 = StarterModel(
+    name="FLUX.2 [dev] (Diffusers, NF4)",
+    base=BaseModelType.Flux2,
+    source="diffusers/FLUX.2-dev-bnb-4bit",
+    description="FLUX.2 [dev] with NF4-quantized DiT and text encoder - runs on ~18GB VRAM with offload. Non-Commercial License.",
+    type=ModelType.Main,
+)
+
+# --- GGUF transformers from gguf-org/flux2-dev-gguf (canonical repo) ---
+# These are the GGUFs BFL/community curate for cow-paired inference. Default
+# encoder dependency is cow Q4 to make starter installs work out of the box.
+flux2_dev_gguf_q3_k_m = StarterModel(
+    name="FLUX.2 [dev] Transformer (GGUF Q3_K_M)",
+    base=BaseModelType.Flux2,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/flux2-dev-q3_k_m.gguf",
+    description="FLUX.2 [dev] transformer Q3_K_M — fits ~12GB VRAM with offload. ~15.9GB",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    dependencies=[flux2_vae, flux2_dev_cow_mistral_q4],
+)
+
+flux2_dev_gguf_q4_k_m = StarterModel(
+    name="FLUX.2 [dev] Transformer (GGUF Q4_K_M)",
+    base=BaseModelType.Flux2,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/flux2-dev-q4_k_m.gguf",
+    description="FLUX.2 [dev] transformer Q4_K_M — good quality / size tradeoff. ~20GB",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    dependencies=[flux2_vae, flux2_dev_cow_mistral_q4],
+)
+
+flux2_dev_gguf_q5_k_m = StarterModel(
+    name="FLUX.2 [dev] Transformer (GGUF Q5_K_M)",
+    base=BaseModelType.Flux2,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/flux2-dev-q5_k_m.gguf",
+    description="FLUX.2 [dev] transformer Q5_K_M — higher fidelity than Q4. ~24GB",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    dependencies=[flux2_vae, flux2_dev_cow_mistral_q8],
+)
+
+flux2_dev_gguf_q6_k = StarterModel(
+    name="FLUX.2 [dev] Transformer (GGUF Q6_K)",
+    base=BaseModelType.Flux2,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/flux2-dev-q6_k.gguf",
+    description="FLUX.2 [dev] transformer Q6_K — near-Q8 quality at lower size. ~27.9GB",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    dependencies=[flux2_vae, flux2_dev_cow_mistral_q8],
+)
+
+flux2_dev_gguf_q8_0 = StarterModel(
+    name="FLUX.2 [dev] Transformer (GGUF Q8_0)",
+    base=BaseModelType.Flux2,
+    source="https://huggingface.co/gguf-org/flux2-dev-gguf/resolve/main/flux2-dev-q8_0.gguf",
+    description="FLUX.2 [dev] transformer Q8_0 — highest GGUF fidelity. ~35.5GB",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    dependencies=[flux2_vae, flux2_dev_cow_mistral_q8],
 )
 # endregion
 
@@ -984,6 +1367,16 @@ z_image_turbo_q8 = StarterModel(
     dependencies=[z_image_qwen3_encoder_quantized, flux_vae],
 )
 
+z_image_turbo_sdnq = StarterModel(
+    name="Z-Image Turbo (SDNQ uint4 + SVD)",
+    base=BaseModelType.ZImage,
+    source="Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32",
+    description="Z-Image Turbo quantized via SDNQ to uint4 + SVD rank 32. Full self-contained "
+    "ZImagePipeline (transformer + Qwen3 + VAE). ~5GB",
+    type=ModelType.Main,
+    format=ModelFormat.SDNQQuantized,
+)
+
 z_image_controlnet_union = StarterModel(
     name="Z-Image ControlNet Union",
     base=BaseModelType.ZImage,
@@ -1001,6 +1394,774 @@ z_image_controlnet_tile = StarterModel(
 )
 # endregion
 
+# region ERNIE-Image
+ernie_image = StarterModel(
+    name="ERNIE-Image",
+    base=BaseModelType.ErnieImage,
+    source="baidu/ERNIE-Image",
+    description=(
+        "Baidu ERNIE-Image: 8B single-stream DiT with Mistral3 text encoder, AutoencoderKLFlux2 VAE, "
+        "and bundled Ministral3 prompt enhancer. Defaults to 50 steps with CFG 4.0."
+    ),
+    type=ModelType.Main,
+)
+
+ernie_image_turbo = StarterModel(
+    name="ERNIE-Image Turbo",
+    base=BaseModelType.ErnieImage,
+    source="baidu/ERNIE-Image-Turbo",
+    description=(
+        "ERNIE-Image-Turbo: distilled variant of ERNIE-Image. Same architecture as ERNIE-Image but "
+        "tuned for fast inference at 8 steps with CFG disabled (1.0)."
+    ),
+    type=ModelType.Main,
+)
+# endregion
+
+# region Krea-2
+# Standalone Qwen3-VL text encoder used by Krea-2 (distinct from the Qwen2.5-VL encoder above). Pair
+# with single-file / GGUF Krea-2 transformers, which ship only the transformer. The Qwen-Image VAE
+# dependency reuses the `qwen_image_vae` starter defined in the Qwen Image region.
+qwen3_vl_encoder_4b = StarterModel(
+    name="Qwen3-VL 4B Encoder (Diffusers)",
+    base=BaseModelType.Any,
+    source="Qwen/Qwen3-VL-4B-Instruct",
+    description="Qwen3-VL 4B text encoder (Qwen3VLModel) used by Krea-2, in HuggingFace folder layout "
+    "(includes tokenizer). Use with single-file / GGUF Krea-2 transformers. (~8GB)",
+    type=ModelType.Qwen3VLEncoder,
+    format=ModelFormat.Qwen3VLEncoder,
+)
+
+krea2_turbo = StarterModel(
+    name="Krea-2 Turbo",
+    base=BaseModelType.Krea2,
+    source="krea/Krea-2-Turbo",
+    description="Krea-2 Turbo - distilled 12B parameter text-to-image model (8 steps, CFG disabled). "
+    "Full diffusers pipeline including the Qwen-Image VAE and Qwen3-VL text encoder. ~26GB",
+    type=ModelType.Main,
+    variant=Krea2VariantType.Turbo,
+)
+
+krea2_raw = StarterModel(
+    name="Krea-2 Raw",
+    base=BaseModelType.Krea2,
+    source="krea/Krea-2-Raw",
+    description="Krea-2 Raw - undistilled 12B base model (28 steps, CFG enabled). Full diffusers pipeline "
+    "including the Qwen-Image VAE and Qwen3-VL text encoder. Primarily a base for finetuning / LoRA "
+    "training; Turbo is recommended for standard inference. ~26GB",
+    type=ModelType.Main,
+    variant=Krea2VariantType.Base,
+)
+
+krea2_turbo_gguf_q4_k_m = StarterModel(
+    name="Krea-2 Turbo (Q4_K_M GGUF)",
+    base=BaseModelType.Krea2,
+    source="https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF/resolve/main/krea2_turbo-Q4_K_M.gguf",
+    description="Krea-2 Turbo transformer quantized to GGUF Q4_K_M for lower VRAM (~7GB transformer). "
+    "GGUF ships only the transformer, so the Qwen-Image VAE and Qwen3-VL encoder are installed as "
+    "dependencies.",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=Krea2VariantType.Turbo,
+    dependencies=[qwen_image_vae, qwen3_vl_encoder_4b],
+)
+
+krea2_turbo_gguf_q8_0 = StarterModel(
+    name="Krea-2 Turbo (Q8_0 GGUF)",
+    base=BaseModelType.Krea2,
+    source="https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF/resolve/main/krea2_turbo-Q8_0.gguf",
+    description="Krea-2 Turbo transformer quantized to GGUF Q8_0 (near-full quality, ~13GB transformer). "
+    "GGUF ships only the transformer, so the Qwen-Image VAE and Qwen3-VL encoder are installed as "
+    "dependencies.",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=Krea2VariantType.Turbo,
+    dependencies=[qwen_image_vae, qwen3_vl_encoder_4b],
+)
+# endregion
+
+# region External API
+GEMINI_3_IMAGE_ALLOWED_ASPECT_RATIOS = [
+    "1:1",
+    "1:4",
+    "1:8",
+    "2:3",
+    "3:2",
+    "3:4",
+    "4:1",
+    "4:3",
+    "4:5",
+    "5:4",
+    "8:1",
+    "9:16",
+    "16:9",
+    "21:9",
+]
+GEMINI_3_IMAGE_MAX_SIZE = ExternalImageSize(width=4096, height=4096)
+
+
+def _gemini_3_resolution_presets(
+    image_sizes: list[str],
+    aspect_ratios: list[str] | None = None,
+) -> list[ExternalResolutionPreset]:
+    """Build resolution presets for Gemini 3 models.
+
+    Each preset combines an aspect ratio with an image size preset (512/1K/2K/4K).
+    Pixel dimensions are approximations based on the preset name (longest side).
+    """
+    if aspect_ratios is None:
+        aspect_ratios = GEMINI_3_IMAGE_ALLOWED_ASPECT_RATIOS
+    base_pixels = {"512": 512, "1K": 1024, "2K": 2048, "4K": 4096}
+    presets: list[ExternalResolutionPreset] = []
+    for image_size in image_sizes:
+        base = base_pixels[image_size]
+        for ratio_str in aspect_ratios:
+            w_part, h_part = (int(x) for x in ratio_str.split(":"))
+            if w_part >= h_part:
+                w = base
+                h = max(1, round(base * h_part / w_part))
+            else:
+                h = base
+                w = max(1, round(base * w_part / h_part))
+            presets.append(
+                ExternalResolutionPreset(
+                    label=f"{ratio_str} ({image_size}) — {w}\u00d7{h}",
+                    aspect_ratio=ratio_str,
+                    image_size=image_size,
+                    width=w,
+                    height=h,
+                )
+            )
+    return presets
+
+
+GEMINI_3_PRO_RESOLUTION_PRESETS = _gemini_3_resolution_presets(["1K", "2K", "4K"])
+GEMINI_3_1_FLASH_RESOLUTION_PRESETS = _gemini_3_resolution_presets(["512", "1K", "2K", "4K"])
+
+gemini_flash_image = StarterModel(
+    name="Gemini 2.5 Flash Image",
+    base=BaseModelType.External,
+    source="external://gemini/gemini-2.5-flash-image",
+    description="Google Gemini 2.5 Flash image generation model (external API). Requires a configured Gemini API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_seed=True,
+        supports_reference_images=True,
+        max_images_per_request=1,
+        allowed_aspect_ratios=[
+            "1:1",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9",
+        ],
+        aspect_ratio_sizes={
+            "1:1": ExternalImageSize(width=1024, height=1024),
+            "2:3": ExternalImageSize(width=832, height=1248),
+            "3:2": ExternalImageSize(width=1248, height=832),
+            "3:4": ExternalImageSize(width=864, height=1184),
+            "4:3": ExternalImageSize(width=1184, height=864),
+            "4:5": ExternalImageSize(width=896, height=1152),
+            "5:4": ExternalImageSize(width=1152, height=896),
+            "9:16": ExternalImageSize(width=768, height=1344),
+            "16:9": ExternalImageSize(width=1344, height=768),
+            "21:9": ExternalImageSize(width=1536, height=672),
+        },
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=ExternalModelPanelSchema(prompts=[{"name": "reference_images"}], image=[{"name": "dimensions"}]),
+)
+gemini_pro_image_preview = StarterModel(
+    name="Gemini 3 Pro Image Preview",
+    base=BaseModelType.External,
+    source="external://gemini/gemini-3-pro-image-preview",
+    description="Google Gemini 3 Pro image generation preview model (external API). Supports up to 14 reference images, including up to 6 object references and up to 5 character references. Supports 1K/2K/4K resolution presets. Requires a configured Gemini API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_seed=True,
+        supports_reference_images=True,
+        max_reference_images=14,
+        max_images_per_request=1,
+        max_image_size=GEMINI_3_IMAGE_MAX_SIZE,
+        allowed_aspect_ratios=GEMINI_3_IMAGE_ALLOWED_ASPECT_RATIOS,
+        resolution_presets=GEMINI_3_PRO_RESOLUTION_PRESETS,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=ExternalModelPanelSchema(prompts=[{"name": "reference_images"}], image=[{"name": "dimensions"}]),
+)
+gemini_3_1_flash_image_preview = StarterModel(
+    name="Gemini 3.1 Flash Image Preview",
+    base=BaseModelType.External,
+    source="external://gemini/gemini-3.1-flash-image-preview",
+    description="Google Gemini 3.1 Flash image generation preview model (external API). Supports up to 14 reference images, including up to 10 object references and up to 4 character references. Supports 512/1K/2K/4K resolution presets. Requires a configured Gemini API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_seed=True,
+        supports_reference_images=True,
+        max_reference_images=14,
+        max_images_per_request=1,
+        max_image_size=GEMINI_3_IMAGE_MAX_SIZE,
+        allowed_aspect_ratios=GEMINI_3_IMAGE_ALLOWED_ASPECT_RATIOS,
+        resolution_presets=GEMINI_3_1_FLASH_RESOLUTION_PRESETS,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=ExternalModelPanelSchema(prompts=[{"name": "reference_images"}], image=[{"name": "dimensions"}]),
+)
+QWEN_IMAGE_2_ALLOWED_ASPECT_RATIOS = ["1:1", "4:3", "3:4", "16:9", "9:16"]
+QWEN_IMAGE_MAX_ALLOWED_ASPECT_RATIOS = ["1:1", "4:3", "3:4", "16:9", "9:16"]
+WAN_V2_ALLOWED_ASPECT_RATIOS = ["1:1", "4:3", "3:4", "16:9", "9:16"]
+
+alibabacloud_qwen_image_2_pro = StarterModel(
+    name="Qwen Image 2.0 Pro",
+    base=BaseModelType.External,
+    source="external://alibabacloud/qwen-image-2.0-pro",
+    description="Alibaba Cloud Qwen Image 2.0 Pro model (external API). Best quality text-to-image with excellent bilingual text rendering. Requires a configured Alibaba Cloud DashScope API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_negative_prompt=False,
+        supports_seed=True,
+        max_images_per_request=4,
+        allowed_aspect_ratios=QWEN_IMAGE_2_ALLOWED_ASPECT_RATIOS,
+        aspect_ratio_sizes={
+            "1:1": ExternalImageSize(width=2048, height=2048),
+            "4:3": ExternalImageSize(width=2368, height=1728),
+            "3:4": ExternalImageSize(width=1728, height=2368),
+            "16:9": ExternalImageSize(width=2688, height=1536),
+            "9:16": ExternalImageSize(width=1536, height=2688),
+        },
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=2048, height=2048, num_images=1),
+    panel_schema=ExternalModelPanelSchema(image=[{"name": "dimensions"}]),
+)
+alibabacloud_qwen_image_2 = StarterModel(
+    name="Qwen Image 2.0",
+    base=BaseModelType.External,
+    source="external://alibabacloud/qwen-image-2.0",
+    description="Alibaba Cloud Qwen Image 2.0 model (external API). Fast text-to-image with good bilingual text rendering. Requires a configured Alibaba Cloud DashScope API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_negative_prompt=False,
+        supports_seed=True,
+        max_images_per_request=4,
+        allowed_aspect_ratios=QWEN_IMAGE_2_ALLOWED_ASPECT_RATIOS,
+        aspect_ratio_sizes={
+            "1:1": ExternalImageSize(width=2048, height=2048),
+            "4:3": ExternalImageSize(width=2368, height=1728),
+            "3:4": ExternalImageSize(width=1728, height=2368),
+            "16:9": ExternalImageSize(width=2688, height=1536),
+            "9:16": ExternalImageSize(width=1536, height=2688),
+        },
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=2048, height=2048, num_images=1),
+    panel_schema=ExternalModelPanelSchema(image=[{"name": "dimensions"}]),
+)
+alibabacloud_qwen_image_max = StarterModel(
+    name="Qwen Image Max",
+    base=BaseModelType.External,
+    source="external://alibabacloud/qwen-image-max",
+    description="Alibaba Cloud Qwen Image Max model (external API). High quality text-to-image generation. Requires a configured Alibaba Cloud DashScope API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_negative_prompt=False,
+        supports_seed=True,
+        max_images_per_request=4,
+        allowed_aspect_ratios=QWEN_IMAGE_MAX_ALLOWED_ASPECT_RATIOS,
+        aspect_ratio_sizes={
+            "1:1": ExternalImageSize(width=1328, height=1328),
+            "4:3": ExternalImageSize(width=1472, height=1104),
+            "3:4": ExternalImageSize(width=1104, height=1472),
+            "16:9": ExternalImageSize(width=1664, height=928),
+            "9:16": ExternalImageSize(width=928, height=1664),
+        },
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1328, height=1328, num_images=1),
+    panel_schema=ExternalModelPanelSchema(image=[{"name": "dimensions"}]),
+)
+# region Wan 2.2 (local)
+# Shared components — all Wan 2.2 variants use the UMT5-XXL text encoder. A14B
+# (both T2V and I2V) uses a 16-channel VAE; TI2V-5B uses a 48-channel VAE. The
+# two VAEs are not interchangeable.
+wan_22_t5_encoder = StarterModel(
+    name="Wan T5 Encoder (UMT5-XXL)",
+    base=BaseModelType.Any,
+    source="Wan-AI/Wan2.2-T2V-A14B-Diffusers::text_encoder+tokenizer",
+    description="UMT5-XXL text encoder used by all Wan 2.2 variants (T2V/I2V A14B and TI2V-5B). "
+    "Required when running a GGUF Wan main without a Diffusers Component Source. (~11GB)",
+    type=ModelType.WanT5Encoder,
+    format=ModelFormat.WanT5Encoder,
+)
+
+wan_22_a14b_vae = StarterModel(
+    name="Wan 2.2 A14B VAE",
+    base=BaseModelType.Wan,
+    source="Wan-AI/Wan2.2-T2V-A14B-Diffusers::vae/diffusion_pytorch_model.safetensors",
+    description="Wan 2.2 A14B VAE (16-channel). Shared between T2V and I2V A14B variants. "
+    "Not interchangeable with the TI2V-5B VAE. (~250MB)",
+    type=ModelType.VAE,
+    format=ModelFormat.Checkpoint,
+)
+
+wan_22_5b_vae = StarterModel(
+    name="Wan 2.2 TI2V-5B VAE",
+    base=BaseModelType.Wan,
+    source="Wan-AI/Wan2.2-TI2V-5B-Diffusers::vae/diffusion_pytorch_model.safetensors",
+    description="Wan 2.2 TI2V-5B VAE (48-channel). Required for the TI2V-5B model family. "
+    "Not interchangeable with the A14B VAE. (~400MB)",
+    type=ModelType.VAE,
+    format=ModelFormat.Checkpoint,
+)
+
+# T2V A14B — full Diffusers + GGUF expert pairs (Q4_K_M and Q8_0).
+# The high-noise GGUF is the "main" entry the user picks; the low-noise GGUF
+# is wired as the partner expert via the Advanced panel. Each high-noise entry
+# lists its low-noise partner plus the shared VAE/encoder as dependencies so
+# the bundle/dependency installer pulls everything together.
+wan_22_t2v_a14b_diffusers = StarterModel(
+    name="Wan 2.2 T2V A14B (Diffusers)",
+    base=BaseModelType.Wan,
+    source="Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+    description="Full Diffusers Wan 2.2 T2V A14B model — both expert transformers, VAE, and UMT5-XXL "
+    "encoder in a single folder. No additional components needed. (~80GB)",
+    type=ModelType.Main,
+    format=ModelFormat.Diffusers,
+    variant=WanVariantType.T2V_A14B,
+)
+
+wan_22_t2v_a14b_low_gguf_q4_k_m = StarterModel(
+    name="Wan 2.2 T2V A14B Low Noise (Q4_K_M)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-T2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf",
+    description="Wan 2.2 T2V A14B low-noise expert transformer (Q4_K_M). Paired with the high-noise "
+    "expert; selected via the Advanced 'Transformer (Low Noise)' field. (~9.7GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.T2V_A14B,
+)
+
+wan_22_t2v_a14b_gguf_q4_k_m = StarterModel(
+    name="Wan 2.2 T2V A14B High Noise (Q4_K_M)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-T2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf",
+    description="Wan 2.2 T2V A14B high-noise expert transformer (Q4_K_M). Pick this as the main model; "
+    "the low-noise partner is wired in Advanced. Good quality/size balance. (~9.7GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.T2V_A14B,
+    dependencies=[wan_22_a14b_vae, wan_22_t5_encoder, wan_22_t2v_a14b_low_gguf_q4_k_m],
+)
+
+wan_22_t2v_a14b_low_gguf_q8_0 = StarterModel(
+    name="Wan 2.2 T2V A14B Low Noise (Q8_0)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-T2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-T2V-A14B-LowNoise-Q8_0.gguf",
+    description="Wan 2.2 T2V A14B low-noise expert transformer (Q8_0). Highest quality quantization. (~15.4GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.T2V_A14B,
+)
+
+wan_22_t2v_a14b_gguf_q8_0 = StarterModel(
+    name="Wan 2.2 T2V A14B High Noise (Q8_0)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-T2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-T2V-A14B-HighNoise-Q8_0.gguf",
+    description="Wan 2.2 T2V A14B high-noise expert transformer (Q8_0). Pick as the main; pair with the "
+    "low-noise Q8_0 partner in Advanced. Highest quality quantization. (~15.4GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.T2V_A14B,
+    dependencies=[wan_22_a14b_vae, wan_22_t5_encoder, wan_22_t2v_a14b_low_gguf_q8_0],
+)
+
+# T2V Lightning LoRAs — V1.1 Seko rank-64 pair (4-step inference).
+wan_22_t2v_lightning_high = StarterModel(
+    name="Wan 2.2 T2V Lightning High Noise (4-step, V1.1)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/high_noise_model.safetensors",
+    description="Lightning distillation LoRA for the Wan 2.2 T2V A14B high-noise expert — enables "
+    "4-step generation. Use together with the low-noise variant. Settings: Steps=4, CFG=1.",
+    type=ModelType.LoRA,
+)
+
+wan_22_t2v_lightning_low = StarterModel(
+    name="Wan 2.2 T2V Lightning Low Noise (4-step, V1.1)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/low_noise_model.safetensors",
+    description="Lightning distillation LoRA for the Wan 2.2 T2V A14B low-noise expert — enables "
+    "4-step generation. Use together with the high-noise variant. Settings: Steps=4, CFG=1.",
+    type=ModelType.LoRA,
+)
+
+# I2V A14B — full Diffusers + GGUF expert pairs (Q4_K_M and Q8_0).
+wan_22_i2v_a14b_diffusers = StarterModel(
+    name="Wan 2.2 I2V A14B (Diffusers)",
+    base=BaseModelType.Wan,
+    source="Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+    description="Full Diffusers Wan 2.2 I2V A14B model — both expert transformers, VAE, and UMT5-XXL "
+    "encoder. Use the Reference Images panel to provide the conditioning image. (~80GB)",
+    type=ModelType.Main,
+    format=ModelFormat.Diffusers,
+    variant=WanVariantType.I2V_A14B,
+)
+
+wan_22_i2v_a14b_low_gguf_q4_k_m = StarterModel(
+    name="Wan 2.2 I2V A14B Low Noise (Q4_K_M)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf",
+    description="Wan 2.2 I2V A14B low-noise expert transformer (Q4_K_M). (~9.7GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.I2V_A14B,
+)
+
+wan_22_i2v_a14b_gguf_q4_k_m = StarterModel(
+    name="Wan 2.2 I2V A14B High Noise (Q4_K_M)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf",
+    description="Wan 2.2 I2V A14B high-noise expert transformer (Q4_K_M). Pick as the main; pair with "
+    "the low-noise partner in Advanced. Use the Reference Images panel for the conditioning image. (~9.7GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.I2V_A14B,
+    dependencies=[wan_22_a14b_vae, wan_22_t5_encoder, wan_22_i2v_a14b_low_gguf_q4_k_m],
+)
+
+wan_22_i2v_a14b_low_gguf_q8_0 = StarterModel(
+    name="Wan 2.2 I2V A14B Low Noise (Q8_0)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf",
+    description="Wan 2.2 I2V A14B low-noise expert transformer (Q8_0). Highest quality quantization. (~15.4GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.I2V_A14B,
+)
+
+wan_22_i2v_a14b_gguf_q8_0 = StarterModel(
+    name="Wan 2.2 I2V A14B High Noise (Q8_0)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf",
+    description="Wan 2.2 I2V A14B high-noise expert transformer (Q8_0). Highest quality quantization. (~15.4GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.I2V_A14B,
+    dependencies=[wan_22_a14b_vae, wan_22_t5_encoder, wan_22_i2v_a14b_low_gguf_q8_0],
+)
+
+# I2V Lightning LoRAs — Seko rank-64 pair (4-step inference). Currently only V1.
+wan_22_i2v_lightning_high = StarterModel(
+    name="Wan 2.2 I2V Lightning High Noise (4-step, V1)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors",
+    description="Lightning distillation LoRA for the Wan 2.2 I2V A14B high-noise expert — enables "
+    "4-step image-to-image generation. Use together with the low-noise variant. Settings: Steps=4, CFG=1.",
+    type=ModelType.LoRA,
+)
+
+wan_22_i2v_lightning_low = StarterModel(
+    name="Wan 2.2 I2V Lightning Low Noise (4-step, V1)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors",
+    description="Lightning distillation LoRA for the Wan 2.2 I2V A14B low-noise expert — enables "
+    "4-step image-to-image generation. Use together with the high-noise variant. Settings: Steps=4, CFG=1.",
+    type=ModelType.LoRA,
+)
+
+# TI2V-5B — single-transformer model (no expert pair). Uses its own 48-channel VAE.
+wan_22_ti2v_5b_diffusers = StarterModel(
+    name="Wan 2.2 TI2V-5B (Diffusers)",
+    base=BaseModelType.Wan,
+    source="Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+    description="Full Diffusers Wan 2.2 TI2V-5B model — single 5B transformer, 48-channel VAE, and "
+    "UMT5-XXL encoder. Smaller and faster than A14B; runs on consumer GPUs. (~20GB)",
+    type=ModelType.Main,
+    format=ModelFormat.Diffusers,
+    variant=WanVariantType.TI2V_5B,
+)
+
+wan_22_ti2v_5b_gguf_q4_k_m = StarterModel(
+    name="Wan 2.2 TI2V-5B (Q4_K_M)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-TI2V-5B-GGUF/resolve/main/Wan2.2-TI2V-5B-Q4_K_M.gguf",
+    description="Wan 2.2 TI2V-5B transformer (Q4_K_M). Single-expert model — no low-noise partner needed. (~3.4GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.TI2V_5B,
+    dependencies=[wan_22_5b_vae, wan_22_t5_encoder],
+)
+
+wan_22_ti2v_5b_gguf_q8_0 = StarterModel(
+    name="Wan 2.2 TI2V-5B (Q8_0)",
+    base=BaseModelType.Wan,
+    source="https://huggingface.co/QuantStack/Wan2.2-TI2V-5B-GGUF/resolve/main/Wan2.2-TI2V-5B-Q8_0.gguf",
+    description="Wan 2.2 TI2V-5B transformer (Q8_0). Highest quality quantization. (~5.4GB)",
+    type=ModelType.Main,
+    format=ModelFormat.GGUFQuantized,
+    variant=WanVariantType.TI2V_5B,
+    dependencies=[wan_22_5b_vae, wan_22_t5_encoder],
+)
+# endregion
+
+alibabacloud_wan26_t2i = StarterModel(
+    name="Wan 2.6 Text-to-Image",
+    base=BaseModelType.External,
+    source="external://alibabacloud/wan2.6-t2i",
+    description="Alibaba Cloud Wan 2.6 text-to-image model (external API). Photorealistic image generation. Requires a configured Alibaba Cloud DashScope API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_negative_prompt=False,
+        supports_seed=True,
+        max_images_per_request=4,
+        allowed_aspect_ratios=WAN_V2_ALLOWED_ASPECT_RATIOS,
+        aspect_ratio_sizes={
+            "1:1": ExternalImageSize(width=1024, height=1024),
+            "4:3": ExternalImageSize(width=1440, height=1080),
+            "3:4": ExternalImageSize(width=1080, height=1440),
+            "16:9": ExternalImageSize(width=1440, height=810),
+            "9:16": ExternalImageSize(width=810, height=1440),
+        },
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=ExternalModelPanelSchema(image=[{"name": "dimensions"}]),
+)
+alibabacloud_qwen_image_edit_max = StarterModel(
+    name="Qwen Image Edit Max",
+    base=BaseModelType.External,
+    source="external://alibabacloud/qwen-image-edit-max",
+    description="Alibaba Cloud Qwen Image Edit Max model (external API). Image editing with industrial design and geometric reasoning, driven by up to 3 reference images. Requires a configured Alibaba Cloud DashScope API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        supports_negative_prompt=False,
+        supports_reference_images=True,
+        supports_seed=True,
+        max_reference_images=3,
+        max_images_per_request=4,
+        allowed_aspect_ratios=QWEN_IMAGE_2_ALLOWED_ASPECT_RATIOS,
+        aspect_ratio_sizes={
+            "1:1": ExternalImageSize(width=2048, height=2048),
+            "4:3": ExternalImageSize(width=2368, height=1728),
+            "3:4": ExternalImageSize(width=1728, height=2368),
+            "16:9": ExternalImageSize(width=2688, height=1536),
+            "9:16": ExternalImageSize(width=1536, height=2688),
+        },
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=2048, height=2048, num_images=1),
+    panel_schema=ExternalModelPanelSchema(prompts=[{"name": "reference_images"}], image=[{"name": "dimensions"}]),
+)
+OPENAI_GPT_IMAGE_ASPECT_RATIOS = ["1:1", "3:2", "2:3"]
+OPENAI_GPT_IMAGE_ASPECT_RATIO_SIZES = {
+    "1:1": ExternalImageSize(width=1024, height=1024),
+    "3:2": ExternalImageSize(width=1536, height=1024),
+    "2:3": ExternalImageSize(width=1024, height=1536),
+}
+OPENAI_GPT_IMAGE_PANEL_SCHEMA = ExternalModelPanelSchema(
+    prompts=[{"name": "reference_images"}], image=[{"name": "dimensions"}]
+)
+
+openai_gpt_image_2 = StarterModel(
+    name="GPT Image 2",
+    base=BaseModelType.External,
+    source="external://openai/gpt-image-2",
+    description="OpenAI GPT-Image-2 image generation model. State-of-the-art image generation and editing with flexible sizing and high-fidelity image inputs. Does not support transparent backgrounds or configurable input fidelity. Requires a configured OpenAI API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_images_per_request=10,
+        allowed_aspect_ratios=OPENAI_GPT_IMAGE_ASPECT_RATIOS,
+        aspect_ratio_sizes=OPENAI_GPT_IMAGE_ASPECT_RATIO_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=OPENAI_GPT_IMAGE_PANEL_SCHEMA,
+)
+openai_gpt_image_1_5 = StarterModel(
+    name="GPT Image 1.5",
+    base=BaseModelType.External,
+    source="external://openai/gpt-image-1.5",
+    description="OpenAI GPT-Image-1.5 image generation model. Fastest and most affordable GPT image model. Requires a configured OpenAI API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_images_per_request=10,
+        allowed_aspect_ratios=OPENAI_GPT_IMAGE_ASPECT_RATIOS,
+        aspect_ratio_sizes=OPENAI_GPT_IMAGE_ASPECT_RATIO_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=OPENAI_GPT_IMAGE_PANEL_SCHEMA,
+)
+openai_gpt_image_1 = StarterModel(
+    name="GPT Image 1",
+    base=BaseModelType.External,
+    source="external://openai/gpt-image-1",
+    description="OpenAI GPT-Image-1 image generation model. High quality image generation. Requires a configured OpenAI API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_images_per_request=10,
+        allowed_aspect_ratios=OPENAI_GPT_IMAGE_ASPECT_RATIOS,
+        aspect_ratio_sizes=OPENAI_GPT_IMAGE_ASPECT_RATIO_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=OPENAI_GPT_IMAGE_PANEL_SCHEMA,
+)
+openai_gpt_image_1_mini = StarterModel(
+    name="GPT Image 1 Mini",
+    base=BaseModelType.External,
+    source="external://openai/gpt-image-1-mini",
+    description="OpenAI GPT-Image-1-Mini image generation model. Cost-efficient option, 80%% cheaper than GPT-Image-1. Requires a configured OpenAI API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_images_per_request=10,
+        allowed_aspect_ratios=OPENAI_GPT_IMAGE_ASPECT_RATIOS,
+        aspect_ratio_sizes=OPENAI_GPT_IMAGE_ASPECT_RATIO_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=OPENAI_GPT_IMAGE_PANEL_SCHEMA,
+)
+openai_dall_e_3 = StarterModel(
+    name="DALL-E 3",
+    base=BaseModelType.External,
+    source="external://openai/dall-e-3",
+    description="OpenAI DALL-E 3 image generation model. Supports vivid and natural styles. Only text-to-image, no editing. Requires a configured OpenAI API key and may incur provider usage costs.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img"],
+        max_images_per_request=1,
+        allowed_aspect_ratios=["1:1", "7:4", "4:7"],
+        aspect_ratio_sizes={
+            "1:1": ExternalImageSize(width=1024, height=1024),
+            "7:4": ExternalImageSize(width=1792, height=1024),
+            "4:7": ExternalImageSize(width=1024, height=1792),
+        },
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=1024, height=1024, num_images=1),
+    panel_schema=ExternalModelPanelSchema(image=[{"name": "dimensions"}]),
+)
+SEEDREAM_ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"]
+SEEDREAM_2K_SIZES = {
+    "1:1": ExternalImageSize(width=2048, height=2048),
+    "3:4": ExternalImageSize(width=1728, height=2304),
+    "4:3": ExternalImageSize(width=2304, height=1728),
+    "16:9": ExternalImageSize(width=2848, height=1600),
+    "9:16": ExternalImageSize(width=1600, height=2848),
+    "3:2": ExternalImageSize(width=2496, height=1664),
+    "2:3": ExternalImageSize(width=1664, height=2496),
+    "21:9": ExternalImageSize(width=3136, height=1344),
+}
+SEEDREAM_1K_SIZES = {
+    "1:1": ExternalImageSize(width=1024, height=1024),
+    "3:4": ExternalImageSize(width=864, height=1152),
+    "4:3": ExternalImageSize(width=1152, height=864),
+    "16:9": ExternalImageSize(width=1312, height=736),
+    "9:16": ExternalImageSize(width=736, height=1312),
+    "2:3": ExternalImageSize(width=832, height=1248),
+    "3:2": ExternalImageSize(width=1248, height=832),
+    "21:9": ExternalImageSize(width=1568, height=672),
+}
+SEEDREAM_PANEL_SCHEMA = ExternalModelPanelSchema(prompts=[{"name": "reference_images"}], image=[{"name": "dimensions"}])
+seedream_5_0 = StarterModel(
+    name="Seedream 5.0",
+    base=BaseModelType.External,
+    source="external://seedream/seedream-5-0-260128",
+    description="BytePlus Seedream 5.0 flagship image generation model (external API). Supports 2K and 4K resolutions, txt2img and img2img with multi-image reference input.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_reference_images=14,
+        max_images_per_request=15,
+        allowed_aspect_ratios=SEEDREAM_ASPECT_RATIOS,
+        aspect_ratio_sizes=SEEDREAM_2K_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=2048, height=2048, num_images=1),
+    panel_schema=SEEDREAM_PANEL_SCHEMA,
+)
+seedream_5_0_lite = StarterModel(
+    name="Seedream 5.0 Lite",
+    base=BaseModelType.External,
+    source="external://seedream/seedream-5-0-lite-260128",
+    description="BytePlus Seedream 5.0 Lite image generation model (external API). Supports 2K and 4K resolutions, txt2img and img2img with multi-image reference input.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_reference_images=14,
+        max_images_per_request=15,
+        allowed_aspect_ratios=SEEDREAM_ASPECT_RATIOS,
+        aspect_ratio_sizes=SEEDREAM_2K_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=2048, height=2048, num_images=1),
+    panel_schema=SEEDREAM_PANEL_SCHEMA,
+)
+seedream_4_5 = StarterModel(
+    name="Seedream 4.5",
+    base=BaseModelType.External,
+    source="external://seedream/seedream-4-5-251128",
+    description="BytePlus Seedream 4.5 image generation model (external API). Supports 2K and 4K resolutions, txt2img, img2img, batch generation, and multi-image reference input.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_reference_images=14,
+        max_images_per_request=15,
+        allowed_aspect_ratios=SEEDREAM_ASPECT_RATIOS,
+        aspect_ratio_sizes=SEEDREAM_2K_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=2048, height=2048, num_images=1),
+    panel_schema=SEEDREAM_PANEL_SCHEMA,
+)
+seedream_4_0 = StarterModel(
+    name="Seedream 4.0",
+    base=BaseModelType.External,
+    source="external://seedream/seedream-4-0-250828",
+    description="BytePlus Seedream 4.0 image generation model (external API). Supports 1K, 2K, and 4K resolutions, txt2img, img2img, batch generation, and multi-image reference input.",
+    type=ModelType.ExternalImageGenerator,
+    format=ModelFormat.ExternalApi,
+    capabilities=ExternalModelCapabilities(
+        modes=["txt2img", "img2img"],
+        supports_reference_images=True,
+        max_reference_images=14,
+        max_images_per_request=15,
+        allowed_aspect_ratios=SEEDREAM_ASPECT_RATIOS,
+        aspect_ratio_sizes=SEEDREAM_2K_SIZES,
+    ),
+    default_settings=ExternalApiModelDefaultSettings(width=2048, height=2048, num_images=1),
+    panel_schema=SEEDREAM_PANEL_SCHEMA,
+)
+# Seedream 3.0 T2I (seedream-3-0-t2i-250415) removed — deprecated by BytePlus, replaced by seedream-4-0-250828.
+
+# DALL-E 2 removed — deprecated by OpenAI, shutdown May 12, 2026.
 # region Anima
 anima_qwen3_encoder = StarterModel(
     name="Anima Qwen3 0.6B Text Encoder",
@@ -1020,14 +2181,92 @@ anima_vae = StarterModel(
     format=ModelFormat.Checkpoint,
 )
 
-anima_preview3 = StarterModel(
-    name="Anima Preview 3",
+anima_base = StarterModel(
+    name="Anima Base 1.0",
     base=BaseModelType.Anima,
-    source="https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-preview3-base.safetensors",
-    description="Anima Preview 3 - 2B parameter anime-focused text-to-image model built on Cosmos Predict2 DiT. ~4.5GB",
+    source="https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-base-v1.0.safetensors",
+    description="Anima Base 1.0 - 2B parameter anime-focused text-to-image model built on Cosmos Predict2 DiT. ~4.5GB",
     type=ModelType.Main,
     format=ModelFormat.Checkpoint,
-    dependencies=[anima_qwen3_encoder, anima_vae, t5_base_encoder],
+    dependencies=[anima_qwen3_encoder, anima_vae],
+)
+
+anima_lllite_inpainting = StarterModel(
+    name="Anima LLLite Inpainting",
+    base=BaseModelType.Anima,
+    source="https://huggingface.co/kohya-ss/Anima-LLLite/resolve/main/anima-lllite-inpainting-v2.safetensors",
+    description="ControlNet-LLLite inpainting adapter for Anima by kohya-ss. Conditions the model on the masked image content during inpainting/outpainting. ~66MB",
+    type=ModelType.ControlNet,
+    format=ModelFormat.Checkpoint,
+)
+
+anima_lllite_sketch = StarterModel(
+    name="Anima LLLite Sketch",
+    base=BaseModelType.Anima,
+    source="https://huggingface.co/kohya-ss/Anima-LLLite/resolve/main/anima-lllite-any-test-like-v2.safetensors",
+    description="ControlNet-LLLite control adapter for Anima by kohya-ss. Trained on mixed scribble/HED/lineart/grayscale conditioning images. ~16MB",
+    type=ModelType.ControlNet,
+    format=ModelFormat.Checkpoint,
+)
+
+anima_lllite_depth_preview3 = StarterModel(
+    name="Anima LLLite Depth (Preview3)",
+    base=BaseModelType.Anima,
+    source="https://huggingface.co/kohya-ss/Anima-LLLite/resolve/main/anima-lllite-depth-1.safetensors",
+    description="ControlNet-LLLite depth adapter for Anima by kohya-ss. Trained on the Preview3 build; reduced quality on Anima Base 1.0. ~8MB",
+    type=ModelType.ControlNet,
+    format=ModelFormat.Checkpoint,
+)
+
+anima_lllite_scribble_preview3 = StarterModel(
+    name="Anima LLLite Scribble (Preview3)",
+    base=BaseModelType.Anima,
+    source="https://huggingface.co/kohya-ss/Anima-LLLite/resolve/main/anima-lllite-scribble-1.safetensors",
+    description="ControlNet-LLLite scribble adapter for Anima by kohya-ss. Trained on the Preview3 build; reduced quality on Anima Base 1.0. ~8MB",
+    type=ModelType.ControlNet,
+    format=ModelFormat.Checkpoint,
+)
+
+anima_lllite_lineart_preview3 = StarterModel(
+    name="Anima LLLite Lineart (Preview3)",
+    base=BaseModelType.Anima,
+    source="https://huggingface.co/kohya-ss/Anima-LLLite/resolve/main/anima-lllite-lineart-1.safetensors",
+    description="ControlNet-LLLite lineart adapter for Anima by kohya-ss. Trained on the Preview3 build; reduced quality on Anima Base 1.0. ~8MB",
+    type=ModelType.ControlNet,
+    format=ModelFormat.Checkpoint,
+)
+
+anima_lllite_pose_preview3 = StarterModel(
+    name="Anima LLLite Pose (Preview3)",
+    base=BaseModelType.Anima,
+    source="https://huggingface.co/kohya-ss/Anima-LLLite/resolve/main/anima-lllite-pose-1.safetensors",
+    description="ControlNet-LLLite pose adapter for Anima by kohya-ss. Trained on the Preview3 build; notably weak on Anima Base 1.0. ~23MB",
+    type=ModelType.ControlNet,
+    format=ModelFormat.Checkpoint,
+)
+# endregion
+
+# region Ideogram 4
+# Self-contained diffusers pipelines (both transformers + Qwen3-VL text encoder + VAE in one folder), so
+# no separate dependencies. Gated, non-commercial license: the license must be accepted on the
+# HuggingFace model page and a HuggingFace token configured before the download will succeed — same as
+# FLUX.1 dev.
+ideogram_4_nf4 = StarterModel(
+    name="Ideogram 4 (nf4)",
+    base=BaseModelType.Ideogram4,
+    source="ideogram-ai/ideogram-4-nf4",
+    description="Ideogram 4 text-to-image in nf4-quantized Diffusers format (CUDA only). Structured JSON "
+    "prompting with regional layout control. Non-commercial license — accept it on HuggingFace first. ~16GB",
+    type=ModelType.Main,
+)
+
+ideogram_4_fp8 = StarterModel(
+    name="Ideogram 4 (fp8)",
+    base=BaseModelType.Ideogram4,
+    source="ideogram-ai/ideogram-4-fp8",
+    description="Ideogram 4 text-to-image in fp8-quantized Diffusers format (runs on any device, higher "
+    "memory use). Non-commercial license — accept it on HuggingFace first. ~26GB",
+    type=ModelType.Main,
 )
 # endregion
 
@@ -1039,8 +2278,11 @@ STARTER_MODELS: list[StarterModel] = [
     flux_dev_quantized,
     flux_schnell,
     flux_dev,
+    flux_schnell_sdnq,
     sd35_medium,
     sd35_large,
+    ideogram_4_nf4,
+    ideogram_4_fp8,
     cyberrealistic_sd1,
     rev_animated_sd1,
     dreamshaper_8_sd1,
@@ -1099,10 +2341,16 @@ STARTER_MODELS: list[StarterModel] = [
     swinir,
     t5_base_encoder,
     t5_8b_quantized_encoder,
+    t5_gguf_q3_k_s_encoder,
+    t5_gguf_q6_k_encoder,
     clip_l_encoder,
     siglip,
     flux_redux,
     llava_onevision,
+    llava_onevision_7b,
+    qwen2_5_1_5b_instruct,
+    qwen2_5_3b_instruct,
+    smollm2_1_7b_instruct,
     flux_fill,
     flux2_vae,
     flux2_klein_4b,
@@ -1110,13 +2358,30 @@ STARTER_MODELS: list[StarterModel] = [
     flux2_klein_4b_fp8,
     flux2_klein_9b,
     flux2_klein_9b_fp8,
+    flux2_klein_4b_sdnq,
+    flux2_klein_9b_sdnq,
     flux2_klein_4b_gguf_q4,
     flux2_klein_4b_gguf_q8,
     flux2_klein_9b_gguf_q4,
     flux2_klein_9b_gguf_q8,
     flux2_klein_qwen3_4b_encoder,
     flux2_klein_qwen3_8b_encoder,
+    flux2_dev_comfy_mistral_bf16,
+    flux2_dev_comfy_mistral_fp8,
+    flux2_dev_cow_mistral_iq4_xs,
+    flux2_dev_cow_mistral_q4,
+    flux2_dev_cow_mistral_q8,
+    flux2_dev_diffusers,
+    flux2_dev_diffusers_nf4,
+    flux2_dev_gguf_q3_k_m,
+    flux2_dev_gguf_q4_k_m,
+    flux2_dev_gguf_q5_k_m,
+    flux2_dev_gguf_q6_k,
+    flux2_dev_gguf_q8_0,
     cogview4,
+    qwen_image_vae,
+    qwen_vl_encoder_fp8,
+    qwen_vl_encoder_diffusers,
     qwen_image_edit,
     qwen_image_edit_gguf_q2_k,
     qwen_image_edit_gguf_q4_k_m,
@@ -1136,13 +2401,73 @@ STARTER_MODELS: list[StarterModel] = [
     z_image_turbo,
     z_image_turbo_quantized,
     z_image_turbo_q8,
+    z_image_turbo_sdnq,
     z_image_qwen3_encoder,
     z_image_qwen3_encoder_quantized,
     z_image_controlnet_union,
     z_image_controlnet_tile,
-    anima_preview3,
+    ernie_image,
+    ernie_image_turbo,
+    krea2_turbo,
+    krea2_raw,
+    krea2_turbo_gguf_q4_k_m,
+    krea2_turbo_gguf_q8_0,
+    qwen3_vl_encoder_4b,
+    wan_22_t5_encoder,
+    wan_22_a14b_vae,
+    wan_22_5b_vae,
+    wan_22_t2v_a14b_diffusers,
+    wan_22_t2v_a14b_low_gguf_q4_k_m,
+    wan_22_t2v_a14b_gguf_q4_k_m,
+    wan_22_t2v_a14b_low_gguf_q8_0,
+    wan_22_t2v_a14b_gguf_q8_0,
+    wan_22_t2v_lightning_high,
+    wan_22_t2v_lightning_low,
+    wan_22_i2v_a14b_diffusers,
+    wan_22_i2v_a14b_low_gguf_q4_k_m,
+    wan_22_i2v_a14b_gguf_q4_k_m,
+    wan_22_i2v_a14b_low_gguf_q8_0,
+    wan_22_i2v_a14b_gguf_q8_0,
+    wan_22_i2v_lightning_high,
+    wan_22_i2v_lightning_low,
+    wan_22_ti2v_5b_diffusers,
+    wan_22_ti2v_5b_gguf_q4_k_m,
+    wan_22_ti2v_5b_gguf_q8_0,
+    gemini_flash_image,
+    gemini_pro_image_preview,
+    gemini_3_1_flash_image_preview,
+    openai_gpt_image_2,
+    openai_gpt_image_1_5,
+    openai_gpt_image_1,
+    openai_gpt_image_1_mini,
+    openai_dall_e_3,
+    seedream_5_0,
+    seedream_5_0_lite,
+    seedream_4_5,
+    seedream_4_0,
+    alibabacloud_qwen_image_2_pro,
+    alibabacloud_qwen_image_2,
+    alibabacloud_qwen_image_max,
+    alibabacloud_wan26_t2i,
+    alibabacloud_qwen_image_edit_max,
+    anima_base,
     anima_qwen3_encoder,
     anima_vae,
+    anima_lllite_inpainting,
+    anima_lllite_sketch,
+    anima_lllite_depth_preview3,
+    anima_lllite_scribble_preview3,
+    anima_lllite_lineart_preview3,
+    anima_lllite_pose_preview3,
+    gemma2_2b_encoder,
+    pid_decoder_flux_2k,
+    pid_decoder_flux_2kto4k,
+    pid_decoder_flux2_2k,
+    pid_decoder_flux2_2kto4k,
+    pid_decoder_sd3_2k,
+    pid_decoder_sd3_2kto4k,
+    pid_decoder_sdxl_2kto4k,
+    pid_decoder_qwenimage_2kto4k,
 ]
 
 sd1_bundle: list[StarterModel] = [
@@ -1211,7 +2536,15 @@ flux2_klein_bundle: list[StarterModel] = [
     flux2_klein_qwen3_4b_encoder,
 ]
 
+# Turbo only: both checkpoints are 8B and the full pipeline is a large download, so the bundle
+# ships the fast default. The undistilled `ernie_image` is still installable individually.
+ernie_image_bundle: list[StarterModel] = [
+    ernie_image_turbo,
+]
+
 qwen_image_bundle: list[StarterModel] = [
+    qwen_image_vae,
+    qwen_vl_encoder_fp8,
     qwen_image_edit,
     qwen_image_edit_gguf_q4_k_m,
     qwen_image_edit_gguf_q8_0,
@@ -1225,10 +2558,50 @@ qwen_image_bundle: list[StarterModel] = [
 ]
 
 anima_bundle: list[StarterModel] = [
-    anima_preview3,
+    anima_base,
     anima_qwen3_encoder,
     anima_vae,
-    t5_base_encoder,
+    anima_lllite_inpainting,
+    anima_lllite_sketch,
+]
+
+krea2_bundle: list[StarterModel] = [
+    qwen_image_vae,
+    qwen3_vl_encoder_4b,
+    krea2_turbo,
+    krea2_raw,
+    krea2_turbo_gguf_q4_k_m,
+    krea2_turbo_gguf_q8_0,
+]
+
+# Wan 2.2 starter bundles. Split into T2V and I2V so users only pay for the
+# capability they need: a 12 GB card can install just the T2V bundle and have
+# both text-to-video (T2V-A14B) and a low-VRAM image-to-video option (via
+# TI2V-5B, which handles both modes in one ~3.4 GB model). The I2V bundle adds
+# the heavier I2V-A14B path for users with more headroom. Q8 variants and full
+# Diffusers builds stay available as a-la-carte starters.
+wan_t2v_bundle: list[StarterModel] = [
+    wan_22_t5_encoder,
+    wan_22_a14b_vae,
+    wan_22_5b_vae,
+    wan_22_ti2v_5b_gguf_q4_k_m,
+    wan_22_t2v_a14b_gguf_q4_k_m,
+    wan_22_t2v_a14b_low_gguf_q4_k_m,
+    wan_22_t2v_lightning_high,
+    wan_22_t2v_lightning_low,
+]
+wan_i2v_bundle: list[StarterModel] = [
+    wan_22_t5_encoder,
+    wan_22_a14b_vae,
+    wan_22_i2v_a14b_gguf_q4_k_m,
+    wan_22_i2v_a14b_low_gguf_q4_k_m,
+    wan_22_i2v_lightning_high,
+    wan_22_i2v_lightning_low,
+]
+
+# nf4 is the recommended 24GB CUDA path; the fp8 build is offered separately for non-CUDA / more VRAM.
+ideogram_bundle: list[StarterModel] = [
+    ideogram_4_nf4,
 ]
 
 STARTER_BUNDLES: dict[str, StarterModelBundle] = {
@@ -1237,8 +2610,13 @@ STARTER_BUNDLES: dict[str, StarterModelBundle] = {
     BaseModelType.Flux: StarterModelBundle(name="FLUX.1 dev", models=flux_bundle),
     BaseModelType.Flux2: StarterModelBundle(name="FLUX.2 Klein", models=flux2_klein_bundle),
     BaseModelType.ZImage: StarterModelBundle(name="Z-Image Turbo", models=zimage_bundle),
+    BaseModelType.ErnieImage: StarterModelBundle(name="ERNIE-Image", models=ernie_image_bundle),
     BaseModelType.QwenImage: StarterModelBundle(name="Qwen Image", models=qwen_image_bundle),
     BaseModelType.Anima: StarterModelBundle(name="Anima", models=anima_bundle),
+    BaseModelType.Krea2: StarterModelBundle(name="Krea-2", models=krea2_bundle),
+    "wan_t2v": StarterModelBundle(name="Wan 2.2 Text-to-Video", models=wan_t2v_bundle),
+    "wan_i2v": StarterModelBundle(name="Wan 2.2 Image-to-Video", models=wan_i2v_bundle),
+    BaseModelType.Ideogram4: StarterModelBundle(name="Ideogram 4", models=ideogram_bundle),
 }
 
 assert len(STARTER_MODELS) == len({m.source for m in STARTER_MODELS}), "Duplicate starter models"

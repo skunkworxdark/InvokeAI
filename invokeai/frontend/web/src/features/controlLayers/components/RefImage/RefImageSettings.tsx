@@ -7,6 +7,7 @@ import { IPAdapterCLIPVisionModel } from 'features/controlLayers/components/comm
 import { PullBboxIntoRefImageIconButton } from 'features/controlLayers/components/common/PullBboxIntoRefImageIconButton';
 import { Weight } from 'features/controlLayers/components/common/Weight';
 import { IPAdapterMethod } from 'features/controlLayers/components/RefImage/IPAdapterMethod';
+import { Krea2StyleStrength } from 'features/controlLayers/components/RefImage/Krea2StyleStrength';
 import { RefImageModel } from 'features/controlLayers/components/RefImage/RefImageModel';
 import { RefImageNoImageState } from 'features/controlLayers/components/RefImage/RefImageNoImageState';
 import { RefImageNoImageStateWithCanvasOptions } from 'features/controlLayers/components/RefImage/RefImageNoImageStateWithCanvasOptions';
@@ -15,7 +16,7 @@ import {
   useCanvasManagerSafe,
 } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
 import { useRefImageIdContext } from 'features/controlLayers/contexts/RefImageIdContext';
-import { selectIsFLUX } from 'features/controlLayers/store/paramsSlice';
+import { selectIsFLUX, selectMainModelConfig } from 'features/controlLayers/store/paramsSlice';
 import {
   refImageFLUXReduxImageInfluenceChanged,
   refImageImageChanged,
@@ -23,6 +24,7 @@ import {
   refImageIPAdapterCLIPVisionModelChanged,
   refImageIPAdapterMethodChanged,
   refImageIPAdapterWeightChanged,
+  refImageKrea2StyleStrengthChanged,
   refImageModelChanged,
   selectRefImageEntity,
   selectRefImageEntityOrThrow,
@@ -38,7 +40,9 @@ import {
   isFlux2ReferenceImageConfig,
   isFLUXReduxConfig,
   isIPAdapterConfig,
+  isKrea2ReferenceImageConfig,
   isQwenImageReferenceImageConfig,
+  isWanReferenceImageConfig,
 } from 'features/controlLayers/store/types';
 import type { SetGlobalReferenceImageDndTargetData } from 'features/dnd/dnd';
 import { setGlobalReferenceImageDndTarget } from 'features/dnd/dnd';
@@ -50,6 +54,7 @@ import type {
   FLUXReduxModelConfig,
   IPAdapterModelConfig,
 } from 'services/api/types';
+import { isExternalApiModelConfig } from 'services/api/types';
 
 import { RefImageImage } from './RefImageImage';
 
@@ -65,6 +70,7 @@ const RefImageSettingsContent = memo(() => {
   const selectConfig = useMemo(() => buildSelectConfig(id), [id]);
   const config = useAppSelector(selectConfig);
   const tab = useAppSelector(selectActiveTab);
+  const mainModelConfig = useAppSelector(selectMainModelConfig);
 
   const onChangeBeginEndStepPct = useCallback(
     (beginEndStepPct: [number, number]) => {
@@ -90,6 +96,13 @@ const RefImageSettingsContent = memo(() => {
   const onChangeFLUXReduxImageInfluence = useCallback(
     (imageInfluence: FLUXReduxImageInfluenceType) => {
       dispatch(refImageFLUXReduxImageInfluenceChanged({ id, imageInfluence }));
+    },
+    [dispatch, id]
+  );
+
+  const onChangeKrea2StyleStrength = useCallback(
+    (styleStrength: number) => {
+      dispatch(refImageKrea2StyleStrengthChanged({ id, styleStrength }));
     },
     [dispatch, id]
   );
@@ -125,9 +138,16 @@ const RefImageSettingsContent = memo(() => {
   );
 
   const isFLUX = useAppSelector(selectIsFLUX);
+  const isExternalModel = !!mainModelConfig && isExternalApiModelConfig(mainModelConfig);
 
-  // FLUX.2 Klein and Qwen Image Edit have built-in reference image support - no model selector needed
-  const showModelSelector = !isFlux2ReferenceImageConfig(config) && !isQwenImageReferenceImageConfig(config);
+  // FLUX.2 Klein, Qwen Image Edit, Wan 2.2, Krea-2 and external API models do not require a ref image
+  // model selection.
+  const showModelSelector =
+    !isFlux2ReferenceImageConfig(config) &&
+    !isQwenImageReferenceImageConfig(config) &&
+    !isWanReferenceImageConfig(config) &&
+    !isKrea2ReferenceImageConfig(config) &&
+    !isExternalModel;
 
   return (
     <Flex flexDir="column" gap={2} position="relative" w="full">
@@ -155,14 +175,19 @@ const RefImageSettingsContent = memo(() => {
         </Flex>
       )}
       <Flex gap={2} w="full">
-        {isIPAdapterConfig(config) && (
+        {isIPAdapterConfig(config) && !isExternalModel && (
           <Flex flexDir="column" gap={2} w="full">
             {!isFLUX && <IPAdapterMethod method={config.method} onChange={onChangeIPMethod} />}
             <Weight weight={config.weight} onChange={onChangeWeight} />
             <BeginEndStepPct beginEndStepPct={config.beginEndStepPct} onChange={onChangeBeginEndStepPct} />
           </Flex>
         )}
-        {isFLUXReduxConfig(config) && (
+        {isKrea2ReferenceImageConfig(config) && (
+          <Flex flexDir="column" gap={2} w="full" alignItems="flex-start">
+            <Krea2StyleStrength styleStrength={config.styleStrength} onChange={onChangeKrea2StyleStrength} />
+          </Flex>
+        )}
+        {isFLUXReduxConfig(config) && !isExternalModel && (
           <Flex flexDir="column" gap={2} w="full" alignItems="flex-start">
             <FLUXReduxImageInfluence
               imageInfluence={config.imageInfluence ?? 'lowest'}

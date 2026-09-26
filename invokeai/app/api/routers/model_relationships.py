@@ -5,6 +5,7 @@ from typing import List
 from fastapi import APIRouter, Body, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
+from invokeai.app.api.auth_dependencies import AdminUserOrDefault, CurrentUserOrDefault
 from invokeai.app.api.dependencies import ApiDependencies
 
 model_relationships_router = APIRouter(prefix="/v1/model_relationships", tags=["model_relationships"])
@@ -84,16 +85,14 @@ class ModelRelationshipBatchRequest(BaseModel):
         422: {"description": "Validation error"},
     },
 )
-async def get_related_models(
+def get_related_models(
+    current_user: CurrentUserOrDefault,
     model_key: str = Path(..., description="The key of the model to get relationships for"),
 ) -> list[str]:
     """
     Get a list of model keys related to a given model.
     """
-    try:
-        return ApiDependencies.invoker.services.model_relationships.get_related_model_keys(model_key)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiDependencies.invoker.services.model_relationships.get_related_model_keys(model_key)
 
 
 @model_relationships_router.post(
@@ -109,7 +108,8 @@ async def get_related_models(
     summary="Add Model Relationship",
     description="Creates a **bidirectional** relationship between two models, allowing each to reference the other as related.",
 )
-async def add_model_relationship(
+def add_model_relationship(
+    current_user: AdminUserOrDefault,
     req: ModelRelationshipCreateRequest = Body(..., description="The model keys to relate"),
 ) -> None:
     """
@@ -120,18 +120,16 @@ async def add_model_relationship(
     - Raises 400 if keys are invalid or identical.
     - Raises 409 if the relationship already exists.
     """
-    try:
-        if req.model_key_1 == req.model_key_2:
-            raise HTTPException(status_code=400, detail="Cannot relate a model to itself.")
+    if req.model_key_1 == req.model_key_2:
+        raise HTTPException(status_code=400, detail="Cannot relate a model to itself.")
 
+    try:
         ApiDependencies.invoker.services.model_relationships.add_model_relationship(
             req.model_key_1,
             req.model_key_2,
         )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @model_relationships_router.delete(
@@ -147,7 +145,8 @@ async def add_model_relationship(
     summary="Remove Model Relationship",
     description="Removes a **bidirectional** relationship between two models. The relationship must already exist.",
 )
-async def remove_model_relationship(
+def remove_model_relationship(
+    current_user: AdminUserOrDefault,
     req: ModelRelationshipCreateRequest = Body(..., description="The model keys to disconnect"),
 ) -> None:
     """
@@ -156,18 +155,16 @@ async def remove_model_relationship(
     - Raises 400 if attempting to unlink a model from itself.
     - Raises 404 if the relationship was not found.
     """
-    try:
-        if req.model_key_1 == req.model_key_2:
-            raise HTTPException(status_code=400, detail="Cannot unlink a model from itself.")
+    if req.model_key_1 == req.model_key_2:
+        raise HTTPException(status_code=400, detail="Cannot unlink a model from itself.")
 
+    try:
         ApiDependencies.invoker.services.model_relationships.remove_model_relationship(
             req.model_key_1,
             req.model_key_2,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @model_relationships_router.post(
@@ -197,7 +194,8 @@ async def remove_model_relationship(
     summary="Get Related Model Keys (Batch)",
     description="Retrieves all **unique related model keys** for a list of given models. This is useful for contextual suggestions or filtering.",
 )
-async def get_related_models_batch(
+def get_related_models_batch(
+    current_user: CurrentUserOrDefault,
     req: ModelRelationshipBatchRequest = Body(..., description="Model keys to check for related connections"),
 ) -> list[str]:
     """
@@ -205,11 +203,8 @@ async def get_related_models_batch(
 
     Useful when working with multiple selections in the UI or cross-model comparisons.
     """
-    try:
-        all_related: set[str] = set()
-        for key in req.model_keys:
-            related = ApiDependencies.invoker.services.model_relationships.get_related_model_keys(key)
-            all_related.update(related)
-        return list(all_related)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    all_related: set[str] = set()
+    for key in req.model_keys:
+        related = ApiDependencies.invoker.services.model_relationships.get_related_model_keys(key)
+        all_related.update(related)
+    return list(all_related)

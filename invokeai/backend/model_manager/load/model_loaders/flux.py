@@ -2,10 +2,11 @@
 """Class for Flux model loading in InvokeAI."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import accelerate
 import torch
+from diffusers import AutoencoderKL
 from safetensors.torch import load_file
 from transformers import (
     AutoConfig,
@@ -13,7 +14,7 @@ from transformers import (
     CLIPTextModel,
     CLIPTokenizer,
     T5EncoderModel,
-    T5TokenizerFast,
+    T5Tokenizer,
 )
 
 from invokeai.app.services.config.config_default import get_config
@@ -49,11 +50,24 @@ from invokeai.backend.model_manager.configs.main import (
     Main_Checkpoint_FLUX_Config,
     Main_GGUF_Flux2_Config,
     Main_GGUF_FLUX_Config,
+    Main_SDNQ_Diffusers_Flux2_Config,
+    Main_SDNQ_Diffusers_FLUX_Config,
+    Main_SDNQ_Flux2_Config,
+    Main_SDNQ_FLUX_Config,
 )
-from invokeai.backend.model_manager.configs.t5_encoder import T5Encoder_BnBLLMint8_Config, T5Encoder_T5Encoder_Config
+from invokeai.backend.model_manager.configs.t5_encoder import (
+    T5Encoder_BnBLLMint8_Config,
+    T5Encoder_GGUF_Config,
+    T5Encoder_SDNQ_Config,
+    T5Encoder_T5Encoder_Config,
+)
 from invokeai.backend.model_manager.configs.vae import VAE_Checkpoint_Config_Base, VAE_Checkpoint_Flux2_Config
-from invokeai.backend.model_manager.load.load_default import ModelLoader
+from invokeai.backend.model_manager.load.load_default import ModelLoader, resolve_submodel_path
 from invokeai.backend.model_manager.load.model_loader_registry import ModelLoaderRegistry
+from invokeai.backend.model_manager.load.model_loaders.flux2_state_dict_utils import (
+    convert_flux2_bfl_to_diffusers,
+    convert_flux2_vae_bfl_to_diffusers,
+)
 from invokeai.backend.model_manager.load.model_loaders.generic_diffusers import GenericDiffusersLoader
 from invokeai.backend.model_manager.taxonomy import (
     AnyModel,
@@ -68,7 +82,14 @@ from invokeai.backend.model_manager.util.model_util import (
 )
 from invokeai.backend.quantization.gguf.loaders import gguf_sd_loader
 from invokeai.backend.quantization.gguf.utils import TORCH_COMPATIBLE_QTYPES
+from invokeai.backend.quantization.sdnq.detection import is_sdnq_folder
+from invokeai.backend.quantization.sdnq.loaders import raise_on_incomplete_sdnq_load, sdnq_sd_loader
+from invokeai.backend.util.logging import InvokeAILogger
 from invokeai.backend.util.silence_warnings import SilenceWarnings
+from invokeai.backend.util.state_dict_loading import load_state_dict_ignoring_extras
+
+logger = InvokeAILogger.get_logger(__name__)
+
 
 try:
     from invokeai.backend.quantization.bnb_llm_int8 import quantize_model_llm_int8
@@ -97,7 +118,7 @@ class FluxVAELoader(ModelLoader):
         with accelerate.init_empty_weights():
             model = AutoEncoder(get_flux_ae_params())
         sd = load_file(model_path)
-        model.load_state_dict(sd, assign=True)
+        load_state_dict_ignoring_extras(model, sd, source="FLUX VAE checkpoint", assign=True)
         # VAE is broken in float16, which mps defaults to
         if self._torch_dtype == torch.float16:
             try:
@@ -139,6 +160,7 @@ class Flux2VAEDiffusersLoader(ModelLoader):
             local_files_only=True,
         )
 
+        model = self._apply_fp8_layerwise_casting(model, config, submodel_type)
         return model
 
 
@@ -176,20 +198,51 @@ class Flux2VAELoader(ModelLoader):
             for k in sd.keys()
         )
         if is_bfl_format:
-            sd = self._convert_flux2_vae_bfl_to_diffusers(sd)
+            sd = convert_flux2_vae_bfl_to_diffusers(sd)
 
-        # FLUX.2 VAE configuration (32 latent channels)
-        # Based on the official FLUX.2 VAE architecture
-        # Use default config - AutoencoderKLFlux2 has built-in defaults
+        # FLUX.2 VAE configuration (32 latent channels).
+        # The standard FLUX.2 VAE uses block_out_channels=(128,256,512,512) for both
+        # encoder and decoder. The "small decoder" variant from
+        # black-forest-labs/FLUX.2-small-decoder keeps the full encoder but uses a
+        # narrower decoder with channels (96,192,384,384). AutoencoderKLFlux2 only
+        # exposes a single block_out_channels, so we build the model with the
+        # encoder's channels and, if the decoder differs, replace just the decoder
+        # submodule with a matching one before loading the state dict.
+        encoder_block_out_channels = (128, 256, 512, 512)
+        decoder_block_out_channels = encoder_block_out_channels
+        if "encoder.conv_in.weight" in sd and "encoder.conv_norm_out.weight" in sd:
+            enc_last = int(sd["encoder.conv_norm_out.weight"].shape[0])
+            enc_first = int(sd["encoder.conv_in.weight"].shape[0])
+            encoder_block_out_channels = (enc_first, enc_first * 2, enc_last, enc_last)
+        if "decoder.conv_in.weight" in sd and "decoder.conv_norm_out.weight" in sd:
+            dec_last = int(sd["decoder.conv_in.weight"].shape[0])
+            dec_first = int(sd["decoder.conv_norm_out.weight"].shape[0])
+            decoder_block_out_channels = (dec_first, dec_first * 2, dec_last, dec_last)
+
         with SilenceWarnings():
             with accelerate.init_empty_weights():
-                model = AutoencoderKLFlux2()
+                model = AutoencoderKLFlux2(block_out_channels=encoder_block_out_channels)
+                if decoder_block_out_channels != encoder_block_out_channels:
+                    # Rebuild the decoder with the smaller channel widths.
+                    from diffusers.models.autoencoders.vae import Decoder
+
+                    cfg = model.config
+                    model.decoder = Decoder(
+                        in_channels=cfg.latent_channels,
+                        out_channels=cfg.out_channels,
+                        up_block_types=cfg.up_block_types,
+                        block_out_channels=decoder_block_out_channels,
+                        layers_per_block=cfg.layers_per_block,
+                        norm_num_groups=cfg.norm_num_groups,
+                        act_fn=cfg.act_fn,
+                        mid_block_add_attention=cfg.mid_block_add_attention,
+                    )
 
         # Convert to bfloat16 and load
         for k in sd.keys():
             sd[k] = sd[k].to(torch.bfloat16)
 
-        model.load_state_dict(sd, assign=True)
+        load_state_dict_ignoring_extras(model, sd, source="FLUX.2 VAE checkpoint", assign=True)
 
         # VAE is broken in float16, which mps defaults to
         if self._torch_dtype == torch.float16:
@@ -201,172 +254,8 @@ class Flux2VAELoader(ModelLoader):
             vae_dtype = self._torch_dtype
         model.to(vae_dtype)
 
+        model = self._apply_fp8_layerwise_casting(model, config, submodel_type)
         return model
-
-    def _convert_flux2_vae_bfl_to_diffusers(self, sd: dict) -> dict:
-        """Convert FLUX.2 VAE BFL format state dict to diffusers format.
-
-        Key differences:
-        - encoder.down.X.block.Y -> encoder.down_blocks.X.resnets.Y
-        - encoder.down.X.downsample.conv -> encoder.down_blocks.X.downsamplers.0.conv
-        - encoder.mid.block_1/2 -> encoder.mid_block.resnets.0/1
-        - encoder.mid.attn_1.q/k/v -> encoder.mid_block.attentions.0.to_q/k/v
-        - encoder.norm_out -> encoder.conv_norm_out
-        - encoder.quant_conv -> quant_conv (top-level)
-        - decoder.up.X -> decoder.up_blocks.(num_blocks-1-X) (reversed order!)
-        - decoder.post_quant_conv -> post_quant_conv (top-level)
-        - *.nin_shortcut -> *.conv_shortcut
-        """
-        import re
-
-        converted = {}
-        num_up_blocks = 4  # Standard VAE has 4 up blocks
-
-        for old_key, tensor in sd.items():
-            new_key = old_key
-
-            # Encoder down blocks: encoder.down.X.block.Y -> encoder.down_blocks.X.resnets.Y
-            match = re.match(r"encoder\.down\.(\d+)\.block\.(\d+)\.(.*)", old_key)
-            if match:
-                block_idx, resnet_idx, rest = match.groups()
-                rest = rest.replace("nin_shortcut", "conv_shortcut")
-                new_key = f"encoder.down_blocks.{block_idx}.resnets.{resnet_idx}.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Encoder downsamplers: encoder.down.X.downsample.conv -> encoder.down_blocks.X.downsamplers.0.conv
-            match = re.match(r"encoder\.down\.(\d+)\.downsample\.conv\.(.*)", old_key)
-            if match:
-                block_idx, rest = match.groups()
-                new_key = f"encoder.down_blocks.{block_idx}.downsamplers.0.conv.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Encoder mid block resnets: encoder.mid.block_1/2 -> encoder.mid_block.resnets.0/1
-            match = re.match(r"encoder\.mid\.block_(\d+)\.(.*)", old_key)
-            if match:
-                block_num, rest = match.groups()
-                resnet_idx = int(block_num) - 1  # block_1 -> resnets.0, block_2 -> resnets.1
-                new_key = f"encoder.mid_block.resnets.{resnet_idx}.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Encoder mid block attention: encoder.mid.attn_1.* -> encoder.mid_block.attentions.0.*
-            match = re.match(r"encoder\.mid\.attn_1\.(.*)", old_key)
-            if match:
-                rest = match.group(1)
-                # Map attention keys
-                # BFL uses Conv2d (shape [out, in, 1, 1]), diffusers uses Linear (shape [out, in])
-                # Squeeze the extra dimensions for weight tensors
-                if rest.startswith("q."):
-                    new_key = f"encoder.mid_block.attentions.0.to_q.{rest[2:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("k."):
-                    new_key = f"encoder.mid_block.attentions.0.to_k.{rest[2:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("v."):
-                    new_key = f"encoder.mid_block.attentions.0.to_v.{rest[2:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("proj_out."):
-                    new_key = f"encoder.mid_block.attentions.0.to_out.0.{rest[9:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("norm."):
-                    new_key = f"encoder.mid_block.attentions.0.group_norm.{rest[5:]}"
-                else:
-                    new_key = f"encoder.mid_block.attentions.0.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Encoder norm_out -> conv_norm_out
-            if old_key.startswith("encoder.norm_out."):
-                new_key = old_key.replace("encoder.norm_out.", "encoder.conv_norm_out.")
-                converted[new_key] = tensor
-                continue
-
-            # Encoder quant_conv -> quant_conv (move to top level)
-            if old_key.startswith("encoder.quant_conv."):
-                new_key = old_key.replace("encoder.quant_conv.", "quant_conv.")
-                converted[new_key] = tensor
-                continue
-
-            # Decoder up blocks (reversed order!): decoder.up.X -> decoder.up_blocks.(num_blocks-1-X)
-            match = re.match(r"decoder\.up\.(\d+)\.block\.(\d+)\.(.*)", old_key)
-            if match:
-                block_idx, resnet_idx, rest = match.groups()
-                # Reverse the block index
-                new_block_idx = num_up_blocks - 1 - int(block_idx)
-                rest = rest.replace("nin_shortcut", "conv_shortcut")
-                new_key = f"decoder.up_blocks.{new_block_idx}.resnets.{resnet_idx}.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Decoder upsamplers (reversed order!)
-            match = re.match(r"decoder\.up\.(\d+)\.upsample\.conv\.(.*)", old_key)
-            if match:
-                block_idx, rest = match.groups()
-                new_block_idx = num_up_blocks - 1 - int(block_idx)
-                new_key = f"decoder.up_blocks.{new_block_idx}.upsamplers.0.conv.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Decoder mid block resnets: decoder.mid.block_1/2 -> decoder.mid_block.resnets.0/1
-            match = re.match(r"decoder\.mid\.block_(\d+)\.(.*)", old_key)
-            if match:
-                block_num, rest = match.groups()
-                resnet_idx = int(block_num) - 1
-                new_key = f"decoder.mid_block.resnets.{resnet_idx}.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Decoder mid block attention: decoder.mid.attn_1.* -> decoder.mid_block.attentions.0.*
-            match = re.match(r"decoder\.mid\.attn_1\.(.*)", old_key)
-            if match:
-                rest = match.group(1)
-                # BFL uses Conv2d (shape [out, in, 1, 1]), diffusers uses Linear (shape [out, in])
-                # Squeeze the extra dimensions for weight tensors
-                if rest.startswith("q."):
-                    new_key = f"decoder.mid_block.attentions.0.to_q.{rest[2:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("k."):
-                    new_key = f"decoder.mid_block.attentions.0.to_k.{rest[2:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("v."):
-                    new_key = f"decoder.mid_block.attentions.0.to_v.{rest[2:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("proj_out."):
-                    new_key = f"decoder.mid_block.attentions.0.to_out.0.{rest[9:]}"
-                    if rest.endswith(".weight") and tensor.dim() == 4:
-                        tensor = tensor.squeeze(-1).squeeze(-1)
-                elif rest.startswith("norm."):
-                    new_key = f"decoder.mid_block.attentions.0.group_norm.{rest[5:]}"
-                else:
-                    new_key = f"decoder.mid_block.attentions.0.{rest}"
-                converted[new_key] = tensor
-                continue
-
-            # Decoder norm_out -> conv_norm_out
-            if old_key.startswith("decoder.norm_out."):
-                new_key = old_key.replace("decoder.norm_out.", "decoder.conv_norm_out.")
-                converted[new_key] = tensor
-                continue
-
-            # Decoder post_quant_conv -> post_quant_conv (move to top level)
-            if old_key.startswith("decoder.post_quant_conv."):
-                new_key = old_key.replace("decoder.post_quant_conv.", "post_quant_conv.")
-                converted[new_key] = tensor
-                continue
-
-            # Keep other keys as-is (like encoder.conv_in, decoder.conv_in, decoder.conv_out, bn.*)
-            converted[new_key] = tensor
-
-        return converted
 
 
 @ModelLoaderRegistry.register(base=BaseModelType.Any, type=ModelType.CLIPEmbed, format=ModelFormat.Diffusers)
@@ -409,7 +298,7 @@ class BnbQuantizedLlmInt8bCheckpointModel(ModelLoader):
             )
         match submodel_type:
             case SubModelType.Tokenizer2 | SubModelType.Tokenizer3:
-                return T5TokenizerFast.from_pretrained(
+                return T5Tokenizer.from_pretrained(
                     Path(config.path) / "tokenizer_2", max_length=512, local_files_only=True
                 )
             case SubModelType.TextEncoder2 | SubModelType.TextEncoder3:
@@ -434,11 +323,18 @@ class BnbQuantizedLlmInt8bCheckpointModel(ModelLoader):
         # There is a shared reference to a single weight tensor in the model.
         # Both "encoder.embed_tokens.weight" and "shared.weight" refer to the same tensor, so only the latter should
         # be present in the state_dict.
-        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False, assign=True)
-        assert len(unexpected_keys) == 0
-        assert set(missing_keys) == {"encoder.embed_tokens.weight"}
-        # Assert that the layers we expect to be shared are actually shared.
-        assert model.encoder.embed_tokens.weight is model.shared.weight
+        load_state_dict_ignoring_extras(
+            model,
+            state_dict,
+            source="FLUX bnb-int8 T5 encoder",
+            assign=True,
+            allowed_missing={"encoder.embed_tokens.weight"},
+        )
+        # Re-tie shared weights. In transformers 5.x, weight tying is implemented at the
+        # parameter level (via _tie_weights / tie_weights) rather than as a Python object
+        # alias.  load_state_dict(assign=True) replaces parameters in-place, which severs
+        # the parameter-level tie.  Calling tie_weights() re-establishes it.
+        model.tie_weights()
 
 
 @ModelLoaderRegistry.register(base=BaseModelType.Any, type=ModelType.T5Encoder, format=ModelFormat.T5Encoder)
@@ -455,7 +351,7 @@ class T5EncoderCheckpointModel(ModelLoader):
 
         match submodel_type:
             case SubModelType.Tokenizer2 | SubModelType.Tokenizer3:
-                return T5TokenizerFast.from_pretrained(
+                return T5Tokenizer.from_pretrained(
                     Path(config.path) / "tokenizer_2", max_length=512, local_files_only=True
                 )
             case SubModelType.TextEncoder2 | SubModelType.TextEncoder3:
@@ -469,6 +365,324 @@ class T5EncoderCheckpointModel(ModelLoader):
         raise ValueError(
             f"Only Tokenizer and TextEncoder submodels are currently supported. Received: {submodel_type.value if submodel_type else 'None'}"
         )
+
+
+@ModelLoaderRegistry.register(base=BaseModelType.Any, type=ModelType.T5Encoder, format=ModelFormat.SDNQQuantized)
+class T5EncoderSDNQLoader(ModelLoader):
+    """Class to load SDNQ-quantized T5 Encoder models."""
+
+    def _load_model(
+        self,
+        config: AnyModelConfig,
+        submodel_type: Optional[SubModelType] = None,
+    ) -> AnyModel:
+        if not isinstance(config, T5Encoder_SDNQ_Config):
+            raise ValueError("Only T5Encoder_SDNQ_Config models are supported here.")
+
+        match submodel_type:
+            case SubModelType.Tokenizer2 | SubModelType.Tokenizer3:
+                # tokenizer_2/ is a child of the pipeline root in the standalone layout but a sibling
+                # of the text_encoder_2 folder in the inline layout — resolve it the same way the
+                # encoder dir is resolved (identification already rejects installs where it's absent).
+                tokenizer_dir = T5Encoder_SDNQ_Config.resolve_tokenizer_dir(Path(config.path))
+                if tokenizer_dir is None:
+                    raise ValueError(f"No tokenizer_2 folder found for SDNQ T5 encoder at {config.path}")
+                return T5Tokenizer.from_pretrained(tokenizer_dir, max_length=512, local_files_only=True)
+            case SubModelType.TextEncoder2 | SubModelType.TextEncoder3:
+                return self._load_text_encoder(config)
+
+        raise ValueError(
+            f"Only Tokenizer and TextEncoder submodels are currently supported. Received: {submodel_type.value if submodel_type else 'None'}"
+        )
+
+    def _load_text_encoder(self, config: T5Encoder_SDNQ_Config) -> AnyModel:
+        # Two layouts: either config.path is the pipeline root (T5 lives under text_encoder_2/),
+        # or config.path is the text_encoder_2 folder itself (FluxPipeline submodel case).
+        te_dir = T5Encoder_SDNQ_Config.resolve_text_encoder_dir(Path(config.path))
+        if te_dir is None:
+            raise ValueError(f"No T5 encoder config.json found for SDNQ T5 encoder at {config.path}")
+
+        model_config = AutoConfig.from_pretrained(te_dir, local_files_only=True)
+        with accelerate.init_empty_weights():
+            model = AutoModelForTextEncoding.from_config(model_config)
+
+        sd = sdnq_sd_loader(te_dir, compute_dtype=torch.bfloat16)
+
+        # T5's embed_tokens and shared point to the same parameter; the SDNQ state dict only carries
+        # one of them, so encoder.embed_tokens.weight is expected to be missing (re-tied below). Use
+        # the explicit helper rather than assert, which `python -O` strips (silent partial loads).
+        missing_keys, unexpected_keys = model.load_state_dict(sd, strict=False, assign=True)
+        raise_on_incomplete_sdnq_load(
+            "SDNQ T5 encoder", missing_keys, unexpected_keys, allowed_missing={"encoder.embed_tokens.weight"}
+        )
+        if "encoder.embed_tokens.weight" in missing_keys:
+            model.encoder.embed_tokens.weight = model.shared.weight
+        return model
+
+
+@ModelLoaderRegistry.register(base=BaseModelType.Any, type=ModelType.T5Encoder, format=ModelFormat.GGUFQuantized)
+class T5EncoderGGUFModel(ModelLoader):
+    """Class to load GGUF-quantized T5 text encoders (single .gguf file, llama.cpp naming).
+
+    The transformer weights are kept as GGMLTensors so the model cache's quantized-autocast layers can
+    dequantize them on-the-fly during inference. Embedding weights (token embeddings and the relative
+    attention bias) are dequantized eagerly since embedding lookups can't operate on quantized tensors.
+    """
+
+    def _load_model(
+        self,
+        config: AnyModelConfig,
+        submodel_type: Optional[SubModelType] = None,
+    ) -> AnyModel:
+        if not isinstance(config, T5Encoder_GGUF_Config):
+            raise ValueError("Only T5Encoder_GGUF_Config models are currently supported here.")
+
+        match submodel_type:
+            case SubModelType.Tokenizer2 | SubModelType.Tokenizer3:
+                return self._load_tokenizer()
+            case SubModelType.TextEncoder2 | SubModelType.TextEncoder3:
+                return self._load_from_gguf(config)
+
+        raise ValueError(
+            f"Only Tokenizer and TextEncoder submodels are currently supported. Received: {submodel_type.value if submodel_type else 'None'}"
+        )
+
+    def _load_tokenizer(self) -> AnyModel:
+        # GGUF T5 files don't bundle a tokenizer that transformers can read. Reuse the T5 v1.1 XXL
+        # tokenizer already vendored in the repo (Apache-2.0, same vocab), so no download is needed.
+        from invokeai.backend.t5.t5_tokenizer import load_bundled_t5_tokenizer
+
+        tokenizer = load_bundled_t5_tokenizer()
+        tokenizer.model_max_length = 512
+        return tokenizer
+
+    def _load_from_gguf(self, config: T5Encoder_GGUF_Config) -> AnyModel:
+        from invokeai.backend.quantization.gguf.ggml_tensor import GGMLTensor
+
+        model_path = Path(config.path)
+
+        # HACK(ryand): We shouldn't be hard-coding the compute_dtype here.
+        sd = gguf_sd_loader(model_path, compute_dtype=torch.bfloat16)
+
+        sd = self._convert_t5_gguf_to_transformers(sd)
+
+        t5_config = self._infer_t5_config_from_state_dict(sd)
+
+        with accelerate.init_empty_weights():
+            model = T5EncoderModel(t5_config)
+
+        # Leave transformer Linear weights as GGMLTensors; the autocast cache handles them.
+        load_state_dict_ignoring_extras(model, sd, source="FLUX GGUF T5 encoder", assign=True, allow_missing=True)
+
+        # Embedding lookups can't run on quantized GGMLTensors, so dequantize the token embeddings and
+        # re-tie the encoder's embed_tokens to the shared embedding.
+        shared_weight = model.shared.weight
+        if isinstance(shared_weight, GGMLTensor):
+            shared_weight = torch.nn.Parameter(shared_weight.get_dequantized_tensor(), requires_grad=False)
+            model.shared.weight = shared_weight
+        model.encoder.embed_tokens.weight = model.shared.weight
+
+        # The relative attention bias (only on the first block) is also an embedding lookup.
+        first_block_attn = model.encoder.block[0].layer[0].SelfAttention
+        rel_bias = first_block_attn.relative_attention_bias.weight
+        if isinstance(rel_bias, GGMLTensor):
+            first_block_attn.relative_attention_bias.weight = torch.nn.Parameter(
+                rel_bias.get_dequantized_tensor(), requires_grad=False
+            )
+
+        self._make_feed_forward_gguf_safe(model)
+
+        # Fail loudly if anything was left unloaded (meta tensors).
+        meta_params = [name for name, p in model.named_parameters() if p.is_meta]
+        if meta_params:
+            raise RuntimeError(
+                f"Failed to load all parameters from GGUF T5 encoder. Remaining meta tensors: {meta_params}. "
+                "This may indicate missing keys in the GGUF file or a key mapping issue."
+            )
+
+        return model
+
+    @staticmethod
+    def _make_feed_forward_gguf_safe(model: T5EncoderModel) -> None:
+        """Work around a transformers T5 quirk that breaks GGUF-quantized ``wo`` weights.
+
+        ``T5DenseGatedActDense.forward`` casts its activations to ``self.wo.weight.dtype`` unless that
+        dtype is ``torch.int8`` (a guard meant for bitsandbytes 8-bit quantization, see transformers
+        issue #20287). GGML stores quantized weights as ``torch.uint8``, which slips past the ``int8``
+        guard and causes the activations to be cast to an integer dtype, corrupting them. We rebind the
+        forward of each feed-forward module so the cast only happens for genuine floating-point weights;
+        the quantized ``wo`` is dequantized on-the-fly by the autocast Linear regardless.
+        """
+        import types
+
+        def gated_forward(self, hidden_states):  # mirrors T5DenseGatedActDense.forward
+            hidden_gelu = self.act(self.wi_0(hidden_states))
+            hidden_linear = self.wi_1(hidden_states)
+            hidden_states = hidden_gelu * hidden_linear
+            hidden_states = self.dropout(hidden_states)
+            if self.wo.weight.is_floating_point() and hidden_states.dtype != self.wo.weight.dtype:
+                hidden_states = hidden_states.to(self.wo.weight.dtype)
+            hidden_states = self.wo(hidden_states)
+            return hidden_states
+
+        def act_forward(self, hidden_states):  # mirrors T5DenseActDense.forward
+            hidden_states = self.wi(hidden_states)
+            hidden_states = self.act(hidden_states)
+            hidden_states = self.dropout(hidden_states)
+            if self.wo.weight.is_floating_point() and hidden_states.dtype != self.wo.weight.dtype:
+                hidden_states = hidden_states.to(self.wo.weight.dtype)
+            hidden_states = self.wo(hidden_states)
+            return hidden_states
+
+        patched = 0
+        for module in model.modules():
+            cls_name = module.__class__.__name__
+            if cls_name == "T5DenseGatedActDense":
+                module.forward = types.MethodType(gated_forward, module)
+                patched += 1
+            elif cls_name == "T5DenseActDense":
+                module.forward = types.MethodType(act_forward, module)
+                patched += 1
+
+        # Guard against a silent no-op: if transformers ever renames these feed-forward classes, the
+        # match above would patch nothing and the uint8-cast bug would silently corrupt encoder output.
+        # Fail loudly instead so the mismatch is caught at load time rather than in the generated images.
+        if patched == 0:
+            raise RuntimeError(
+                "Failed to patch any T5 feed-forward modules (expected T5DenseGatedActDense / T5DenseActDense). "
+                "The installed transformers version may have renamed these classes; the GGUF T5 encoder "
+                "cannot be loaded safely without the wo-dtype workaround."
+            )
+
+    def _infer_t5_config_from_state_dict(self, sd: dict[str, torch.Tensor]) -> "object":
+        """Reconstruct a ``T5Config`` from the (transformers-named) GGUF tensors.
+
+        This only supports the T5 v1.1 XXL encoder family (e.g. city96/t5-v1_1-xxl-encoder-gguf), which
+        is what the starter models and FLUX pipelines use. Dimensions that vary (vocab, d_model, layer
+        count, head/ff sizes) are read from tensor shapes; the fixed architectural constants below
+        (``relative_attention_max_distance``, ``layer_norm_epsilon``, gated-gelu activation) are the T5
+        v1.1 defaults and would need revisiting for other T5 variants.
+
+        Note: ``.shape`` on a ``GGMLTensor`` already returns the dequantized (logical) shape, so quantized
+        and unquantized tensors can be read the same way here.
+        """
+        from transformers import T5Config
+
+        # Number of encoder blocks.
+        num_layers = 0
+        for key in sd.keys():
+            if isinstance(key, str) and key.startswith("encoder.block."):
+                try:
+                    num_layers = max(num_layers, int(key.split(".")[2]) + 1)
+                except (IndexError, ValueError):
+                    pass
+
+        shared = sd.get("shared.weight")
+        if shared is None:
+            raise ValueError("Could not find shared.weight (token embeddings) in T5 GGUF state dict")
+        vocab_size, d_model = (int(x) for x in shared.shape)
+
+        # Inner attention dim from q projection: nn.Linear(d_model, inner_dim) -> weight (inner_dim, d_model).
+        q_weight = sd.get("encoder.block.0.layer.0.SelfAttention.q.weight")
+        if q_weight is None:
+            raise ValueError("Could not find SelfAttention.q.weight in T5 GGUF state dict")
+        inner_dim = int(q_weight.shape[0])
+
+        # Number of heads and buckets from the relative attention bias: nn.Embedding(num_buckets, num_heads).
+        rel_bias = sd.get("encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight")
+        if rel_bias is None:
+            raise ValueError("Could not find relative_attention_bias.weight in T5 GGUF state dict")
+        num_buckets = int(rel_bias.shape[0])
+        num_heads = int(rel_bias.shape[1])
+        d_kv = inner_dim // num_heads
+
+        # Feed-forward dim from the gated FFN: nn.Linear(d_model, d_ff) -> weight (d_ff, d_model).
+        wi_0 = sd.get("encoder.block.0.layer.1.DenseReluDense.wi_0.weight")
+        if wi_0 is None:
+            raise ValueError("Could not find DenseReluDense.wi_0.weight in T5 GGUF state dict")
+        d_ff = int(wi_0.shape[0])
+
+        return T5Config(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            d_kv=d_kv,
+            d_ff=d_ff,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            relative_attention_num_buckets=num_buckets,
+            relative_attention_max_distance=128,  # T5 v1.1 default
+            layer_norm_epsilon=1e-6,  # T5 v1.1 default
+            feed_forward_proj="gated-gelu",
+            is_gated_act=True,
+            dense_act_fn="gelu_new",
+            tie_word_embeddings=False,
+            use_cache=False,
+        )
+
+    def _convert_t5_gguf_to_transformers(self, sd: dict[str, Any]) -> dict[str, Any]:
+        """Convert llama.cpp T5 encoder GGUF keys to HuggingFace transformers T5 naming.
+
+        llama.cpp T5 encoder format:
+        - token_embd.weight                  -> shared.weight
+        - enc.output_norm.weight             -> encoder.final_layer_norm.weight
+        - enc.blk.N.attn_q/k/v/o.weight      -> encoder.block.N.layer.0.SelfAttention.q/k/v/o.weight
+        - enc.blk.0.attn_rel_b.weight        -> encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight
+        - enc.blk.N.attn_norm.weight         -> encoder.block.N.layer.0.layer_norm.weight
+        - enc.blk.N.ffn_gate.weight          -> encoder.block.N.layer.1.DenseReluDense.wi_0.weight (gated/activated)
+        - enc.blk.N.ffn_up.weight            -> encoder.block.N.layer.1.DenseReluDense.wi_1.weight (linear)
+        - enc.blk.N.ffn_down.weight          -> encoder.block.N.layer.1.DenseReluDense.wo.weight
+        - enc.blk.N.ffn_norm.weight          -> encoder.block.N.layer.1.layer_norm.weight
+        """
+        import re
+
+        attn_map = {
+            "attn_q": "SelfAttention.q",
+            "attn_k": "SelfAttention.k",
+            "attn_v": "SelfAttention.v",
+            "attn_o": "SelfAttention.o",
+            "attn_rel_b": "SelfAttention.relative_attention_bias",
+            "attn_norm": "layer_norm",
+        }
+        ffn_map = {
+            "ffn_gate": "DenseReluDense.wi_0",
+            "ffn_up": "DenseReluDense.wi_1",
+            "ffn_down": "DenseReluDense.wo",
+            "ffn_norm": "layer_norm",
+        }
+
+        new_sd: dict[str, Any] = {}
+        blk_pattern = re.compile(r"^enc\.blk\.(\d+)\.(.+)$")
+
+        for key, value in sd.items():
+            if not isinstance(key, str):
+                new_sd[key] = value
+                continue
+
+            if key == "token_embd.weight":
+                new_sd["shared.weight"] = value
+                continue
+            if key == "enc.output_norm.weight":
+                new_sd["encoder.final_layer_norm.weight"] = value
+                continue
+
+            match = blk_pattern.match(key)
+            if match:
+                layer_idx = match.group(1)
+                rest = match.group(2)
+                component = rest.split(".", 1)[0]
+
+                if component in attn_map:
+                    new_sd[f"encoder.block.{layer_idx}.layer.0.{attn_map[component]}.weight"] = value
+                elif component in ffn_map:
+                    new_sd[f"encoder.block.{layer_idx}.layer.1.{ffn_map[component]}.weight"] = value
+                else:
+                    # Unknown component - keep as-is so the meta-tensor check surfaces it.
+                    new_sd[key] = value
+                continue
+
+            new_sd[key] = value
+
+        return new_sd
 
 
 @ModelLoaderRegistry.register(base=BaseModelType.Flux, type=ModelType.Main, format=ModelFormat.Checkpoint)
@@ -485,7 +699,9 @@ class FluxCheckpointModel(ModelLoader):
 
         match submodel_type:
             case SubModelType.Transformer:
-                return self._load_from_singlefile(config)
+                model = self._load_from_singlefile(config)
+                model = self._apply_fp8_layerwise_casting(model, config, submodel_type)
+                return model
 
         raise ValueError(
             f"Only Transformer submodels are currently supported. Received: {submodel_type.value if submodel_type else 'None'}"
@@ -509,7 +725,7 @@ class FluxCheckpointModel(ModelLoader):
         for k in sd.keys():
             # We need to cast to bfloat16 due to it being the only currently supported dtype for inference
             sd[k] = sd[k].to(torch.bfloat16)
-        model.load_state_dict(sd, assign=True)
+        load_state_dict_ignoring_extras(model, sd, source="FLUX transformer checkpoint", assign=True)
         return model
 
 
@@ -555,7 +771,7 @@ class FluxGGUFCheckpointModel(ModelLoader):
             img_in_weight.quantized_data = img_in_weight.quantized_data.view(expected_img_in_weight_shape)
             img_in_weight.tensor_shape = expected_img_in_weight_shape
 
-        model.load_state_dict(sd, assign=True)
+        load_state_dict_ignoring_extras(model, sd, source="FLUX GGUF transformer checkpoint", assign=True)
         return model
 
 
@@ -597,7 +813,7 @@ class FluxBnbQuantizednf4bCheckpointModel(ModelLoader):
             sd = load_file(model_path)
             if "model.diffusion_model.double_blocks.0.img_attn.norm.key_norm.scale" in sd:
                 sd = convert_bundle_to_flux_transformer_checkpoint(sd)
-            model.load_state_dict(sd, assign=True)
+            load_state_dict_ignoring_extras(model, sd, source="FLUX nf4 transformer checkpoint", assign=True)
         return model
 
 
@@ -639,6 +855,7 @@ class FluxDiffusersModel(GenericDiffusersLoader):
             else:
                 raise e
 
+        result = self._apply_fp8_layerwise_casting(result, config, submodel_type)
         return result
 
 
@@ -715,6 +932,7 @@ class Flux2DiffusersModel(GenericDiffusersLoader):
                         if guidance_emb.linear_2.bias is not None:
                             guidance_emb.linear_2.bias.data.zero_()
 
+        result = self._apply_fp8_layerwise_casting(result, config, submodel_type)
         return result
 
 
@@ -732,7 +950,9 @@ class Flux2CheckpointModel(ModelLoader):
 
         match submodel_type:
             case SubModelType.Transformer:
-                return self._load_from_singlefile(config)
+                model = self._load_from_singlefile(config)
+                model = self._apply_fp8_layerwise_casting(model, config, submodel_type)
+                return model
 
         raise ValueError(
             f"Only Transformer submodels are currently supported. Received: {submodel_type.value if submodel_type else 'None'}"
@@ -772,7 +992,7 @@ class Flux2CheckpointModel(ModelLoader):
             }
 
         # Convert BFL format state dict to diffusers format
-        converted_sd = self._convert_flux2_bfl_to_diffusers(sd)
+        converted_sd = convert_flux2_bfl_to_diffusers(sd)
 
         # Detect architecture from checkpoint keys
         double_block_indices = [
@@ -853,159 +1073,9 @@ class Flux2CheckpointModel(ModelLoader):
             converted_sd[k] = converted_sd[k].to(torch.bfloat16)
 
         # Load the state dict - guidance weights were already initialized above if missing
-        model.load_state_dict(converted_sd, assign=True)
+        load_state_dict_ignoring_extras(model, converted_sd, source="FLUX.2 transformer checkpoint", assign=True)
 
         return model
-
-    def _convert_flux2_bfl_to_diffusers(self, sd: dict) -> dict:
-        """Convert FLUX.2 BFL format state dict to diffusers format.
-
-        Based on diffusers convert_flux2_to_diffusers.py key mappings.
-        """
-        converted = {}
-
-        # Basic key renames
-        key_renames = {
-            "img_in.weight": "x_embedder.weight",
-            "txt_in.weight": "context_embedder.weight",
-            "time_in.in_layer.weight": "time_guidance_embed.timestep_embedder.linear_1.weight",
-            "time_in.out_layer.weight": "time_guidance_embed.timestep_embedder.linear_2.weight",
-            "guidance_in.in_layer.weight": "time_guidance_embed.guidance_embedder.linear_1.weight",
-            "guidance_in.out_layer.weight": "time_guidance_embed.guidance_embedder.linear_2.weight",
-            "double_stream_modulation_img.lin.weight": "double_stream_modulation_img.linear.weight",
-            "double_stream_modulation_txt.lin.weight": "double_stream_modulation_txt.linear.weight",
-            "single_stream_modulation.lin.weight": "single_stream_modulation.linear.weight",
-            "final_layer.linear.weight": "proj_out.weight",
-            "final_layer.adaLN_modulation.1.weight": "norm_out.linear.weight",
-        }
-
-        for old_key, tensor in sd.items():
-            new_key = old_key
-
-            # Apply basic renames
-            if old_key in key_renames:
-                new_key = key_renames[old_key]
-                # Apply scale-shift swap for adaLN modulation weights
-                # BFL and diffusers use different parameter ordering for AdaLayerNorm
-                if old_key == "final_layer.adaLN_modulation.1.weight":
-                    tensor = self._swap_scale_shift(tensor)
-                converted[new_key] = tensor
-                continue
-
-            # Convert double_blocks.X.* to transformer_blocks.X.*
-            if old_key.startswith("double_blocks."):
-                new_key = self._convert_double_block_key(old_key, tensor, converted)
-                if new_key is None:
-                    continue  # Key was handled specially
-            # Convert single_blocks.X.* to single_transformer_blocks.X.*
-            elif old_key.startswith("single_blocks."):
-                new_key = self._convert_single_block_key(old_key, tensor, converted)
-                if new_key is None:
-                    continue  # Key was handled specially
-
-            if new_key != old_key or new_key not in converted:
-                converted[new_key] = tensor
-
-        return converted
-
-    def _convert_double_block_key(self, key: str, tensor: torch.Tensor, converted: dict) -> str | None:
-        """Convert double_blocks key to transformer_blocks format."""
-        parts = key.split(".")
-        block_idx = parts[1]
-        rest = ".".join(parts[2:])
-
-        prefix = f"transformer_blocks.{block_idx}"
-
-        # Attention QKV conversion - BFL uses fused qkv, diffusers uses separate
-        if "img_attn.qkv.weight" in rest:
-            # Split fused QKV into separate Q, K, V
-            # Defensive check: ensure tensor has at least 1 dimension and can be split into 3
-            if tensor.dim() < 1 or tensor.shape[0] % 3 != 0:
-                # Skip malformed tensors (might be metadata or corrupted)
-                return key
-            q, k, v = tensor.chunk(3, dim=0)
-            converted[f"{prefix}.attn.to_q.weight"] = q
-            converted[f"{prefix}.attn.to_k.weight"] = k
-            converted[f"{prefix}.attn.to_v.weight"] = v
-            return None
-        elif "txt_attn.qkv.weight" in rest:
-            # Defensive check
-            if tensor.dim() < 1 or tensor.shape[0] % 3 != 0:
-                return key
-            q, k, v = tensor.chunk(3, dim=0)
-            converted[f"{prefix}.attn.add_q_proj.weight"] = q
-            converted[f"{prefix}.attn.add_k_proj.weight"] = k
-            converted[f"{prefix}.attn.add_v_proj.weight"] = v
-            return None
-
-        # Attention output projection
-        if "img_attn.proj.weight" in rest:
-            return f"{prefix}.attn.to_out.0.weight"
-        elif "txt_attn.proj.weight" in rest:
-            return f"{prefix}.attn.to_add_out.weight"
-
-        # Attention norms
-        if "img_attn.norm.query_norm.scale" in rest:
-            return f"{prefix}.attn.norm_q.weight"
-        elif "img_attn.norm.key_norm.scale" in rest:
-            return f"{prefix}.attn.norm_k.weight"
-        elif "txt_attn.norm.query_norm.scale" in rest:
-            return f"{prefix}.attn.norm_added_q.weight"
-        elif "txt_attn.norm.key_norm.scale" in rest:
-            return f"{prefix}.attn.norm_added_k.weight"
-
-        # MLP layers
-        if "img_mlp.0.weight" in rest:
-            return f"{prefix}.ff.linear_in.weight"
-        elif "img_mlp.2.weight" in rest:
-            return f"{prefix}.ff.linear_out.weight"
-        elif "txt_mlp.0.weight" in rest:
-            return f"{prefix}.ff_context.linear_in.weight"
-        elif "txt_mlp.2.weight" in rest:
-            return f"{prefix}.ff_context.linear_out.weight"
-
-        return key
-
-    def _convert_single_block_key(self, key: str, tensor: torch.Tensor, converted: dict) -> str | None:
-        """Convert single_blocks key to single_transformer_blocks format."""
-        parts = key.split(".")
-        block_idx = parts[1]
-        rest = ".".join(parts[2:])
-
-        prefix = f"single_transformer_blocks.{block_idx}"
-
-        # linear1 is the fused QKV+MLP projection
-        if "linear1.weight" in rest:
-            return f"{prefix}.attn.to_qkv_mlp_proj.weight"
-        elif "linear2.weight" in rest:
-            return f"{prefix}.attn.to_out.weight"
-
-        # Norms
-        if "norm.query_norm.scale" in rest:
-            return f"{prefix}.attn.norm_q.weight"
-        elif "norm.key_norm.scale" in rest:
-            return f"{prefix}.attn.norm_k.weight"
-
-        return key
-
-    def _swap_scale_shift(self, weight: torch.Tensor) -> torch.Tensor:
-        """Swap scale and shift in AdaLayerNorm weights.
-
-        BFL and diffusers use different parameter ordering for AdaLayerNorm.
-        This function swaps the two halves of the weight tensor.
-
-        Args:
-            weight: Weight tensor of shape (out_features,) or (out_features, in_features)
-
-        Returns:
-            Weight tensor with scale and shift swapped.
-        """
-        # Defensive check: ensure tensor can be split
-        if weight.dim() < 1 or weight.shape[0] % 2 != 0:
-            return weight
-        # Split in half along the first dimension and swap
-        shift, scale = weight.chunk(2, dim=0)
-        return torch.cat([scale, shift], dim=0)
 
     def _dequantize_fp8_weights(self, sd: dict) -> dict:
         """Dequantize FP8 quantized weights in the state dict.
@@ -1041,7 +1111,13 @@ class Flux2CheckpointModel(ModelLoader):
                             if block_size > 1:
                                 scale = scale.repeat_interleave(block_size, dim=dim)
 
-                sd[weight_key] = weight_float * scale
+                # Do the multiply in float32 for precision, but store bf16 (FLUX.2's compute dtype)
+                # immediately so the *whole* model is never materialized in float32. Holding every
+                # dequantized weight as float32 here doubled RAM transiently (~36GB vs ~17GB for a 9B
+                # model) and was the dominant cold-load spike, especially with two GPUs. The result is
+                # identical to the previous code, which cast the same values to bf16 a few steps later.
+                sd[weight_key] = (weight_float * scale).to(torch.bfloat16)
+                del weight_float
 
         # Filter out scale metadata keys and other FP8 metadata
         keys_to_remove = [
@@ -1071,10 +1147,180 @@ class Flux2CheckpointModel(ModelLoader):
             del sd[k]
 
         for key in keys_to_convert:
-            # Convert FP8 tensor to float32
-            sd[key] = sd[key].float()
+            # Convert native FP8 tensors straight to bf16 (FLUX.2's compute dtype) rather than float32,
+            # so a cold load never transiently holds the whole model in float32 (see the scaled path).
+            sd[key] = sd[key].to(torch.bfloat16)
 
         return sd
+
+
+@ModelLoaderRegistry.register(base=BaseModelType.Flux2, type=ModelType.Main, format=ModelFormat.SDNQQuantized)
+class Flux2SDNQCheckpointModel(ModelLoader):
+    """Class to load SDNQ-quantized FLUX.2 transformer models (e.g. Klein 4B / 9B).
+
+    The checkpoint is expected to be in diffusers layout (i.e. the same key naming as
+    Flux2Transformer2DModel.state_dict()), since SDNQ tooling typically operates on
+    diffusers state dicts. BFL-layout SDNQ FLUX.2 checkpoints are not supported here.
+    """
+
+    def _load_model(
+        self,
+        config: AnyModelConfig,
+        submodel_type: Optional[SubModelType] = None,
+    ) -> AnyModel:
+        if not isinstance(config, (Main_SDNQ_Flux2_Config, Main_SDNQ_Diffusers_Flux2_Config)):
+            raise ValueError(
+                "Only Main_SDNQ_Flux2_Config or Main_SDNQ_Diffusers_Flux2_Config models are supported here."
+            )
+
+        # Single-file SDNQ FLUX.2 checkpoints only ship the transformer.
+        if isinstance(config, Main_SDNQ_Flux2_Config):
+            if submodel_type == SubModelType.Transformer:
+                return self._load_from_singlefile(config)
+            raise ValueError(
+                f"Single-file SDNQ FLUX.2 checkpoints only provide the Transformer submodel. "
+                f"Received: {submodel_type.value if submodel_type else 'None'}"
+            )
+
+        # Full Flux2 pipeline folder — dispatch each submodel from its own subfolder.
+        match submodel_type:
+            case SubModelType.Transformer:
+                return self._load_transformer_from_folder(config)
+            case SubModelType.TextEncoder:
+                return self._load_text_encoder(config)
+            case SubModelType.Tokenizer:
+                return self._load_tokenizer(config)
+            case SubModelType.VAE:
+                return self._load_vae(config)
+
+        raise ValueError(
+            f"Unsupported submodel type for SDNQ FLUX.2 pipeline: {submodel_type.value if submodel_type else 'None'}"
+        )
+
+    def _load_transformer_from_folder(self, config: Main_SDNQ_Diffusers_Flux2_Config) -> AnyModel:
+        from diffusers import Flux2Transformer2DModel
+
+        model_path = Path(config.path)
+        transformer_path = resolve_submodel_path(
+            config,
+            SubModelType.Transformer,
+            model_path / "transformer" if (model_path / "transformer").is_dir() else model_path,
+        )
+
+        with accelerate.init_empty_weights():
+            model = Flux2Transformer2DModel.from_config(
+                Flux2Transformer2DModel.load_config(transformer_path, local_files_only=True)
+            )
+
+        sd = sdnq_sd_loader(transformer_path, compute_dtype=torch.bfloat16)
+        # The FLUX.2 transformer has no tied weights, so we expect a complete state dict — a missing
+        # key means a required parameter is left on the meta device and would fail later.
+        missing, unexpected = model.load_state_dict(sd, assign=True, strict=False)
+        raise_on_incomplete_sdnq_load("SDNQ FLUX.2 transformer", missing, unexpected)
+        return model
+
+    def _load_text_encoder(self, config: Main_SDNQ_Diffusers_Flux2_Config) -> AnyModel:
+        from transformers import AutoConfig, Qwen3ForCausalLM
+
+        te_dir = resolve_submodel_path(config, SubModelType.TextEncoder, Path(config.path) / "text_encoder")
+        te_config = AutoConfig.from_pretrained(te_dir, local_files_only=True)
+        with accelerate.init_empty_weights():
+            model = Qwen3ForCausalLM(te_config)
+
+        sd = sdnq_sd_loader(te_dir, compute_dtype=torch.bfloat16)
+        missing = load_state_dict_ignoring_extras(
+            model, sd, source="SDNQ Qwen3 text encoder", assign=True, allowed_missing={"lm_head.weight"}
+        )
+        if missing == ["lm_head.weight"]:
+            model.lm_head.weight = model.model.embed_tokens.weight
+        return model
+
+    def _load_tokenizer(self, config: Main_SDNQ_Diffusers_Flux2_Config) -> AnyModel:
+        from transformers import AutoTokenizer
+
+        tok_dir = resolve_submodel_path(config, SubModelType.Tokenizer, Path(config.path) / "tokenizer")
+        return AutoTokenizer.from_pretrained(tok_dir, local_files_only=True)
+
+    def _load_vae(self, config: Main_SDNQ_Diffusers_Flux2_Config) -> AnyModel:
+        # FLUX.2 Klein uses AutoencoderKLFlux2 (not the generic AutoencoderKL). Both ship as
+        # plain bf16 in this pipeline (the VAE itself isn't SDNQ-quantized).
+        from diffusers import AutoencoderKL, AutoencoderKLFlux2
+
+        vae_dir = resolve_submodel_path(config, SubModelType.VAE, Path(config.path) / "vae")
+        # Pick the right class based on what the on-disk config.json declares.
+        try:
+            cls_name = AutoencoderKL.load_config(vae_dir, local_files_only=True).get("_class_name", "")
+        except Exception:
+            cls_name = ""
+        if cls_name == "AutoencoderKLFlux2":
+            return AutoencoderKLFlux2.from_pretrained(vae_dir, local_files_only=True)
+        return AutoencoderKL.from_pretrained(vae_dir, local_files_only=True)
+
+    def _load_from_singlefile(self, config: Main_SDNQ_Flux2_Config) -> AnyModel:
+        from diffusers import Flux2Transformer2DModel
+
+        model_path = Path(config.path)
+
+        sd = sdnq_sd_loader(model_path, compute_dtype=torch.bfloat16)
+
+        # Detect architecture from state dict shapes. SDNQTensor.shape returns the
+        # *dequantized* shape, so this works identically to the fp16 path.
+        double_block_indices = [
+            int(k.split(".")[1]) for k in sd.keys() if isinstance(k, str) and k.startswith("transformer_blocks.")
+        ]
+        single_block_indices = [
+            int(k.split(".")[1]) for k in sd.keys() if isinstance(k, str) and k.startswith("single_transformer_blocks.")
+        ]
+        num_layers = max(double_block_indices) + 1 if double_block_indices else 5
+        num_single_layers = max(single_block_indices) + 1 if single_block_indices else 20
+
+        context_embedder_weight = sd.get("context_embedder.weight")
+        if context_embedder_weight is not None:
+            hidden_size = context_embedder_weight.shape[0]
+            joint_attention_dim = context_embedder_weight.shape[1]
+        else:
+            hidden_size = 3072
+            joint_attention_dim = 7680
+
+        x_embedder_weight = sd.get("x_embedder.weight")
+        in_channels = x_embedder_weight.shape[1] if x_embedder_weight is not None else 128
+
+        attention_head_dim = 128
+        num_attention_heads = hidden_size // attention_head_dim
+
+        has_guidance = "time_guidance_embed.guidance_embedder.linear_1.weight" in sd
+
+        with SilenceWarnings():
+            with accelerate.init_empty_weights():
+                model = Flux2Transformer2DModel(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    num_layers=num_layers,
+                    num_single_layers=num_single_layers,
+                    attention_head_dim=attention_head_dim,
+                    num_attention_heads=num_attention_heads,
+                    joint_attention_dim=joint_attention_dim,
+                    patch_size=1,
+                )
+
+        # Klein variants ship without guidance embeddings — zero-fill from the timestep
+        # embedder dimensions so load_state_dict has a tensor for those slots.
+        if not has_guidance:
+            timestep_linear1 = sd.get("time_guidance_embed.timestep_embedder.linear_1.weight")
+            if timestep_linear1 is not None:
+                out_features, in_features = timestep_linear1.shape[0], timestep_linear1.shape[1]
+                sd["time_guidance_embed.guidance_embedder.linear_1.weight"] = torch.zeros(
+                    out_features, in_features, dtype=torch.bfloat16
+                )
+                timestep_linear2 = sd.get("time_guidance_embed.timestep_embedder.linear_2.weight")
+                if timestep_linear2 is not None:
+                    out2, in2 = timestep_linear2.shape[0], timestep_linear2.shape[1]
+                    sd["time_guidance_embed.guidance_embedder.linear_2.weight"] = torch.zeros(
+                        out2, in2, dtype=torch.bfloat16
+                    )
+
+        load_state_dict_ignoring_extras(model, sd, source="SDNQ FLUX.2 transformer checkpoint", assign=True)
+        return model
 
 
 @ModelLoaderRegistry.register(base=BaseModelType.Flux2, type=ModelType.Main, format=ModelFormat.GGUFQuantized)
@@ -1122,7 +1368,7 @@ class Flux2GGUFCheckpointModel(ModelLoader):
             }
 
         # Convert BFL format state dict to diffusers format
-        converted_sd = self._convert_flux2_bfl_to_diffusers(sd)
+        converted_sd = convert_flux2_bfl_to_diffusers(sd)
 
         # Detect architecture from checkpoint keys
         double_block_indices = [
@@ -1220,129 +1466,8 @@ class Flux2GGUFCheckpointModel(ModelLoader):
                         out_features2, in_features2, dtype=torch.bfloat16
                     )
 
-        model.load_state_dict(converted_sd, assign=True)
+        load_state_dict_ignoring_extras(model, converted_sd, source="FLUX.2 GGUF transformer checkpoint", assign=True)
         return model
-
-    def _convert_flux2_bfl_to_diffusers(self, sd: dict) -> dict:
-        """Convert FLUX.2 BFL format state dict to diffusers format."""
-        converted = {}
-
-        key_renames = {
-            "img_in.weight": "x_embedder.weight",
-            "txt_in.weight": "context_embedder.weight",
-            "time_in.in_layer.weight": "time_guidance_embed.timestep_embedder.linear_1.weight",
-            "time_in.out_layer.weight": "time_guidance_embed.timestep_embedder.linear_2.weight",
-            "guidance_in.in_layer.weight": "time_guidance_embed.guidance_embedder.linear_1.weight",
-            "guidance_in.out_layer.weight": "time_guidance_embed.guidance_embedder.linear_2.weight",
-            "double_stream_modulation_img.lin.weight": "double_stream_modulation_img.linear.weight",
-            "double_stream_modulation_txt.lin.weight": "double_stream_modulation_txt.linear.weight",
-            "single_stream_modulation.lin.weight": "single_stream_modulation.linear.weight",
-            "final_layer.linear.weight": "proj_out.weight",
-            "final_layer.adaLN_modulation.1.weight": "norm_out.linear.weight",
-        }
-
-        for old_key, tensor in sd.items():
-            new_key = old_key
-
-            if old_key in key_renames:
-                new_key = key_renames[old_key]
-                if old_key == "final_layer.adaLN_modulation.1.weight":
-                    tensor = self._swap_scale_shift(tensor)
-                converted[new_key] = tensor
-                continue
-
-            if old_key.startswith("double_blocks."):
-                new_key = self._convert_double_block_key(old_key, tensor, converted)
-                if new_key is None:
-                    continue
-            elif old_key.startswith("single_blocks."):
-                new_key = self._convert_single_block_key(old_key, tensor, converted)
-                if new_key is None:
-                    continue
-
-            if new_key != old_key or new_key not in converted:
-                converted[new_key] = tensor
-
-        return converted
-
-    def _convert_double_block_key(self, key: str, tensor, converted: dict) -> str | None:
-        parts = key.split(".")
-        block_idx = parts[1]
-        rest = ".".join(parts[2:])
-        prefix = f"transformer_blocks.{block_idx}"
-
-        if "img_attn.qkv.weight" in rest:
-            q, k, v = self._chunk_tensor(tensor, 3)
-            converted[f"{prefix}.attn.to_q.weight"] = q
-            converted[f"{prefix}.attn.to_k.weight"] = k
-            converted[f"{prefix}.attn.to_v.weight"] = v
-            return None
-        elif "txt_attn.qkv.weight" in rest:
-            q, k, v = self._chunk_tensor(tensor, 3)
-            converted[f"{prefix}.attn.add_q_proj.weight"] = q
-            converted[f"{prefix}.attn.add_k_proj.weight"] = k
-            converted[f"{prefix}.attn.add_v_proj.weight"] = v
-            return None
-
-        if "img_attn.proj.weight" in rest:
-            return f"{prefix}.attn.to_out.0.weight"
-        elif "txt_attn.proj.weight" in rest:
-            return f"{prefix}.attn.to_add_out.weight"
-
-        if "img_attn.norm.query_norm.scale" in rest:
-            return f"{prefix}.attn.norm_q.weight"
-        elif "img_attn.norm.key_norm.scale" in rest:
-            return f"{prefix}.attn.norm_k.weight"
-        elif "txt_attn.norm.query_norm.scale" in rest:
-            return f"{prefix}.attn.norm_added_q.weight"
-        elif "txt_attn.norm.key_norm.scale" in rest:
-            return f"{prefix}.attn.norm_added_k.weight"
-
-        if "img_mlp.0.weight" in rest:
-            return f"{prefix}.ff.linear_in.weight"
-        elif "img_mlp.2.weight" in rest:
-            return f"{prefix}.ff.linear_out.weight"
-        elif "txt_mlp.0.weight" in rest:
-            return f"{prefix}.ff_context.linear_in.weight"
-        elif "txt_mlp.2.weight" in rest:
-            return f"{prefix}.ff_context.linear_out.weight"
-
-        return key
-
-    def _convert_single_block_key(self, key: str, tensor, converted: dict) -> str | None:
-        parts = key.split(".")
-        block_idx = parts[1]
-        rest = ".".join(parts[2:])
-        prefix = f"single_transformer_blocks.{block_idx}"
-
-        if "linear1.weight" in rest:
-            return f"{prefix}.attn.to_qkv_mlp_proj.weight"
-        elif "linear2.weight" in rest:
-            return f"{prefix}.attn.to_out.weight"
-
-        if "norm.query_norm.scale" in rest:
-            return f"{prefix}.attn.norm_q.weight"
-        elif "norm.key_norm.scale" in rest:
-            return f"{prefix}.attn.norm_k.weight"
-
-        return key
-
-    def _chunk_tensor(self, tensor, chunks: int):
-        """Chunk a tensor, handling both regular tensors and GGUF quantized tensors."""
-        if hasattr(tensor, "get_dequantized_tensor"):
-            # GGUF quantized tensor - dequantize first, then chunk
-            # This loses quantization for the split weights, but is necessary
-            # because diffusers uses separate Q/K/V projections
-            tensor = tensor.get_dequantized_tensor()
-        return tensor.chunk(chunks, dim=0)
-
-    def _swap_scale_shift(self, weight) -> torch.Tensor:
-        """Swap scale and shift in AdaLayerNorm weights."""
-        if hasattr(weight, "get_dequantized_tensor"):
-            # For GGUF, dequantize first
-            weight = weight.get_dequantized_tensor()
-        shift, scale = weight.chunk(2, dim=0)
-        return torch.cat([scale, shift], dim=0)
 
 
 @ModelLoaderRegistry.register(base=BaseModelType.Flux, type=ModelType.ControlNet, format=ModelFormat.Checkpoint)
@@ -1378,7 +1503,7 @@ class FluxControlnetModel(ModelLoader):
             # HACK(ryand): Is it safe to assume dev here?
             model = XLabsControlNetFlux(get_flux_transformers_params(FluxVariantType.Dev))
 
-        model.load_state_dict(sd, assign=True)
+        load_state_dict_ignoring_extras(model, sd, source="FLUX XLabs ControlNet checkpoint", assign=True)
         return model
 
     def _load_instantx_controlnet(self, sd: dict[str, torch.Tensor]) -> AnyModel:
@@ -1389,7 +1514,7 @@ class FluxControlnetModel(ModelLoader):
         with accelerate.init_empty_weights():
             model = InstantXControlNetFlux(flux_params, num_control_modes)
 
-        model.load_state_dict(sd, assign=True)
+        load_state_dict_ignoring_extras(model, sd, source="FLUX InstantX ControlNet checkpoint", assign=True)
         return model
 
 
@@ -1433,6 +1558,393 @@ class FluxReduxModelLoader(ModelLoader):
         with accelerate.init_empty_weights():
             model = FluxReduxModel()
 
-        model.load_state_dict(sd, assign=True)
+        load_state_dict_ignoring_extras(model, sd, source="FLUX Redux checkpoint", assign=True)
         model.to(dtype=torch.bfloat16)
+        return model
+
+
+# Re-exported from the shared detector: the loader's dispatch and identification must agree about
+# what counts as an SDNQ folder, including markerless exports.
+_is_sdnq_folder = is_sdnq_folder
+
+
+@ModelLoaderRegistry.register(base=BaseModelType.Flux, type=ModelType.Main, format=ModelFormat.SDNQQuantized)
+class FluxSDNQDiffusersModel(ModelLoader):
+    """Class to load SDNQ-quantized Flux models in diffusers format."""
+
+    def _load_model(
+        self,
+        config: AnyModelConfig,
+        submodel_type: Optional[SubModelType] = None,
+    ) -> AnyModel:
+        logger.debug(
+            "[SDNQ] FluxSDNQDiffusersModel._load_model called with config=%s, submodel=%s",
+            type(config).__name__,
+            submodel_type,
+        )
+        # Handle single-file SDNQ checkpoint (Main_SDNQ_FLUX_Config)
+        if isinstance(config, Main_SDNQ_FLUX_Config):
+            if submodel_type == SubModelType.Transformer:
+                return self._load_sdnq_transformer_checkpoint(config)
+            raise ValueError(
+                f"Only Transformer submodels are supported for checkpoint format. Received: {submodel_type}"
+            )
+
+        # Handle diffusers-format SDNQ model (Main_SDNQ_Diffusers_FLUX_Config)
+        if not isinstance(config, Main_SDNQ_Diffusers_FLUX_Config):
+            raise ValueError(f"Expected Main_SDNQ_Diffusers_FLUX_Config, got {type(config).__name__}")
+
+        if submodel_type is None:
+            raise ValueError("A submodel type must be provided when loading main pipelines.")
+
+        # Prefer the path discovery actually found. `model_index.json` names its components with
+        # arbitrary keys, and identification records the key it saw — but reconstructing
+        # `model_path / submodel_type.value` here assumes the key always equals the slot name. A
+        # pipeline whose index calls its CLIP encoder something else is then discovered fine and
+        # loaded from a folder that does not exist. Fall back to the conventional name when a config
+        # predates submodel discovery.
+        model_path = Path(config.path)
+        submodel_path = resolve_submodel_path(config, submodel_type, model_path / submodel_type.value)
+
+        # These branches build their modules by hand (`init_empty_weights` + `load_state_dict`)
+        # rather than through `from_pretrained`, so they arrive in training mode — `put_in_eval_mode`
+        # in `load_default._load_and_cache` is what puts every loaded model into inference mode.
+        match submodel_type:
+            case SubModelType.Transformer:
+                return self._load_sdnq_transformer(submodel_path, config)
+            case SubModelType.TextEncoder:
+                return self._load_text_encoder(submodel_path)
+            case SubModelType.TextEncoder2:
+                return self._load_text_encoder_2(submodel_path)
+            case SubModelType.Tokenizer:
+                return CLIPTokenizer.from_pretrained(submodel_path, local_files_only=True)
+            case SubModelType.Tokenizer2:
+                return T5Tokenizer.from_pretrained(submodel_path, max_length=512, local_files_only=True)
+            case SubModelType.VAE:
+                return self._load_vae(submodel_path)
+            case _:
+                raise ValueError(f"Unsupported submodel type: {submodel_type}")
+
+    def _load_sdnq_transformer_checkpoint(self, config: Main_SDNQ_FLUX_Config) -> AnyModel:
+        """Load SDNQ transformer from single-file checkpoint."""
+        model_path = Path(config.path)
+
+        with accelerate.init_empty_weights():
+            model = Flux(get_flux_transformers_params(config.variant))
+
+        sd = sdnq_sd_loader(model_path, compute_dtype=torch.bfloat16)
+
+        # Handle ComfyUI bundle format
+        if "model.diffusion_model.double_blocks.0.img_attn.norm.key_norm.scale" in sd:
+            sd = convert_bundle_to_flux_transformer_checkpoint(sd)
+
+        load_state_dict_ignoring_extras(model, sd, source="SDNQ FLUX transformer checkpoint", assign=True)
+        return model
+
+    def _load_sdnq_transformer(self, transformer_path: Path, config: Main_SDNQ_Diffusers_FLUX_Config) -> AnyModel:
+        """Load SDNQ-quantized transformer from diffusers folder."""
+        logger.debug("[SDNQ] _load_sdnq_transformer called for %s", transformer_path)
+        with accelerate.init_empty_weights():
+            model = Flux(get_flux_transformers_params(config.variant))
+
+        sd = sdnq_sd_loader(transformer_path, compute_dtype=torch.bfloat16)
+
+        # Convert from diffusers format to BFL format
+        sd = self._convert_diffusers_sd_to_bfl(sd)
+
+        load_state_dict_ignoring_extras(model, sd, source="SDNQ FLUX transformer", assign=True)
+        return model
+
+    def _convert_diffusers_sd_to_bfl(self, sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Convert a Flux transformer state dict from diffusers format to BFL format.
+
+        Note: For SDNQTensor objects, Q/K/V tensors are dequantized before fusion since
+        torch.cat doesn't work with quantized tensors. Other layers retain quantization.
+        """
+        from invokeai.backend.quantization.sdnq.sdnq_tensor import SDNQTensor
+
+        # Helper to dequantize SDNQTensor or return as-is
+        def maybe_dequantize(t: torch.Tensor) -> torch.Tensor:
+            if isinstance(t, SDNQTensor):
+                return t.get_dequantized_tensor()
+            return t
+
+        # Helper to fuse weights, handling SDNQTensor
+        def fuse_weights(*tensors: torch.Tensor) -> torch.Tensor:
+            dequantized = [maybe_dequantize(t) for t in tensors]
+            return torch.cat(dequantized, dim=0)
+
+        def _swap_scale_shift_halves(t: torch.Tensor) -> torch.Tensor:
+            """Swap the (scale, shift) halves along dim 0 to (shift, scale).
+
+            diffusers' AdaLayerNormContinuous packs (scale, shift); BFL's LastLayer expects
+            (shift, scale). Same memory, different interpretation — without this swap the final
+            normalisation modulation is permuted and the output is high-frequency noise.
+            """
+            t = maybe_dequantize(t)
+            if t.dim() < 1 or t.shape[0] % 2 != 0:
+                return t
+            scale, shift = t.chunk(2, dim=0)
+            return torch.cat([shift, scale], dim=0)
+
+        # Make a shallow copy so we can pop keys
+        sd = sd.copy()
+        new_sd: dict[str, torch.Tensor] = {}
+
+        # Basic 1-to-1 key conversions
+        basic_key_map = {
+            # txt_in keys
+            "context_embedder.bias": "txt_in.bias",
+            "context_embedder.weight": "txt_in.weight",
+            # guidance_in MLPEmbedder keys
+            "time_text_embed.guidance_embedder.linear_1.bias": "guidance_in.in_layer.bias",
+            "time_text_embed.guidance_embedder.linear_1.weight": "guidance_in.in_layer.weight",
+            "time_text_embed.guidance_embedder.linear_2.bias": "guidance_in.out_layer.bias",
+            "time_text_embed.guidance_embedder.linear_2.weight": "guidance_in.out_layer.weight",
+            # vector_in MLPEmbedder keys
+            "time_text_embed.text_embedder.linear_1.bias": "vector_in.in_layer.bias",
+            "time_text_embed.text_embedder.linear_1.weight": "vector_in.in_layer.weight",
+            "time_text_embed.text_embedder.linear_2.bias": "vector_in.out_layer.bias",
+            "time_text_embed.text_embedder.linear_2.weight": "vector_in.out_layer.weight",
+            # time_in MLPEmbedder keys
+            "time_text_embed.timestep_embedder.linear_1.bias": "time_in.in_layer.bias",
+            "time_text_embed.timestep_embedder.linear_1.weight": "time_in.in_layer.weight",
+            "time_text_embed.timestep_embedder.linear_2.bias": "time_in.out_layer.bias",
+            "time_text_embed.timestep_embedder.linear_2.weight": "time_in.out_layer.weight",
+            # img_in keys
+            "x_embedder.bias": "img_in.bias",
+            "x_embedder.weight": "img_in.weight",
+            # final_layer keys
+            "proj_out.bias": "final_layer.linear.bias",
+            "proj_out.weight": "final_layer.linear.weight",
+            # norm_out.linear is the final AdaLayerNormContinuous. diffusers packs the linear
+            # output as (scale, shift); BFL's LastLayer packs as (shift, scale). Swap the
+            # halves of the weight and bias to keep the math correct.
+            "norm_out.linear.bias": "final_layer.adaLN_modulation.1.bias",
+            "norm_out.linear.weight": "final_layer.adaLN_modulation.1.weight",
+        }
+        # Keys whose first-axis halves (scale, shift) must be swapped to (shift, scale) for BFL.
+        SWAP_SCALE_SHIFT_KEYS = {
+            "norm_out.linear.bias",
+            "norm_out.linear.weight",
+        }
+        for old_key, new_key in basic_key_map.items():
+            v = sd.pop(old_key, None)
+            if v is not None:
+                if old_key in SWAP_SCALE_SHIFT_KEYS:
+                    v = _swap_scale_shift_halves(v)
+                new_sd[new_key] = v
+
+        # Handle the double_blocks (19 blocks for FLUX)
+        block_index = 0
+        while f"transformer_blocks.{block_index}.attn.add_q_proj.bias" in sd:
+            from_prefix = f"transformer_blocks.{block_index}"
+            to_prefix = f"double_blocks.{block_index}"
+
+            # txt_attn.qkv (fuse add_q, add_k, add_v)
+            new_sd[f"{to_prefix}.txt_attn.qkv.bias"] = fuse_weights(
+                sd.pop(f"{from_prefix}.attn.add_q_proj.bias"),
+                sd.pop(f"{from_prefix}.attn.add_k_proj.bias"),
+                sd.pop(f"{from_prefix}.attn.add_v_proj.bias"),
+            )
+            new_sd[f"{to_prefix}.txt_attn.qkv.weight"] = fuse_weights(
+                sd.pop(f"{from_prefix}.attn.add_q_proj.weight"),
+                sd.pop(f"{from_prefix}.attn.add_k_proj.weight"),
+                sd.pop(f"{from_prefix}.attn.add_v_proj.weight"),
+            )
+
+            # img_attn.qkv (fuse to_q, to_k, to_v)
+            new_sd[f"{to_prefix}.img_attn.qkv.bias"] = fuse_weights(
+                sd.pop(f"{from_prefix}.attn.to_q.bias"),
+                sd.pop(f"{from_prefix}.attn.to_k.bias"),
+                sd.pop(f"{from_prefix}.attn.to_v.bias"),
+            )
+            new_sd[f"{to_prefix}.img_attn.qkv.weight"] = fuse_weights(
+                sd.pop(f"{from_prefix}.attn.to_q.weight"),
+                sd.pop(f"{from_prefix}.attn.to_k.weight"),
+                sd.pop(f"{from_prefix}.attn.to_v.weight"),
+            )
+
+            # 1-to-1 key mappings for double block
+            double_block_key_map = {
+                # img_attn
+                "attn.norm_k.weight": "img_attn.norm.key_norm.scale",
+                "attn.norm_q.weight": "img_attn.norm.query_norm.scale",
+                "attn.to_out.0.weight": "img_attn.proj.weight",
+                "attn.to_out.0.bias": "img_attn.proj.bias",
+                # img_mlp
+                "ff.net.0.proj.weight": "img_mlp.0.weight",
+                "ff.net.0.proj.bias": "img_mlp.0.bias",
+                "ff.net.2.weight": "img_mlp.2.weight",
+                "ff.net.2.bias": "img_mlp.2.bias",
+                # img_mod
+                "norm1.linear.weight": "img_mod.lin.weight",
+                "norm1.linear.bias": "img_mod.lin.bias",
+                # txt_attn
+                "attn.norm_added_q.weight": "txt_attn.norm.query_norm.scale",
+                "attn.norm_added_k.weight": "txt_attn.norm.key_norm.scale",
+                "attn.to_add_out.weight": "txt_attn.proj.weight",
+                "attn.to_add_out.bias": "txt_attn.proj.bias",
+                # txt_mlp
+                "ff_context.net.0.proj.weight": "txt_mlp.0.weight",
+                "ff_context.net.0.proj.bias": "txt_mlp.0.bias",
+                "ff_context.net.2.weight": "txt_mlp.2.weight",
+                "ff_context.net.2.bias": "txt_mlp.2.bias",
+                # txt_mod
+                "norm1_context.linear.weight": "txt_mod.lin.weight",
+                "norm1_context.linear.bias": "txt_mod.lin.bias",
+            }
+            for from_key, to_key in double_block_key_map.items():
+                v = sd.pop(f"{from_prefix}.{from_key}", None)
+                if v is not None:
+                    new_sd[f"{to_prefix}.{to_key}"] = v
+
+            block_index += 1
+
+        # Handle the single_blocks (38 blocks for FLUX)
+        block_index = 0
+        while f"single_transformer_blocks.{block_index}.attn.to_q.bias" in sd:
+            from_prefix = f"single_transformer_blocks.{block_index}"
+            to_prefix = f"single_blocks.{block_index}"
+
+            # linear1 (fuse to_q, to_k, to_v, proj_mlp)
+            new_sd[f"{to_prefix}.linear1.bias"] = fuse_weights(
+                sd.pop(f"{from_prefix}.attn.to_q.bias"),
+                sd.pop(f"{from_prefix}.attn.to_k.bias"),
+                sd.pop(f"{from_prefix}.attn.to_v.bias"),
+                sd.pop(f"{from_prefix}.proj_mlp.bias"),
+            )
+            new_sd[f"{to_prefix}.linear1.weight"] = fuse_weights(
+                sd.pop(f"{from_prefix}.attn.to_q.weight"),
+                sd.pop(f"{from_prefix}.attn.to_k.weight"),
+                sd.pop(f"{from_prefix}.attn.to_v.weight"),
+                sd.pop(f"{from_prefix}.proj_mlp.weight"),
+            )
+
+            # 1-to-1 key mappings for single block
+            single_block_key_map = {
+                # linear2
+                "proj_out.weight": "linear2.weight",
+                "proj_out.bias": "linear2.bias",
+                # modulation
+                "norm.linear.weight": "modulation.lin.weight",
+                "norm.linear.bias": "modulation.lin.bias",
+                # norm
+                "attn.norm_k.weight": "norm.key_norm.scale",
+                "attn.norm_q.weight": "norm.query_norm.scale",
+            }
+            for from_key, to_key in single_block_key_map.items():
+                v = sd.pop(f"{from_prefix}.{from_key}", None)
+                if v is not None:
+                    new_sd[f"{to_prefix}.{to_key}"] = v
+
+            block_index += 1
+
+        # Any remaining keys that weren't converted - just pass through
+        for k, v in sd.items():
+            if k not in new_sd:
+                new_sd[k] = v
+
+        return new_sd
+
+    def _load_text_encoder(self, text_encoder_path: Path) -> AnyModel:
+        """Load text encoder (CLIP) - SDNQ or normal."""
+        if _is_sdnq_folder(text_encoder_path):
+            # SDNQ CLIP - need custom loading
+            return self._load_sdnq_clip(text_encoder_path)
+        # Normal CLIP
+        return CLIPTextModel.from_pretrained(text_encoder_path, local_files_only=True)
+
+    def _load_text_encoder_2(self, text_encoder_path: Path) -> AnyModel:
+        """Load text encoder 2 (T5) - SDNQ or normal."""
+        if _is_sdnq_folder(text_encoder_path):
+            # SDNQ T5 - need custom loading
+            return self._load_sdnq_t5(text_encoder_path)
+        # Normal T5
+        return T5EncoderModel.from_pretrained(
+            text_encoder_path,
+            torch_dtype="auto",
+            low_cpu_mem_usage=True,
+            local_files_only=True,
+        )
+
+    def _load_sdnq_clip(self, clip_path: Path) -> AnyModel:
+        """Load SDNQ-quantized CLIP text encoder."""
+        from invokeai.backend.quantization.sdnq.sdnq_tensor import SDNQTensor
+
+        # Load SDNQ state dict
+        sd = sdnq_sd_loader(clip_path, compute_dtype=torch.bfloat16)
+
+        # Load config and create model
+        model_config = AutoConfig.from_pretrained(clip_path, local_files_only=True)
+        with accelerate.init_empty_weights():
+            model = CLIPTextModel(model_config)
+
+        # position_ids is a non-persistent buffer that may be absent from the checkpoint.
+        missing, unexpected = model.load_state_dict(sd, strict=False, assign=True)
+        raise_on_incomplete_sdnq_load(
+            "SDNQ CLIP text encoder", missing, unexpected, allowed_missing={"text_model.embeddings.position_ids"}
+        )
+
+        # Dequantize embedding layer
+        if hasattr(model, "text_model") and hasattr(model.text_model, "embeddings"):
+            embed_weight = model.text_model.embeddings.token_embedding.weight
+            if isinstance(embed_weight, SDNQTensor):
+                dequantized = embed_weight.get_dequantized_tensor()
+                model.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(
+                    dequantized, requires_grad=False
+                )
+
+        return model
+
+    def _load_sdnq_t5(self, t5_path: Path) -> AnyModel:
+        """Load SDNQ-quantized T5 text encoder."""
+        from invokeai.backend.quantization.sdnq.sdnq_tensor import SDNQTensor
+
+        # Load SDNQ state dict
+        sd = sdnq_sd_loader(t5_path, compute_dtype=torch.bfloat16)
+
+        # Load config and create model
+        model_config = AutoConfig.from_pretrained(t5_path, local_files_only=True)
+        with accelerate.init_empty_weights():
+            model = AutoModelForTextEncoding.from_config(model_config)
+
+        # T5 ties encoder.embed_tokens to shared; the checkpoint only ships `shared.weight` and the
+        # tie is re-established below, so encoder.embed_tokens.weight is expected to be missing.
+        missing, unexpected = model.load_state_dict(sd, strict=False, assign=True)
+        raise_on_incomplete_sdnq_load(
+            "SDNQ T5 text encoder", missing, unexpected, allowed_missing={"encoder.embed_tokens.weight"}
+        )
+
+        # Dequantize shared embedding
+        if hasattr(model, "shared") and isinstance(model.shared.weight, SDNQTensor):
+            dequantized = model.shared.weight.get_dequantized_tensor()
+            model.shared.weight = torch.nn.Parameter(dequantized, requires_grad=False)
+
+        # Re-tie weights after dequantization
+        if hasattr(model, "encoder") and hasattr(model.encoder, "embed_tokens"):
+            if model.encoder.embed_tokens.weight is not model.shared.weight:
+                model.encoder.embed_tokens.weight = model.shared.weight
+
+        return model
+
+    def _load_vae(self, vae_path: Path) -> AnyModel:
+        """Load VAE - SDNQ or normal."""
+        if _is_sdnq_folder(vae_path):
+            return self._load_sdnq_vae(vae_path)
+        # Normal VAE
+        return AutoencoderKL.from_pretrained(vae_path, local_files_only=True)
+
+    def _load_sdnq_vae(self, vae_path: Path) -> AnyModel:
+        """Load SDNQ-quantized VAE."""
+        # Load SDNQ state dict
+        sd = sdnq_sd_loader(vae_path, compute_dtype=torch.bfloat16)
+
+        # Load config and create model
+        with accelerate.init_empty_weights():
+            model = AutoencoderKL.from_config(AutoencoderKL.load_config(vae_path, local_files_only=True))
+
+        # AutoencoderKL has no tied weights, so a complete state dict is expected.
+        missing, unexpected = model.load_state_dict(sd, strict=False, assign=True)
+        raise_on_incomplete_sdnq_load("SDNQ VAE", missing, unexpected)
         return model

@@ -52,7 +52,7 @@ import { getConnectorDeletionSpliceConnections } from 'features/nodes/store/util
 import { connectionToEdge } from 'features/nodes/store/util/reactFlowUtil';
 import { validateConnection } from 'features/nodes/store/util/validateConnection';
 import { selectSelectionMode, selectShouldSnapToGrid } from 'features/nodes/store/workflowSettingsSlice';
-import { NO_DRAG_CLASS, NO_PAN_CLASS, NO_WHEEL_CLASS } from 'features/nodes/types/constants';
+import { NO_DRAG_CLASS, NO_PAN_CLASS, NO_WHEEL_CLASS, WORKFLOW_GRID_SIZE } from 'features/nodes/types/constants';
 import type { AnyEdge, AnyNode } from 'features/nodes/types/invocation';
 import { buildConnectorNode } from 'features/nodes/util/node/buildConnectorNode';
 import { useRegisteredHotkeys } from 'features/system/components/HotkeysModal/useHotkeyData';
@@ -69,6 +69,8 @@ import ConnectorNode from './nodes/Connector/ConnectorNode';
 import CurrentImageNode from './nodes/CurrentImage/CurrentImageNode';
 import InvocationNodeWrapper from './nodes/Invocation/InvocationNodeWrapper';
 import NotesNode from './nodes/Notes/NotesNode';
+import type { WorkflowContextMenuState } from './workflowContextMenu';
+import { getWorkflowContextMenuState } from './workflowContextMenu';
 import { isWorkflowHotkeyEnabled, shouldIgnoreWorkflowCopyHotkey } from './workflowHotkeys';
 
 const edgeTypes = {
@@ -86,57 +88,9 @@ const nodeTypes = {
 // TODO: can we support reactflow? if not, we could style the attribution so it matches the app
 const proOptions: ProOptions = { hideAttribution: true };
 
-const snapGrid: [number, number] = [25, 25];
+const snapGrid: [number, number] = [WORKFLOW_GRID_SIZE, WORKFLOW_GRID_SIZE];
 
 const selectCancelConnection = (state: ReactFlowState) => state.cancelConnection;
-
-type WorkflowContextMenuState =
-  | {
-      kind: 'pane';
-      clientX: number;
-      clientY: number;
-      pageX: number;
-      pageY: number;
-    }
-  | {
-      kind: 'connector';
-      connectorId: string;
-      pageX: number;
-      pageY: number;
-    }
-  | null;
-
-const getWorkflowContextMenuState = (
-  event: globalThis.MouseEvent,
-  flowWrapper: HTMLDivElement | null
-): WorkflowContextMenuState => {
-  if (event.shiftKey || !(event.target instanceof Element) || !flowWrapper?.contains(event.target)) {
-    return null;
-  }
-
-  const connectorId = event.target.closest<HTMLElement>('[data-connector-node-id]')?.dataset.connectorNodeId;
-  if (connectorId) {
-    return {
-      kind: 'connector',
-      connectorId,
-      pageX: event.pageX,
-      pageY: event.pageY,
-    };
-  }
-
-  const paneTarget = event.target.closest('.react-flow__pane');
-  if (paneTarget && flowWrapper.contains(paneTarget)) {
-    return {
-      kind: 'pane',
-      clientX: event.clientX,
-      clientY: event.clientY,
-      pageX: event.pageX,
-      pageY: event.pageY,
-    };
-  }
-
-  return null;
-};
 
 export const Flow = memo(() => {
   const { t } = useTranslation();
@@ -265,20 +219,20 @@ export const Flow = memo(() => {
   );
 
   const deleteConnectorFromContextMenu = useCallback(() => {
-    if (contextMenuState?.kind !== 'connector' || !connectorSpliceConnections) {
+    if (contextMenuState?.kind !== 'connector') {
       return;
     }
     const connectorEdgeRemovals: EdgeChange<AnyEdge>[] = edges
       .filter((edge) => edge.source === contextMenuState.connectorId || edge.target === contextMenuState.connectorId)
       .map((edge) => ({ type: 'remove', id: edge.id }));
-    const spliceEdgeAdditions: EdgeChange<AnyEdge>[] = connectorSpliceConnections.map((connection) => ({
+    const spliceEdgeAdditions: EdgeChange<AnyEdge>[] = (connectorSpliceConnections ?? []).map((connection) => ({
       type: 'add',
       item: connectionToEdge(connection),
     }));
 
     pendingNodeInternalsUpdateRef.current = [
       contextMenuState.connectorId,
-      ...connectorSpliceConnections.flatMap((connection) => [connection.source, connection.target]),
+      ...(connectorSpliceConnections?.flatMap((connection) => [connection.source, connection.target]) ?? []),
     ];
     dispatch(edgesChanged([...connectorEdgeRemovals, ...spliceEdgeAdditions]));
     dispatch(nodesChanged([{ type: 'remove', id: contextMenuState.connectorId }]));
@@ -318,12 +272,7 @@ export const Flow = memo(() => {
     if (contextMenuState?.kind === 'connector') {
       return (
         <MenuList visibility="visible">
-          <MenuItem
-            icon={<PiTrashBold />}
-            onClick={deleteConnectorFromContextMenu}
-            isDisabled={!connectorSpliceConnections}
-            isDestructive
-          >
+          <MenuItem icon={<PiTrashBold />} onClick={deleteConnectorFromContextMenu} isDestructive>
             {t('nodes.deleteConnector')}
           </MenuItem>
         </MenuList>
@@ -331,7 +280,7 @@ export const Flow = memo(() => {
     }
 
     return <MenuList visibility="visible" />;
-  }, [addConnectorAtPaneMenuPosition, connectorSpliceConnections, contextMenuState, deleteConnectorFromContextMenu, t]);
+  }, [addConnectorAtPaneMenuPosition, contextMenuState, deleteConnectorFromContextMenu, t]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenuState(null);
@@ -581,7 +530,7 @@ const FlowSurface = memo((props: FlowSurfaceProps) => {
 
 FlowSurface.displayName = 'FlowSurface';
 
-const HotkeyIsolator = memo(({ flowWrapper }: { flowWrapper: RefObject<HTMLDivElement> }) => {
+const HotkeyIsolator = memo(({ flowWrapper }: { flowWrapper: RefObject<HTMLDivElement | null> }) => {
   const mayUndo = useAppSelector(selectMayUndo);
   const mayRedo = useAppSelector(selectMayRedo);
 

@@ -5,6 +5,7 @@ import torch
 from invokeai.backend.patches.layers.base_layer_patch import BaseLayerPatch
 from invokeai.backend.patches.layers.param_shape_utils import get_param_shape
 from invokeai.backend.quantization.gguf.ggml_tensor import GGMLTensor
+from invokeai.backend.quantization.sdnq.sdnq_tensor import SDNQTensor
 
 
 class CustomModuleMixin:
@@ -49,11 +50,16 @@ class CustomModuleMixin:
         # parameters. But, of course, any sub-layers that need to access the actual values of the parameters will fail.
         for param_name in orig_params.keys():
             param = orig_params[param_name]
-            if type(param) is torch.nn.Parameter and type(param.data) is torch.Tensor:
+            if isinstance(param, torch.nn.Parameter) and type(param.data) is torch.Tensor:
+                pass
+            elif type(param) is torch.Tensor:
+                # Plain tensor (e.g. after cast_to_device moved a Parameter to another device).
                 pass
             elif type(param) is GGMLTensor:
                 # Move to device and dequantize here. Doing it in the patch layer can result in redundant casts /
                 # dequantizations.
+                orig_params[param_name] = param.to(device=device).get_dequantized_tensor()
+            elif type(param) is SDNQTensor:
                 orig_params[param_name] = param.to(device=device).get_dequantized_tensor()
             else:
                 orig_params[param_name] = torch.empty(get_param_shape(param), device="meta")

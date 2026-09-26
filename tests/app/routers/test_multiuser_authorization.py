@@ -9,8 +9,9 @@ These tests verify the security fixes for:
 """
 
 import logging
+from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import status
@@ -64,10 +65,18 @@ def client():
     return TestClient(app)
 
 
+def _mock_urls() -> MagicMock:
+    """A urls service whose getters return real strings, so ImageDTO validates."""
+    urls = MagicMock()
+    urls.get_image_url.return_value = "http://test.invalid/image.png"
+    return urls
+
+
 @pytest.fixture
 def mock_services() -> InvocationServices:
     from invokeai.app.services.board_image_records.board_image_records_sqlite import SqliteBoardImageRecordStorage
     from invokeai.app.services.board_records.board_records_sqlite import SqliteBoardRecordStorage
+    from invokeai.app.services.board_video_records.board_video_records_sqlite import SqliteBoardVideoRecordStorage
     from invokeai.app.services.boards.boards_default import BoardService
     from invokeai.app.services.bulk_download.bulk_download_default import BulkDownloadService
     from invokeai.app.services.client_state_persistence.client_state_persistence_sqlite import (
@@ -77,7 +86,11 @@ def mock_services() -> InvocationServices:
     from invokeai.app.services.images.images_default import ImageService
     from invokeai.app.services.invocation_cache.invocation_cache_memory import MemoryInvocationCache
     from invokeai.app.services.invocation_stats.invocation_stats_default import InvocationStatsService
+    from invokeai.app.services.system_prompt_records.system_prompt_records_sqlite import (
+        SqliteSystemPromptRecordsStorage,
+    )
     from invokeai.app.services.users.users_default import UserService
+    from invokeai.app.services.video_records.video_records_sqlite import SqliteVideoRecordStorage
     from tests.test_nodes import TestEventService
 
     configuration = InvokeAIAppConfig(use_memory_db=True, node_cache_size=0)
@@ -104,17 +117,29 @@ def mock_services() -> InvocationServices:
         performance_statistics=InvocationStatsService(),
         session_processor=None,  # type: ignore
         session_queue=None,  # type: ignore
-        urls=None,  # type: ignore
+        # Real enough for ImageService.get_dto to build a DTO. With None it raised
+        # AttributeError for *every* image, so any route resolving a DTO silently took its
+        # not-found path — which made board_images' batch-delete authorization untestable:
+        # every name was skipped before the ownership check ran, and the test passed no
+        # matter what the route did. The returns must be strings; ImageDTO validates them.
+        urls=_mock_urls(),
         workflow_records=SqliteWorkflowRecordsStorage(db=db),
         tensors=None,  # type: ignore
         conditioning=None,  # type: ignore
         style_preset_records=None,  # type: ignore
         style_preset_image_files=None,  # type: ignore
+        system_prompt_records=SqliteSystemPromptRecordsStorage(db=db),
         workflow_thumbnails=None,  # type: ignore
         model_relationship_records=None,  # type: ignore
         model_relationships=None,  # type: ignore
         client_state_persistence=ClientStatePersistenceSqlite(db=db),
         users=UserService(db),
+        external_generation=None,  # type: ignore
+        videos=None,  # type: ignore
+        video_files=None,  # type: ignore
+        video_records=SqliteVideoRecordStorage(db=db),
+        board_video_records=SqliteBoardVideoRecordStorage(db=db),
+        gallery=None,  # type: ignore
     )
 
 
@@ -161,6 +186,11 @@ def enable_multiuser(monkeypatch: Any, mock_invoker: Invoker):
 
     mock_board_images = MagicMock()
     mock_board_images.get_all_board_image_names_for_board.return_value = []
+    # The real facade returns the scoped DELETE's row count, and the routes classify a zero-row
+    # miss as not-removed. A bare MagicMock return only passed the old `== 0` check by accident;
+    # under `> 0` it is a TypeError. One row deleted is the honest default for a mock whose
+    # remove is expected to succeed; tests that stage the miss override this per-call.
+    mock_board_images.remove_image_from_board.return_value = 1
     mock_invoker.services.board_images = mock_board_images
 
     mock_workflow_thumbnails = MagicMock()
@@ -173,10 +203,12 @@ def enable_multiuser(monkeypatch: Any, mock_invoker: Invoker):
     monkeypatch.setattr("invokeai.app.api.routers.boards.ApiDependencies", mock_deps)
     monkeypatch.setattr("invokeai.app.api.routers.board_images.ApiDependencies", mock_deps)
     monkeypatch.setattr("invokeai.app.api.routers.images.ApiDependencies", mock_deps)
+    monkeypatch.setattr("invokeai.app.api.routers._access.ApiDependencies", mock_deps)
     monkeypatch.setattr("invokeai.app.api.routers.workflows.ApiDependencies", mock_deps)
     monkeypatch.setattr("invokeai.app.api.routers.session_queue.ApiDependencies", mock_deps)
     monkeypatch.setattr("invokeai.app.api.routers.recall_parameters.ApiDependencies", mock_deps)
     monkeypatch.setattr("invokeai.app.api.routers.model_manager.ApiDependencies", mock_deps)
+    monkeypatch.setattr("invokeai.app.api.routers.custom_nodes.ApiDependencies", mock_deps)
     yield
 
 
@@ -218,6 +250,31 @@ def _create_workflow(client: TestClient, token: str) -> str:
     r = client.post("/api/v1/workflows/", json={"workflow": WORKFLOW_BODY}, headers=_auth(token))
     assert r.status_code == 200
     return r.json()["workflow_id"]
+
+
+def _insert_pending_queue_item(session_queue: Any, user_id: str, queue_id: str = "default") -> int:
+    """Insert a pending queue item owned by ``user_id`` directly into the queue's database."""
+    import uuid
+
+    from invokeai.app.services.shared.graph import Graph, GraphExecutionState
+    from tests.test_nodes import PromptTestInvocation
+
+    graph = Graph()
+    graph.add_node(PromptTestInvocation(id="prompt", prompt="test"))
+    session = GraphExecutionState(graph=graph)
+    session_json = session.model_dump_json(warnings=False, exclude_none=True)
+    with session_queue._db.transaction() as cursor:
+        cursor.execute(
+            """--sql
+            INSERT INTO session_queue (
+                queue_id, session, session_id, batch_id, field_values, priority,
+                workflow, origin, destination, retried_from_item_id, user_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (queue_id, session_json, session.id, str(uuid.uuid4()), None, 0, None, None, None, None, user_id),
+        )
+        return cursor.lastrowid
 
 
 # ===========================================================================
@@ -337,7 +394,14 @@ class TestBoardImageMutationAuth:
     def test_non_owner_cannot_batch_add_other_users_images_to_own_board(
         self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
     ):
-        """Same attack via the batch endpoint."""
+        """Same attack via the batch endpoint.
+
+        Batch add skips foreign names instead of re-raising the first 403 — same rationale as
+        test_non_owner_cannot_star_image: re-raising mid-batch discarded the partial successes,
+        so the client never learned which images HAD moved. Only the response shape changes.
+        The attack itself must still fail: the victim's image must not move, and must not be
+        advertised as added.
+        """
         user1 = mock_invoker.services.users.get_by_email("user1@test.com")
         assert user1 is not None
         _save_image(mock_invoker, "victim-batch-img", user1.user_id)
@@ -349,7 +413,443 @@ class TestBoardImageMutationAuth:
             json={"board_id": attacker_board, "image_names": ["victim-batch-img"]},
             headers=_auth(user2_token),
         )
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["added_images"] == []
+        # An auth skip is not a failure — it must not be reported (and toasted) as one.
+        assert body["failed_images"] == []
+        # `board_images` is a MagicMock in this fixture, so asserting on board_image_records
+        # would pass no matter what the route did. Assert the move was never attempted.
+        mock_invoker.services.board_images.add_image_to_board.assert_not_called()
+
+    def test_batch_add_keeps_partial_successes_when_one_name_is_foreign(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
+    ):
+        """The point of the skip: the attacker's own image still moves, and is reported.
+
+        Before, the first foreign name re-raised and discarded the payload for every image
+        that had already been moved in the same request, so the client never invalidated
+        their caches and the UI kept showing them on their old board.
+        """
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user1 is not None and user2 is not None
+        _save_image(mock_invoker, "victim-mixed-img", user1.user_id)
+        _save_image(mock_invoker, "own-mixed-img", user2.user_id)
+
+        board_id = _create_board(client, user2_token, "Mixed Batch Board")
+        mock_invoker.services.board_images.add_image_to_board.reset_mock()
+
+        # Foreign name first, so the old `raise` would abort before reaching the owned one.
+        r = client.post(
+            "/api/v1/board_images/batch",
+            json={"board_id": board_id, "image_names": ["victim-mixed-img", "own-mixed-img"]},
+            headers=_auth(user2_token),
+        )
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["added_images"] == ["own-mixed-img"]
+        assert body["failed_images"] == []
+        assert board_id in body["affected_boards"]
+        # Exactly one move attempted, and only for the caller's own image.
+        assert [
+            call.kwargs["image_name"] for call in mock_invoker.services.board_images.add_image_to_board.call_args_list
+        ] == ["own-mixed-img"]
+
+    def test_non_owner_cannot_batch_remove_images_from_foreign_board(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
+    ):
+        """Batch remove skips names on boards the caller cannot write, instead of re-raising.
+
+        The guarantee is unchanged: the image stays on the board and is not advertised as
+        removed. Only the response shape changes.
+        """
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        _save_image(mock_invoker, "victim-remove-img", user1.user_id)
+        board_id = _create_board(client, user1_token, "User1 Private Remove Board")
+        mock_invoker.services.board_image_records.add_image_to_board(board_id, "victim-remove-img")
+        mock_invoker.services.board_images.remove_image_from_board.reset_mock()
+
+        r = client.post(
+            "/api/v1/board_images/batch/delete",
+            json={"image_names": ["victim-remove-img"]},
+            headers=_auth(user2_token),
+        )
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["removed_images"] == []
+        # An auth skip is not a failure — it must not be reported (and toasted) as one.
+        assert body["failed_images"] == []
+        mock_invoker.services.board_images.remove_image_from_board.assert_not_called()
+
+    def test_batch_remove_keeps_partial_successes_when_one_name_is_foreign(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
+    ):
+        """The point of the skip, on the remove side: the caller's own image still comes off."""
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user1 is not None and user2 is not None
+        _save_image(mock_invoker, "victim-rm-mixed", user1.user_id)
+        _save_image(mock_invoker, "own-rm-mixed", user2.user_id)
+        victim_board = _create_board(client, user1_token, "User1 Board For Remove Mix")
+        own_board = _create_board(client, user2_token, "User2 Board For Remove Mix")
+        mock_invoker.services.board_image_records.add_image_to_board(victim_board, "victim-rm-mixed")
+        mock_invoker.services.board_image_records.add_image_to_board(own_board, "own-rm-mixed")
+        mock_invoker.services.board_images.remove_image_from_board.reset_mock()
+
+        # Foreign name first, so the old `raise` would abort before reaching the owned one.
+        r = client.post(
+            "/api/v1/board_images/batch/delete",
+            json={"image_names": ["victim-rm-mixed", "own-rm-mixed"]},
+            headers=_auth(user2_token),
+        )
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["removed_images"] == ["own-rm-mixed"]
+        assert body["failed_images"] == []
+        assert own_board in body["affected_boards"]
+        assert victim_board not in body["affected_boards"]
+        assert [
+            call.kwargs["image_name"]
+            for call in mock_invoker.services.board_images.remove_image_from_board.call_args_list
+        ] == ["own-rm-mixed"]
+
+    def test_batch_remove_decides_board_write_access_once_per_name_and_cheaply(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user1_token: str, user2_token: str
+    ):
+        """Two invariants that pull against each other, asserted together.
+
+        Skipping removed the early abort that used to cap an unauthorized batch at one check, so
+        the decision is now taken for every name -- caching it per board would let a permission
+        revoked mid-batch keep working until the request ends (see the revocation test below).
+
+        Which is only affordable because the decision reads the board *record*: one indexed
+        SELECT. Through boards.get_dto() it would be six queries -- three of them COUNT
+        aggregates over the board's contents -- per name, synchronously, on the event loop, for
+        a 1000-name batch. So get_dto must not appear in this path at all.
+        """
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        board_id = _create_board(client, user1_token, "User1 Board Perms")
+        names = [f"victim-perm-{index}" for index in range(5)]
+        for name in names:
+            _save_image(mock_invoker, name, user1.user_id)
+            mock_invoker.services.board_image_records.add_image_to_board(board_id, name)
+
+        get_dto_spy = MagicMock(side_effect=mock_invoker.services.boards.get_dto)
+        monkeypatch.setattr(mock_invoker.services.boards, "get_dto", get_dto_spy)
+        record_spy = MagicMock(side_effect=mock_invoker.services.board_records.get)
+        monkeypatch.setattr(mock_invoker.services.board_records, "get", record_spy)
+
+        r = client.post(
+            "/api/v1/board_images/batch/delete",
+            json={"image_names": names},
+            headers=_auth(user2_token),
+        )
+        assert r.status_code == status.HTTP_201_CREATED
+        assert r.json()["removed_images"] == []
+        assert record_spy.call_count == len(names)
+        assert get_dto_spy.call_count == 0
+
+    def test_batch_remove_stops_when_board_write_access_is_revoked_mid_batch(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
+    ):
+        """A contributor's write access ends the moment the board stops being public.
+
+        Public boards accept contributions from anyone, so user2 may empty user1's public board.
+        Nothing about that decision holds for the rest of a 1000-name batch: user1 can make the
+        board private while it is still running. Caching the first `True` would remove every
+        remaining name on an answer that is no longer true, and none of it is undone.
+        """
+        from invokeai.app.services.board_records.board_records_common import BoardChanges, BoardVisibility
+
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        board_id = _create_board(client, user1_token, "User1 Public Board Revoked")
+        _set_board_visibility(client, user1_token, board_id, "public")
+        names = [f"revoke-rm-{index}" for index in range(3)]
+        for name in names:
+            _save_image(mock_invoker, name, user1.user_id)
+            mock_invoker.services.board_image_records.add_image_to_board(board_id, name)
+
+        def _revoke_after_first_removal(image_name: str, board_id: str) -> int:
+            mock_invoker.services.board_records.update(board_id, BoardChanges(board_visibility=BoardVisibility.Private))
+            # One row removed: a side_effect's return value overrides the mock's return_value,
+            # and the route classifies anything else as a miss.
+            return 1
+
+        mock_invoker.services.board_images.remove_image_from_board.reset_mock()
+        mock_invoker.services.board_images.remove_image_from_board.side_effect = _revoke_after_first_removal
+
+        r = client.post(
+            "/api/v1/board_images/batch/delete",
+            json={"image_names": names},
+            headers=_auth(user2_token),
+        )
+
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["removed_images"] == [names[0]]
+        # The rest are an authorization skip, not a failure: absent from both lists.
+        assert body["failed_images"] == []
+        assert mock_invoker.services.board_images.remove_image_from_board.call_count == 1
+
+    def test_batch_add_stops_when_board_write_access_is_revoked_mid_batch(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
+    ):
+        """The same window on the add side, where the target board is checked before the loop.
+
+        The refused names are reported as failed, not skipped: the destination is the whole
+        request's problem, and skipping empties the rest of the batch into a 201 with empty
+        lists, which the client reads as success and clears the user's selection over. The
+        loop must still stop *issuing adds* the moment access is gone.
+        """
+        from invokeai.app.services.board_records.board_records_common import BoardChanges, BoardVisibility
+
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user2 is not None
+        board_id = _create_board(client, user1_token, "User1 Public Board Add Revoked")
+        _set_board_visibility(client, user1_token, board_id, "public")
+        names = [f"revoke-add-{index}" for index in range(3)]
+        for name in names:
+            _save_image(mock_invoker, name, user2.user_id)
+
+        def _revoke_after_first_add(board_id: str, image_name: str) -> None:
+            mock_invoker.services.board_records.update(board_id, BoardChanges(board_visibility=BoardVisibility.Private))
+
+        mock_invoker.services.board_images.add_image_to_board.reset_mock()
+        mock_invoker.services.board_images.add_image_to_board.side_effect = _revoke_after_first_add
+
+        r = client.post(
+            "/api/v1/board_images/batch",
+            json={"board_id": board_id, "image_names": names},
+            headers=_auth(user2_token),
+        )
+
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["added_images"] == [names[0]]
+        assert set(body["failed_images"]) == set(names[1:])
+        assert mock_invoker.services.board_images.add_image_to_board.call_count == 1
+
+    def test_batch_add_skips_an_image_deleted_after_its_ownership_check(
+        self, client: TestClient, mock_invoker: Invoker, user2_token: str
+    ):
+        """A name deleted mid-batch is a skip, not a failure -- even here, where it arrives
+        as a bare foreign-key error.
+
+        board_images.image_name references images.image_name, so an image deleted between the
+        ownership check and the insert fails the INSERT with sqlite3.IntegrityError. Nothing in
+        that exception says "gone", so without the record probe the name is reported (and
+        toasted) as a storage failure for an image the user themselves just deleted.
+        """
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user2 is not None
+        names = ["fk-ok", "fk-vanished"]
+        for name in names:
+            _save_image(mock_invoker, name, user2.user_id)
+        board_id = _create_board(client, user2_token, "User2 FK Race Board")
+
+        def _delete_then_insert(board_id: str, image_name: str) -> None:
+            if image_name == "fk-vanished":
+                mock_invoker.services.image_records.delete(image_name)
+            # The real storage, so the foreign key fires for real rather than being simulated.
+            mock_invoker.services.board_image_records.add_image_to_board(board_id, image_name)
+
+        mock_invoker.services.board_images.add_image_to_board.reset_mock()
+        mock_invoker.services.board_images.add_image_to_board.side_effect = _delete_then_insert
+
+        r = client.post(
+            "/api/v1/board_images/batch",
+            json={"board_id": board_id, "image_names": names},
+            headers=_auth(user2_token),
+        )
+
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["added_images"] == ["fk-ok"]
+        # Absent from both lists: not moved by us, and not a failure either.
+        assert body["failed_images"] == []
+
+    def test_batch_add_reports_a_failure_it_could_not_probe(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user2_token: str
+    ):
+        """The probe's own failure path: an unreadable record must not become a skip.
+
+        The insert failure is classified by asking whether the image record is still there, so
+        the probe decides whether a name is reported. If the probe cannot answer — the same
+        locked database that broke the insert — the only safe answer is "still there": a skip
+        claims the user's own concurrent delete caused this, and says nothing at all.
+        """
+        import sqlite3
+
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user2 is not None
+        _save_image(mock_invoker, "unprobeable", user2.user_id)
+        board_id = _create_board(client, user2_token, "User2 Unprobeable Board")
+
+        def _fail(board_id: str, image_name: str) -> None:
+            raise RuntimeError("storage is on fire")
+
+        mock_invoker.services.board_images.add_image_to_board.reset_mock()
+        mock_invoker.services.board_images.add_image_to_board.side_effect = _fail
+        monkeypatch.setattr(
+            mock_invoker.services.image_records,
+            "get",
+            MagicMock(side_effect=sqlite3.OperationalError("database is locked")),
+        )
+
+        r = client.post(
+            "/api/v1/board_images/batch",
+            json={"board_id": board_id, "image_names": ["unprobeable"]},
+            headers=_auth(user2_token),
+        )
+
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["added_images"] == []
+        assert body["failed_images"] == ["unprobeable"]
+
+    @pytest.mark.parametrize("route", ["add", "remove"])
+    def test_batch_routes_report_a_name_whose_board_check_hit_a_storage_error(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user2_token: str, route: str
+    ):
+        """A name we could not decide about must be reported, never silently dropped.
+
+        Board write access is now decided once per name, off board_records.get(). That read used
+        to answer a locked or unreadable database with BoardRecordNotFoundException — the same
+        exception a board that simply does not exist raises — which the routes turn into a 404
+        and then skip. A disk error mid-batch would therefore drop names out of the response
+        entirely: absent from added/removed, absent from failed_images, no toast, and the client
+        re-rendering them as moved until the next refresh. That is exactly the outcome
+        failed_images exists to prevent, so the storage error has to stay distinguishable.
+        """
+        import sqlite3
+
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user2 is not None
+        names = ["decide-ok", "decide-broken"]
+        for name in names:
+            _save_image(mock_invoker, name, user2.user_id)
+        board_id = _create_board(client, user2_token, "User2 Board Check Failure")
+        if route == "remove":
+            for name in names:
+                mock_invoker.services.board_image_records.add_image_to_board(board_id, name)
+
+        real_get = mock_invoker.services.board_records.get
+        calls = {"n": 0}
+        # One decision per name, plus — on the add route only — the up-front check that answers
+        # a wholly unauthorized request with a 403 before the loop starts. Either way the last
+        # decision is the one taken for "decide-broken".
+        failing_call = 3 if route == "add" else 2
+
+        def _fail_on_the_last_decision(requested_board_id: str):
+            calls["n"] += 1
+            if calls["n"] == failing_call:
+                raise sqlite3.OperationalError("database is locked")
+            return real_get(requested_board_id)
+
+        monkeypatch.setattr(mock_invoker.services.board_records, "get", _fail_on_the_last_decision)
+        mock_invoker.services.board_images.add_image_to_board.reset_mock()
+        mock_invoker.services.board_images.remove_image_from_board.reset_mock()
+
+        if route == "add":
+            r = client.post(
+                "/api/v1/board_images/batch",
+                json={"board_id": board_id, "image_names": names},
+                headers=_auth(user2_token),
+            )
+            moved_key = "added_images"
+        else:
+            r = client.post(
+                "/api/v1/board_images/batch/delete",
+                json={"image_names": names},
+                headers=_auth(user2_token),
+            )
+            moved_key = "removed_images"
+
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body[moved_key] == ["decide-ok"]
+        assert body["failed_images"] == ["decide-broken"]
+
+    def test_batch_remove_only_touches_the_board_it_authorized_against(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user1_token: str, user2_token: str
+    ):
+        """Deciding freshly is not enough — the write has to be scoped to what was decided.
+
+        The route reads the image's board, authorizes against *that* board, then removes. An
+        unscoped `DELETE ... WHERE image_name = ?` follows the image if it is moved in between,
+        so a decision taken about a public board could be applied to a private one: user2 is
+        authorized against public P, user1 moves the image to private Q, and the delete lands on
+        Q. The predicate belongs on the write.
+        """
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        public_board = _create_board(client, user1_token, "User1 Public Source")
+        _set_board_visibility(client, user1_token, public_board, "public")
+        private_board = _create_board(client, user1_token, "User1 Private Destination")
+        _save_image(mock_invoker, "moving-target", user1.user_id)
+        mock_invoker.services.board_image_records.add_image_to_board(public_board, "moving-target")
+
+        # The image moves to the private board between the route's board read and its delete.
+        real_get_dto = mock_invoker.services.images.get_dto
+
+        def _move_after_reading(image_name: str):
+            dto = real_get_dto(image_name)
+            mock_invoker.services.board_image_records.add_image_to_board(private_board, image_name)
+            return dto
+
+        monkeypatch.setattr(mock_invoker.services.images, "get_dto", _move_after_reading)
+        # The real storage, so the scoping is exercised rather than asserted on a mock.
+        mock_invoker.services.board_images.remove_image_from_board.side_effect = (
+            mock_invoker.services.board_image_records.remove_image_from_board
+        )
+
+        r = client.post(
+            "/api/v1/board_images/batch/delete",
+            json={"image_names": ["moving-target"]},
+            headers=_auth(user2_token),
+        )
+
+        assert r.status_code == status.HTTP_201_CREATED
+        # The image is still on the private board: user2 was never authorized against it.
+        assert mock_invoker.services.board_image_records.get_board_for_image("moving-target") == private_board
+
+    def test_batch_add_still_reports_a_genuine_storage_failure(
+        self, client: TestClient, mock_invoker: Invoker, user2_token: str
+    ):
+        """The other half of the probe: a name whose record is still there stays a failure.
+
+        Without this the skip above could be written as a blanket `continue` and nothing would
+        notice -- a move that silently reverted on reload is exactly what failed_images exists
+        to surface.
+        """
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user2 is not None
+        names = ["storage-ok", "storage-broken"]
+        for name in names:
+            _save_image(mock_invoker, name, user2.user_id)
+        board_id = _create_board(client, user2_token, "User2 Storage Failure Board")
+
+        def _fail_one(board_id: str, image_name: str) -> None:
+            if image_name == "storage-broken":
+                raise RuntimeError("storage is on fire")
+
+        mock_invoker.services.board_images.add_image_to_board.reset_mock()
+        mock_invoker.services.board_images.add_image_to_board.side_effect = _fail_one
+
+        r = client.post(
+            "/api/v1/board_images/batch",
+            json={"board_id": board_id, "image_names": names},
+            headers=_auth(user2_token),
+        )
+
+        assert r.status_code == status.HTTP_201_CREATED
+        body = r.json()
+        assert body["added_images"] == ["storage-ok"]
+        assert body["failed_images"] == ["storage-broken"]
 
 
 # ===========================================================================
@@ -364,19 +864,203 @@ class TestImageReadAuth:
         r = client.get("/api/v1/images/i/some-image")
         assert r.status_code == status.HTTP_401_UNAUTHORIZED
 
+    def test_deleted_image_reads_as_gone_rather_than_denied(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str
+    ):
+        """A deleted image answers 404 even to a non-admin, and the clients depend on it.
+
+        The ownership decision rests on `images.user_id`, which is gone with the row, so
+        nothing above the refusal can tell a deleted image from a foreign one -- both used to
+        come back 403. The two mean opposite things to a client holding a reference: gone is
+        permanent and the reference should go with it, denied is reversible and it must not.
+        Only the refusal path pays for the distinction.
+        """
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        _save_image(mock_invoker, "user1-doomed", user1.user_id)
+        mock_invoker.services.image_records.delete("user1-doomed")
+
+        r = client.get("/api/v1/images/i/user1-doomed", headers=_auth(user1_token))
+
+        assert r.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unreadable_storage_does_not_read_as_a_deleted_image(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user1_token: str
+    ):
+        """The DTO route's 404 is the one clients destroy references on, so only absence earns it.
+
+        The route ended `except Exception: raise HTTPException(404)`, so any failure inside
+        `get_dto` -- the board lookup, the URL service, not just a missing row -- answered the
+        same 404 that tells a workflow field its image is gone. The caller here owns the image
+        and it is still there; the board lookup is what breaks.
+        """
+        import sqlite3
+
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        _save_image(mock_invoker, "user1-unreadable", user1.user_id)
+        monkeypatch.setattr(
+            mock_invoker.services.board_image_records,
+            "get_board_for_image",
+            MagicMock(side_effect=sqlite3.OperationalError("database is locked")),
+        )
+
+        # Uncaught in the route, so a 500 in production; the test client re-raises instead of
+        # rendering it. Either way it must not be the 404 that clears the user's reference.
+        with pytest.raises(sqlite3.OperationalError):
+            client.get("/api/v1/images/i/user1-unreadable", headers=_auth(user1_token))
+
+    def test_revoking_access_to_a_live_image_stays_a_denial(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
+    ):
+        """The other half, and the one with teeth: a reversible refusal must not read as gone.
+
+        A shared board flipped back to Private refuses every image on it, and every one of
+        them still exists. The clients drop a workflow field or a reference image on a 404, so
+        answering one here would destroy work that restoring the permission could not bring
+        back.
+        """
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        board_id = _create_board(client, user1_token, "User1 Formerly Shared Board")
+        _set_board_visibility(client, user1_token, board_id, "shared")
+        _save_image(mock_invoker, "user1-still-here", user1.user_id)
+        mock_invoker.services.board_image_records.add_image_to_board(board_id, "user1-still-here")
+        assert client.get("/api/v1/images/i/user1-still-here", headers=_auth(user2_token)).status_code == (
+            status.HTTP_200_OK
+        )
+
+        _set_board_visibility(client, user1_token, board_id, "private")
+
+        r = client.get("/api/v1/images/i/user1-still-here", headers=_auth(user2_token))
+
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_unreadable_board_does_not_read_as_unavailable(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user1_token: str, user2_token: str
+    ):
+        """A storage error must not reach the client wearing the deleted image's answer.
+
+        `assert_image_read_access` used to catch every exception from the board lookup and
+        fall through to the same 403 a deleted image gets. Since the clients read that 403 as
+        "gone, drop your reference", a locked database would have taken every workflow field
+        and reference image pointing at a shared board's images down with it. Only a board
+        positively known to be gone may still answer 403.
+        """
+        import sqlite3
+
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        board_id = _create_board(client, user1_token, "User1 Shared Read Board")
+        _set_board_visibility(client, user1_token, board_id, "shared")
+        _save_image(mock_invoker, "user1-shared-read", user1.user_id)
+        mock_invoker.services.board_image_records.add_image_to_board(board_id, "user1-shared-read")
+
+        # Patched only after the setup above used the real store. user2 is neither admin nor
+        # direct owner, so the decision reaches the board lookup and cannot complete.
+        monkeypatch.setattr(
+            mock_invoker.services.board_records,
+            "get",
+            MagicMock(side_effect=sqlite3.OperationalError("database is locked")),
+        )
+
+        # The storage error leaves the route uncaught, which is a 500 in production; the test
+        # client re-raises unhandled server exceptions instead of rendering them. Either way the
+        # one thing that must not happen is a 403 -- the answer the clients act on destructively.
+        with pytest.raises(sqlite3.OperationalError):
+            client.get("/api/v1/images/i/user1-shared-read", headers=_auth(user2_token))
+
+    def test_vanished_board_still_reads_as_an_ordinary_refusal(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user1_token: str, user2_token: str
+    ):
+        """The narrowed catch stays exactly that narrow, in both directions.
+
+        A dangling board_image row refuses the read, but the image itself is still there, so
+        the refusal is a 403 and not the 404 that would take the caller's reference with it.
+        """
+        from invokeai.app.services.board_records.board_records_common import BoardRecordNotFoundException
+
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        board_id = _create_board(client, user1_token, "User1 Vanishing Read Board")
+        _set_board_visibility(client, user1_token, board_id, "shared")
+        _save_image(mock_invoker, "user1-read-board-gone", user1.user_id)
+        mock_invoker.services.board_image_records.add_image_to_board(board_id, "user1-read-board-gone")
+
+        monkeypatch.setattr(
+            mock_invoker.services.board_records,
+            "get",
+            MagicMock(side_effect=BoardRecordNotFoundException),
+        )
+
+        r = client.get("/api/v1/images/i/user1-read-board-gone", headers=_auth(user2_token))
+
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
     def test_get_image_metadata_requires_auth(self, enable_multiuser: Any, client: TestClient):
         r = client.get("/api/v1/images/i/some-image/metadata")
         assert r.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_get_image_full_is_unauthenticated(self, enable_multiuser: Any, client: TestClient):
-        # Binary image endpoints are intentionally unauthenticated because
-        # browsers load them via <img src> which cannot send Bearer tokens.
-        r = client.get("/api/v1/images/i/some-image/full")
-        assert r.status_code != status.HTTP_401_UNAUTHORIZED
+    @pytest.mark.parametrize("suffix", ["full", "thumbnail"])
+    def test_image_media_requires_auth(self, enable_multiuser: Any, client: TestClient, suffix: str):
+        client.cookies.clear()
 
-    def test_get_image_thumbnail_is_unauthenticated(self, enable_multiuser: Any, client: TestClient):
-        r = client.get("/api/v1/images/i/some-image/thumbnail")
-        assert r.status_code != status.HTTP_401_UNAUTHORIZED
+        r = client.get(f"/api/v1/images/i/some-image/{suffix}")
+
+        assert r.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.parametrize("suffix,thumbnail", [("full", False), ("thumbnail", True)])
+    def test_image_owner_can_load_media_with_login_cookie(
+        self,
+        monkeypatch: Any,
+        client: TestClient,
+        mock_invoker: Invoker,
+        user1_token: str,
+        tmp_path: Path,
+        suffix: str,
+        thumbnail: bool,
+    ):
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        _save_image(mock_invoker, "owned-image", user1.user_id)
+        media_path = tmp_path / ("image.webp" if thumbnail else "image.png")
+        media_path.write_bytes(b"media")
+        get_path = MagicMock(return_value=media_path)
+        monkeypatch.setattr(mock_invoker.services.images, "get_path", get_path)
+        client.cookies.clear()
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "user1@test.com", "password": "TestPass123", "remember_me": False},
+        )
+        assert login.status_code == status.HTTP_200_OK
+
+        r = client.get(f"/api/v1/images/i/owned-image/{suffix}")
+
+        assert r.status_code == status.HTTP_200_OK
+        assert r.headers["cache-control"] == "private, no-store"
+        if thumbnail:
+            get_path.assert_called_once_with("owned-image", thumbnail=True)
+        else:
+            get_path.assert_called_once_with("owned-image")
+
+    def test_non_owner_cannot_load_private_image_media(
+        self,
+        monkeypatch: Any,
+        client: TestClient,
+        mock_invoker: Invoker,
+        user1_token: str,
+        user2_token: str,
+    ):
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        _save_image(mock_invoker, "private-image", user1.user_id)
+        get_path = MagicMock()
+        monkeypatch.setattr(mock_invoker.services.images, "get_path", get_path)
+
+        r = client.get("/api/v1/images/i/private-image/full", headers=_auth(user2_token))
+
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+        get_path.assert_not_called()
 
     def test_get_image_urls_requires_auth(self, enable_multiuser: Any, client: TestClient):
         r = client.get("/api/v1/images/i/some-image/urls")
@@ -583,6 +1267,33 @@ class TestImageMutationAuth:
         r = client.delete("/api/v1/images/uncategorized")
         assert r.status_code == status.HTTP_401_UNAUTHORIZED
 
+    def test_delete_uncategorized_reports_owned_images_that_failed(
+        self,
+        client: TestClient,
+        mock_invoker: Invoker,
+        monkeypatch: pytest.MonkeyPatch,
+        user1_token: str,
+    ):
+        user = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user is not None
+        _save_image(mock_invoker, "deleted.png", user.user_id)
+        _save_image(mock_invoker, "stuck.png", user.user_id)
+        mock_invoker.services.board_images.get_all_board_image_names_for_board.return_value = [
+            "deleted.png",
+            "stuck.png",
+        ]
+        monkeypatch.setattr(
+            mock_invoker.services.images,
+            "delete",
+            MagicMock(side_effect=[None, OSError("file busy")]),
+        )
+
+        response = client.delete("/api/v1/images/uncategorized", headers=_auth(user1_token))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["deleted_images"] == ["deleted.png"]
+        assert response.json()["failed_images"] == ["stuck.png"]
+
     def test_non_owner_cannot_delete_image(
         self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
     ):
@@ -647,6 +1358,13 @@ class TestImageMutationAuth:
     def test_non_owner_cannot_star_image(
         self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
     ):
+        """Batch star skips foreign items instead of re-raising the first 403.
+
+        Same rationale as test_non_owner_cannot_batch_delete_image: re-raising mid-batch
+        discarded the partial successes, so the client never learned which images HAD
+        changed. Only the response shape changes — the foreign image must still not be
+        starred, and must not be advertised as starred.
+        """
         user1 = mock_invoker.services.users.get_by_email("user1@test.com")
         assert user1 is not None
         _save_image(mock_invoker, "user1-star-blocked", user1.user_id)
@@ -656,11 +1374,104 @@ class TestImageMutationAuth:
             json={"image_names": ["user1-star-blocked"]},
             headers=_auth(user2_token),
         )
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_200_OK
+        body = r.json()
+        assert body["starred_images"] == []
+        # An auth skip is not a failure — it must not be reported (and toasted) as one.
+        assert body["failed_images"] == []
+        assert mock_invoker.services.image_records.get("user1-star-blocked").starred is False
+
+    @pytest.mark.parametrize("route", ["star", "unstar"])
+    def test_star_reports_a_name_whose_board_lookup_hit_a_storage_error(
+        self,
+        client: TestClient,
+        mock_invoker: Invoker,
+        monkeypatch: Any,
+        user1_token: str,
+        user2_token: str,
+        route: str,
+    ):
+        """A database error during the board-ownership fallback must land in failed_images.
+
+        `assert_image_owner` used to catch every exception from the board lookup and fall
+        through to the 403, and the batch loops treat a 403 as a silent auth skip -- so a
+        locked database made the star quietly vanish from the response: not applied, not
+        reported, and nothing for the client to toast. Only a board positively known to be
+        gone may still answer 403; a lookup that cannot be decided must propagate into the
+        loop's storage-failure arm.
+        """
+        import sqlite3
+
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        board_id = _create_board(client, user1_token, f"User1 Public {route} Board")
+        _set_board_visibility(client, user1_token, board_id, "public")
+        name = f"user1-{route}-undecidable"
+        _save_image(mock_invoker, name, user1.user_id)
+        mock_invoker.services.board_image_records.add_image_to_board(board_id, name)
+
+        # Patched only after the setup above used the real store. user2 is neither admin nor
+        # direct owner, so the decision reaches the board lookup and cannot complete.
+        monkeypatch.setattr(
+            mock_invoker.services.board_records,
+            "get",
+            MagicMock(side_effect=sqlite3.OperationalError("database is locked")),
+        )
+
+        r = client.post(
+            f"/api/v1/images/{route}",
+            json={"image_names": [name]},
+            headers=_auth(user2_token),
+        )
+        assert r.status_code == status.HTTP_200_OK
+        body = r.json()
+        assert body[f"{route}red_images"] == []
+        assert body["failed_images"] == [name]
+
+    def test_star_still_skips_a_name_whose_board_is_positively_gone(
+        self, client: TestClient, mock_invoker: Invoker, monkeypatch: Any, user1_token: str, user2_token: str
+    ):
+        """The narrowed catch must stay exactly that narrow, in both directions.
+
+        A board positively known to be gone (a dangling board_image row) is the one lookup
+        outcome that may still answer the ordinary 403 -- an auth skip, absent from both
+        lists. An implementation that let BoardRecordNotFoundException propagate alongside
+        the storage errors would report it in failed_images and toast a failure for a name
+        whose only problem is that its board vanished mid-request.
+        """
+        from invokeai.app.services.board_records.board_records_common import BoardRecordNotFoundException
+
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        assert user1 is not None
+        board_id = _create_board(client, user1_token, "User1 Vanishing Board")
+        _set_board_visibility(client, user1_token, board_id, "public")
+        _save_image(mock_invoker, "user1-board-gone", user1.user_id)
+        mock_invoker.services.board_image_records.add_image_to_board(board_id, "user1-board-gone")
+
+        monkeypatch.setattr(
+            mock_invoker.services.board_records,
+            "get",
+            MagicMock(side_effect=BoardRecordNotFoundException),
+        )
+
+        r = client.post(
+            "/api/v1/images/star",
+            json={"image_names": ["user1-board-gone"]},
+            headers=_auth(user2_token),
+        )
+        assert r.status_code == status.HTTP_200_OK
+        body = r.json()
+        assert body["starred_images"] == []
+        assert body["failed_images"] == []
 
     def test_non_owner_cannot_batch_delete_image(
         self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
     ):
+        """Batch delete tolerates foreign items by skipping them in-loop and returning the
+        per-item delete list to the client. Previously the route re-raised the first 403,
+        dropping any partial successes — see PR #9163 review (finding 3). The non-owner
+        must still not destroy the image; only the response shape changes.
+        """
         user1 = mock_invoker.services.users.get_by_email("user1@test.com")
         assert user1 is not None
         _save_image(mock_invoker, "user1-batch-del", user1.user_id)
@@ -670,7 +1481,12 @@ class TestImageMutationAuth:
             json={"image_names": ["user1-batch-del"]},
             headers=_auth(user2_token),
         )
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_200_OK
+        body = r.json()
+        # Auth failure must not advertise the foreign image as deleted, and the underlying
+        # record must still exist.
+        assert body["deleted_images"] == []
+        mock_invoker.services.image_records.get("user1-batch-del")
 
     def test_non_owner_can_delete_image_from_public_board(
         self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
@@ -684,11 +1500,18 @@ class TestImageMutationAuth:
         _save_image(mock_invoker, "user1-public-delete", user1.user_id)
         mock_invoker.services.board_image_records.add_image_to_board(public_board_id, "user1-public-delete")
 
+        # The delete route no longer swallows service failures, so the test env needs
+        # working urls/image_files services for the deletion to actually succeed.
+        mock_invoker.services.urls = MagicMock()
+        mock_invoker.services.urls.get_image_url.return_value = "http://localhost/img.png"
+        mock_invoker.services.image_files = MagicMock()
+
         r = client.delete(
             "/api/v1/images/i/user1-public-delete",
             headers=_auth(user2_token),
         )
         assert r.status_code == status.HTTP_200_OK
+        assert r.json()["deleted_images"] == ["user1-public-delete"]
 
     def test_clear_intermediates_non_admin_forbidden(self, client: TestClient, user1_token: str):
         r = client.delete("/api/v1/images/intermediates", headers=_auth(user1_token))
@@ -969,6 +1792,10 @@ class TestSessionQueueAuth:
 
     def test_get_queue_item_ids_requires_auth(self, enable_multiuser: Any, client: TestClient):
         r = client.get("/api/v1/queue/default/item_ids")
+        assert r.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_get_queue_item_summaries_by_ids_requires_auth(self, enable_multiuser: Any, client: TestClient):
+        r = client.post("/api/v1/queue/default/item_summaries_by_ids", json={"item_ids": [1]})
         assert r.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_get_current_queue_item_requires_auth(self, enable_multiuser: Any, client: TestClient):
@@ -1321,6 +2148,7 @@ class TestQueueStatusScoping:
             batch_id=None,
             pending=2,
             in_progress=0,
+            waiting=0,
             completed=1,
             failed=0,
             canceled=0,
@@ -1331,14 +2159,96 @@ class TestQueueStatusScoping:
         assert status_obj.session_id is None
         assert status_obj.batch_id is None
 
-    def test_session_queue_status_no_user_fields(self):
-        """SessionQueueStatus should not have user_pending/user_in_progress fields anymore.
-        Non-admin users now get their own counts in the main pending/in_progress fields."""
+    def test_session_queue_status_has_user_fields(self):
+        """SessionQueueStatus carries per-user counts (user_pending/user_in_progress) alongside
+        the global aggregate counts. The frontend badge needs both to render "own / total" for
+        non-admin users in multiuser mode. The per-user fields are optional (None for admins
+        and single-user/global callers)."""
         from invokeai.app.services.session_queue.session_queue_common import SessionQueueStatus
 
         fields = set(SessionQueueStatus.model_fields.keys())
-        assert "user_pending" not in fields
-        assert "user_in_progress" not in fields
+        assert "user_pending" in fields
+        assert "user_in_progress" in fields
+
+        # Per-user fields default to None (global/admin caller) and aggregate counts stay global.
+        status_obj = SessionQueueStatus(
+            queue_id="default",
+            item_id=None,
+            session_id=None,
+            batch_id=None,
+            pending=5,
+            in_progress=1,
+            waiting=0,
+            completed=0,
+            failed=0,
+            canceled=0,
+            total=6,
+        )
+        assert status_obj.user_pending is None
+        assert status_obj.user_in_progress is None
+
+        # A non-admin caller's status carries their own subset of the global counts.
+        scoped = status_obj.model_copy(update={"user_pending": 2, "user_in_progress": 1})
+        assert scoped.pending == 5  # global, unchanged
+        assert scoped.user_pending == 2  # this user's share
+
+    def _setup_queue_router(self, mock_invoker: Invoker):
+        """Wire a real session queue and a stub processor into the invoker the router uses,
+        so GET /queue/{queue_id}/status exercises the real service contract."""
+        from unittest.mock import MagicMock
+
+        from invokeai.app.services.session_processor.session_processor_common import SessionProcessorStatus
+        from invokeai.app.services.session_queue.session_queue_sqlite import SqliteSessionQueue
+
+        db = mock_invoker.services.board_records._db
+        queue = SqliteSessionQueue(db=db)
+        queue.start(mock_invoker)
+        mock_invoker.services.session_queue = queue
+
+        processor = MagicMock()
+        processor.get_status.return_value = SessionProcessorStatus(is_started=True, is_processing=False)
+        mock_invoker.services.session_processor = processor
+        return queue
+
+    def test_get_queue_status_route_returns_global_and_user_counts(
+        self, setup_jwt_secret: None, enable_multiuser: Any, mock_invoker: Invoker, client: TestClient
+    ):
+        """Regression test: GET /api/v1/queue/{queue_id}/status must return 200 (not 500) and the
+        expected global and per-user counts for both non-admin and admin callers. Previously the
+        router called get_queue_status() with a keyword the service did not accept, raising a
+        TypeError that the broad except turned into a 500 for every status request."""
+        queue = self._setup_queue_router(mock_invoker)
+
+        user1_id = _create_user(mock_invoker, "user1@test.com", "User One")
+        user2_id = _create_user(mock_invoker, "user2@test.com", "User Two")
+        _create_user(mock_invoker, "admin@test.com", "Admin", is_admin=True)
+        user1_tok = _login(client, "user1@test.com")
+        admin_tok = _login(client, "admin@test.com")
+
+        # Three pending jobs globally: two owned by user1, one by user2; none by the admin.
+        _insert_pending_queue_item(queue, user_id=user1_id)
+        _insert_pending_queue_item(queue, user_id=user1_id)
+        _insert_pending_queue_item(queue, user_id=user2_id)
+
+        # Non-admin caller sees the global total but only their own pending count.
+        r = client.get("/api/v1/queue/default/status", headers=_auth(user1_tok))
+        assert r.status_code == 200
+        queue_status = r.json()["queue"]
+        assert queue_status["pending"] == 3
+        assert queue_status["total"] == 3
+        assert queue_status["user_pending"] == 2
+        assert queue_status["user_in_progress"] == 0
+
+        # Admin caller sees the same global total plus their own per-user counts (zero here -
+        # the admin owns no items), so personal UI like the progress bar can distinguish the
+        # admin's own activity from other users'.
+        r = client.get("/api/v1/queue/default/status", headers=_auth(admin_tok))
+        assert r.status_code == 200
+        queue_status = r.json()["queue"]
+        assert queue_status["pending"] == 3
+        assert queue_status["total"] == 3
+        assert queue_status["user_pending"] == 0
+        assert queue_status["user_in_progress"] == 0
 
 
 # ===========================================================================
@@ -1540,6 +2450,10 @@ class TestWebSocketAuth:
         # at request time. Patch it to point at the mock invoker.
         mock_deps = MockApiDependencies(mock_invoker)
         monkeypatch.setattr("invokeai.app.api.dependencies.ApiDependencies", mock_deps)
+        # Connect resolves the user record through `resolve_authorized_user`, which binds
+        # ApiDependencies at import time in auth_dependencies — patching the defining
+        # module alone would not reach it.
+        monkeypatch.setattr("invokeai.app.api.auth_dependencies.ApiDependencies", mock_deps)
 
         fastapi_app = FastAPI()
         return SocketIO(fastapi_app)
@@ -1573,11 +2487,15 @@ class TestWebSocketAuth:
         import asyncio
 
         mock_invoker.services.configuration.multiuser = False
+        socketio._sio.enter_room = AsyncMock()
 
         result = asyncio.run(socketio._handle_connect("sid-single-1", environ={}, auth=None))
         assert result is True
         assert socketio._socket_users["sid-single-1"]["user_id"] == "system"
         assert socketio._socket_users["sid-single-1"]["is_admin"] is True
+        socketio._sio.enter_room.assert_any_call("sid-single-1", "user:system")
+        socketio._sio.enter_room.assert_any_call("sid-single-1", "workflows:shared")
+        socketio._sio.enter_room.assert_any_call("sid-single-1", "admin")
 
     def test_connect_accepted_with_valid_token_in_multiuser_mode(
         self,
@@ -1592,6 +2510,7 @@ class TestWebSocketAuth:
         from invokeai.app.services.users.users_common import UserCreateRequest
 
         mock_invoker.services.configuration.multiuser = True
+        socketio._sio.enter_room = AsyncMock()
 
         # Create the user in the database so the active-user check passes
         user = mock_invoker.services.users.create(
@@ -1706,8 +2625,11 @@ class TestWebSocketAuth:
         assert event.queue_id == "default"
 
     def test_queue_item_status_changed_routed_privately(self, socketio: Any) -> None:
-        """Verify that _handle_queue_event emits QueueItemStatusChangedEvent ONLY to
-        user:{user_id} and admin rooms, never to the queue_id room."""
+        """_handle_queue_event must emit the FULL QueueItemStatusChangedEvent only to the
+        owner's user room and the admin room. A sanitized companion (user_id="redacted",
+        identifiers stripped) is also emitted to the queue_id room so other users' UIs can
+        refresh, with the owner's and admins' sids in skip_sid so they don't get a duplicate
+        that would clobber their cache."""
         import asyncio
         from unittest.mock import AsyncMock
 
@@ -1737,6 +2659,7 @@ class TestWebSocketAuth:
                 destination="canvas",
                 pending=0,
                 in_progress=1,
+                waiting=0,
                 completed=0,
                 failed=0,
                 canceled=0,
@@ -1749,6 +2672,7 @@ class TestWebSocketAuth:
                 batch_id="batch-private",
                 pending=0,
                 in_progress=1,
+                waiting=0,
                 completed=0,
                 failed=0,
                 canceled=0,
@@ -1756,20 +2680,62 @@ class TestWebSocketAuth:
             ),
         )
 
+        # Track owner sid so we can verify skip_sid is honored
+        socketio._socket_users["sid-owner"] = {"user_id": "owner-xyz", "is_admin": False}
+        socketio._socket_users["sid-admin"] = {"user_id": "admin-1", "is_admin": True}
+        socketio._socket_users["sid-other"] = {"user_id": "other-user", "is_admin": False}
+
         mock_emit = AsyncMock()
         socketio._sio.emit = mock_emit
 
         asyncio.run(socketio._handle_queue_event(("queue_item_status_changed", event)))
 
-        rooms_emitted_to = [call.kwargs.get("room") for call in mock_emit.call_args_list]
-        assert "user:owner-xyz" in rooms_emitted_to
-        assert "admin" in rooms_emitted_to
-        # CRITICAL: must NOT emit to the queue_id room — that would leak to other users
-        assert "default" not in rooms_emitted_to
+        # Collect (room, payload, skip_sid) for each emit call
+        emits = [
+            (c.kwargs.get("room"), c.kwargs.get("data"), c.kwargs.get("skip_sid")) for c in mock_emit.call_args_list
+        ]
+
+        # Full event must go to owner + admin rooms with original sensitive fields, in a SINGLE
+        # emit to the room list — python-socketio dedups recipients across a room list, so an
+        # admin owner (or the single-user "system" user, which is in both rooms) receives
+        # exactly one copy instead of running the frontend handler twice.
+        full_emits = [(p, s) for r, p, s in emits if r == ["user:owner-xyz", "admin"]]
+        assert len(full_emits) == 1
+        for payload, _ in full_emits:
+            assert payload["user_id"] == "owner-xyz"
+            assert payload["batch_id"] == "batch-private"
+            assert payload["session_id"] == "sess-private"
+            assert payload["destination"] == "canvas"
+
+        # A sanitized companion event must go to the queue_id room with sensitive fields cleared
+        queue_emits = [(p, s) for r, p, s in emits if r == "default"]
+        assert len(queue_emits) == 1, "expected exactly one sanitized emit to queue room"
+        sanitized_payload, skip_sid = queue_emits[0]
+        assert sanitized_payload["user_id"] == "redacted"
+        assert sanitized_payload["batch_id"] == "redacted"
+        assert sanitized_payload["session_id"] == "redacted"
+        assert sanitized_payload["origin"] is None
+        assert sanitized_payload["destination"] is None
+        assert sanitized_payload["error_type"] is None
+        assert sanitized_payload["batch_status"]["batch_id"] == "redacted"
+        assert sanitized_payload["batch_status"]["destination"] is None
+        assert sanitized_payload["queue_status"]["item_id"] is None
+        assert sanitized_payload["queue_status"]["batch_id"] is None
+        assert sanitized_payload["queue_status"]["user_pending"] is None
+        # Owner and admin sids must be skipped so they don't receive the duplicate
+        assert "sid-owner" in skip_sid
+        assert "sid-admin" in skip_sid
+        # Third-party user must NOT be skipped — they need the sanitized event
+        assert "sid-other" not in skip_sid
+        # Status (non-sensitive) is preserved so the non-owner UI knows what changed
+        assert sanitized_payload["status"] == "in_progress"
+        assert sanitized_payload["item_id"] == 1
 
     def test_batch_enqueued_routed_privately(self, socketio: Any) -> None:
-        """Verify that _handle_queue_event emits BatchEnqueuedEvent ONLY to
-        user:{user_id} and admin rooms, never to the queue_id room."""
+        """_handle_queue_event must emit the FULL BatchEnqueuedEvent only to the owner's
+        user room and the admin room. A sanitized companion (user_id="redacted", batch_id
+        and origin stripped) is also emitted to the queue_id room so other users' badge
+        totals refresh, with owner/admin sids in skip_sid."""
         import asyncio
         from unittest.mock import AsyncMock
 
@@ -1790,19 +2756,303 @@ class TestWebSocketAuth:
         )
         event = BatchEnqueuedEvent.build(enqueue_result, user_id="owner-zzz")
 
+        socketio._socket_users["sid-owner"] = {"user_id": "owner-zzz", "is_admin": False}
+        socketio._socket_users["sid-admin"] = {"user_id": "admin-1", "is_admin": True}
+        socketio._socket_users["sid-other"] = {"user_id": "other-user", "is_admin": False}
+
         mock_emit = AsyncMock()
         socketio._sio.emit = mock_emit
 
         asyncio.run(socketio._handle_queue_event(("batch_enqueued", event)))
 
-        rooms_emitted_to = [call.kwargs.get("room") for call in mock_emit.call_args_list]
-        assert "user:owner-zzz" in rooms_emitted_to
-        assert "admin" in rooms_emitted_to
-        assert "default" not in rooms_emitted_to
+        emits = [
+            (c.kwargs.get("room"), c.kwargs.get("data"), c.kwargs.get("skip_sid")) for c in mock_emit.call_args_list
+        ]
 
-    def test_queue_cleared_still_broadcast(self, socketio: Any) -> None:
-        """QueueClearedEvent does not carry user identity and should still be broadcast
-        to all queue subscribers — this is a sanity check that we haven't over-scoped."""
+        # Full event to owner + admin contains the real batch_id and origin, in a single emit to
+        # the room list so a socket in both rooms receives exactly one copy
+        full_emits = [(p, s) for r, p, s in emits if r == ["user:owner-zzz", "admin"]]
+        assert len(full_emits) == 1
+        for payload, _ in full_emits:
+            assert payload["user_id"] == "owner-zzz"
+            assert payload["batch_id"] == "batch-pvt"
+            assert payload["origin"] == "workflows"
+
+        # Sanitized event to queue room: user/batch/origin redacted, owner+admin skipped
+        queue_emits = [(p, s) for r, p, s in emits if r == "default"]
+        assert len(queue_emits) == 1
+        sanitized_payload, skip_sid = queue_emits[0]
+        assert sanitized_payload["user_id"] == "redacted"
+        assert sanitized_payload["batch_id"] == "redacted"
+        assert sanitized_payload["origin"] is None
+        assert sanitized_payload["enqueued"] == 5  # count is non-sensitive
+        assert "sid-owner" in skip_sid
+        assert "sid-admin" in skip_sid
+        assert "sid-other" not in skip_sid
+
+    def test_queue_items_retried_event_carries_user_ids(self) -> None:
+        """QueueItemsRetriedEvent must carry owner identity so retry notifications are
+        routed privately instead of broadcast to all queue subscribers."""
+        from invokeai.app.services.events.events_common import QueueItemsRetriedEvent
+        from invokeai.app.services.session_queue.session_queue_common import RetryItemsResult
+
+        retry_result = RetryItemsResult(queue_id="default", retried_item_ids=[10])
+        event = QueueItemsRetriedEvent.build(
+            retry_result, user_ids=["owner-123"], retried_item_ids_by_user={"owner-123": [10]}
+        )
+
+        assert event.user_ids == ["owner-123"]
+        assert event.retried_item_ids == [10]
+        assert event.retried_item_ids_by_user == {"owner-123": [10]}
+        assert event.queue_id == "default"
+
+    def test_queue_items_retried_routed_privately(self, socketio: Any) -> None:
+        """The FULL queue_items_retried event, which carries owners' item ids, must reach only the
+        owner/admin rooms. A sanitized companion carrying no ids is broadcast to the queue room so
+        other users' badge totals refresh — see test_queue_items_retried_broadcasts_sanitized_companion.
+        """
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import QueueItemsRetriedEvent
+        from invokeai.app.services.session_queue.session_queue_common import RetryItemsResult
+
+        event = QueueItemsRetriedEvent.build(
+            RetryItemsResult(queue_id="default", retried_item_ids=[10]),
+            user_ids=["owner-123", "owner-456"],
+            retried_item_ids_by_user={"owner-123": [10], "owner-456": []},
+        )
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("queue_items_retried", event)))
+
+        rooms_emitted_to = [call.kwargs.get("room") for call in mock_emit.call_args_list]
+        assert "user:owner-123" in rooms_emitted_to
+        assert "user:owner-456" in rooms_emitted_to
+        assert "admin" in rooms_emitted_to
+
+        # CRITICAL: nothing identifying may reach the queue room. The only emit there is the
+        # sanitized companion, which must not name any owner or any retried item.
+        queue_room_payloads = [c.kwargs["data"] for c in mock_emit.call_args_list if c.kwargs.get("room") == "default"]
+        assert len(queue_room_payloads) == 1
+        assert queue_room_payloads[0]["retried_item_ids"] == []
+        assert queue_room_payloads[0]["user_ids"] == []
+        assert queue_room_payloads[0]["retried_item_ids_by_user"] == {}
+
+    def test_queue_items_retried_broadcasts_sanitized_companion(self, socketio: Any) -> None:
+        """Retried items are re-enqueued and raise the queue's global total, but retrying emits no
+        per-item queue_item_status_changed. A sanitized companion must therefore reach every other
+        subscriber so their badge total refetches, while owners and admins — who already got the
+        full event — are skipped.
+        """
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import QueueItemsRetriedEvent
+        from invokeai.app.services.session_queue.session_queue_common import RetryItemsResult
+
+        event = QueueItemsRetriedEvent.build(
+            RetryItemsResult(queue_id="default", retried_item_ids=[10, 20]),
+            user_ids=["owner-123", "owner-456"],
+            retried_item_ids_by_user={"owner-123": [10], "owner-456": [20]},
+        )
+
+        # A retry batch can span several owners — every one of them must be skipped, not just the first.
+        socketio._socket_users["sid-owner-123"] = {"user_id": "owner-123", "is_admin": False}
+        socketio._socket_users["sid-owner-456"] = {"user_id": "owner-456", "is_admin": False}
+        socketio._socket_users["sid-admin"] = {"user_id": "admin-1", "is_admin": True}
+        socketio._socket_users["sid-other"] = {"user_id": "other-user", "is_admin": False}
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("queue_items_retried", event)))
+
+        queue_emits = [c for c in mock_emit.call_args_list if c.kwargs.get("room") == "default"]
+        assert len(queue_emits) == 1, "expected exactly one sanitized emit to the queue room"
+        payload = queue_emits[0].kwargs["data"]
+        skip_sid = queue_emits[0].kwargs["skip_sid"]
+
+        # Non-sensitive: the queue_id is all a non-owner needs to refetch its redacted status.
+        assert payload["queue_id"] == "default"
+        assert payload["retried_item_ids"] == []
+        assert payload["user_ids"] == []
+        assert payload["retried_item_ids_by_user"] == {}
+
+        # Both owners and the admin already received the full event and must not get a second copy.
+        assert "sid-owner-123" in skip_sid
+        assert "sid-owner-456" in skip_sid
+        assert "sid-admin" in skip_sid
+        # The unrelated user is the whole point — they must receive it.
+        assert "sid-other" not in skip_sid
+
+    def test_queue_items_retried_payload_is_filtered_per_owner_room(self, socketio: Any) -> None:
+        """Each owner room should only receive retry payload for that owner."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import QueueItemsRetriedEvent
+        from invokeai.app.services.session_queue.session_queue_common import RetryItemsResult
+
+        event = QueueItemsRetriedEvent.build(
+            RetryItemsResult(queue_id="default", retried_item_ids=[10, 20]),
+            user_ids=["owner-123", "owner-456"],
+            retried_item_ids_by_user={"owner-123": [10], "owner-456": [20]},
+        )
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("queue_items_retried", event)))
+
+        owner_123_calls = [call for call in mock_emit.call_args_list if call.kwargs.get("room") == "user:owner-123"]
+        owner_456_calls = [call for call in mock_emit.call_args_list if call.kwargs.get("room") == "user:owner-456"]
+        admin_calls = [call for call in mock_emit.call_args_list if call.kwargs.get("room") == "admin"]
+
+        assert len(owner_123_calls) == 1
+        assert len(owner_456_calls) == 1
+        assert len(admin_calls) == 1
+        assert owner_123_calls[0].kwargs["data"]["retried_item_ids"] == [10]
+        assert owner_123_calls[0].kwargs["data"]["user_ids"] == ["owner-123"]
+        assert owner_123_calls[0].kwargs["data"]["retried_item_ids_by_user"] == {"owner-123": [10]}
+        assert owner_456_calls[0].kwargs["data"]["retried_item_ids"] == [20]
+        assert owner_456_calls[0].kwargs["data"]["user_ids"] == ["owner-456"]
+        assert owner_456_calls[0].kwargs["data"]["retried_item_ids_by_user"] == {"owner-456": [20]}
+        assert admin_calls[0].kwargs["data"]["retried_item_ids"] == [10, 20]
+        assert admin_calls[0].kwargs["data"]["user_ids"] == ["owner-123", "owner-456"]
+        assert admin_calls[0].kwargs["data"]["retried_item_ids_by_user"] == {"owner-123": [10], "owner-456": [20]}
+
+    def test_queue_items_canceled_routed_privately_per_owner(self, socketio: Any) -> None:
+        """The FULL queue_items_canceled event, which carries owners' item ids, must reach only the
+        owner/admin rooms, and each owner room may only see that owner's own item ids. A bulk
+        cancel emits no per-item queue_item_status_changed, so this event is each owner's only
+        signal that their pending items were canceled (e.g. by an admin's cancel-all-except-current).
+        """
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import QueueItemsCanceledEvent
+
+        event = QueueItemsCanceledEvent.build(
+            queue_id="default",
+            canceled_item_ids_by_user={"owner-123": [10, 11], "owner-456": [20]},
+        )
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("queue_items_canceled", event)))
+
+        owner_123_calls = [call for call in mock_emit.call_args_list if call.kwargs.get("room") == "user:owner-123"]
+        owner_456_calls = [call for call in mock_emit.call_args_list if call.kwargs.get("room") == "user:owner-456"]
+        admin_calls = [call for call in mock_emit.call_args_list if call.kwargs.get("room") == "admin"]
+
+        assert len(owner_123_calls) == 1
+        assert len(owner_456_calls) == 1
+        assert len(admin_calls) == 1
+        assert owner_123_calls[0].kwargs["data"]["canceled_item_ids"] == [10, 11]
+        assert owner_123_calls[0].kwargs["data"]["user_ids"] == ["owner-123"]
+        assert owner_123_calls[0].kwargs["data"]["canceled_item_ids_by_user"] == {"owner-123": [10, 11]}
+        assert owner_456_calls[0].kwargs["data"]["canceled_item_ids"] == [20]
+        assert admin_calls[0].kwargs["data"]["canceled_item_ids"] == [10, 11, 20]
+        assert admin_calls[0].kwargs["data"]["canceled_item_ids_by_user"] == {
+            "owner-123": [10, 11],
+            "owner-456": [20],
+        }
+
+        # Nothing identifying may reach the queue room: the only emit there is the sanitized
+        # companion, which must not name any owner or any canceled item.
+        queue_room_payloads = [c.kwargs["data"] for c in mock_emit.call_args_list if c.kwargs.get("room") == "default"]
+        assert len(queue_room_payloads) == 1
+        assert queue_room_payloads[0]["canceled_item_ids"] == []
+        assert queue_room_payloads[0]["user_ids"] == []
+        assert queue_room_payloads[0]["canceled_item_ids_by_user"] == {}
+
+    def test_queue_items_canceled_broadcasts_sanitized_companion(self, socketio: Any) -> None:
+        """Canceled items lower the queue's global total, so every other subscriber's badge must
+        refetch. The sanitized companion reaches them while owners and admins — who already got
+        the full event — are skipped.
+        """
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import QueueItemsCanceledEvent
+
+        event = QueueItemsCanceledEvent.build(
+            queue_id="default",
+            canceled_item_ids_by_user={"owner-123": [10], "owner-456": [20]},
+        )
+
+        # A bulk cancel can span several owners — every one of them must be skipped, not just the first.
+        socketio._socket_users["sid-owner-123"] = {"user_id": "owner-123", "is_admin": False}
+        socketio._socket_users["sid-owner-456"] = {"user_id": "owner-456", "is_admin": False}
+        socketio._socket_users["sid-admin"] = {"user_id": "admin-1", "is_admin": True}
+        socketio._socket_users["sid-other"] = {"user_id": "other-user", "is_admin": False}
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("queue_items_canceled", event)))
+
+        queue_emits = [c for c in mock_emit.call_args_list if c.kwargs.get("room") == "default"]
+        assert len(queue_emits) == 1, "expected exactly one sanitized emit to the queue room"
+        payload = queue_emits[0].kwargs["data"]
+        skip_sid = queue_emits[0].kwargs["skip_sid"]
+
+        # Non-sensitive: the queue_id is all a non-owner needs to refetch its redacted status.
+        assert payload["queue_id"] == "default"
+        assert payload["canceled_item_ids"] == []
+        assert payload["user_ids"] == []
+        assert payload["canceled_item_ids_by_user"] == {}
+
+        # Both owners and the admin already received the full event and must not get a second copy.
+        assert "sid-owner-123" in skip_sid
+        assert "sid-owner-456" in skip_sid
+        assert "sid-admin" in skip_sid
+        # The unrelated user is the whole point — they must receive it.
+        assert "sid-other" not in skip_sid
+
+    def test_bulk_event_admin_owner_receives_exactly_one_copy(self, socketio: Any) -> None:
+        """An admin who also owns affected items is in both their user room and the admin room.
+        The owner-room emit must skip admin sids so such a socket receives only the full
+        admin-room copy — two copies would double-refetch every queue endpoint (single-user
+        mode hits this on every bulk cancel, since the "system" user is an admin)."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import QueueItemsCanceledEvent
+
+        event = QueueItemsCanceledEvent.build(
+            queue_id="default",
+            canceled_item_ids_by_user={"admin-1": [10], "owner-456": [20]},
+        )
+
+        socketio._socket_users["sid-admin-owner"] = {"user_id": "admin-1", "is_admin": True}
+        socketio._socket_users["sid-owner-456"] = {"user_id": "owner-456", "is_admin": False}
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("queue_items_canceled", event)))
+
+        # The admin-owner's user-room emit skips their sid; the admin-room emit is their one copy.
+        owner_room_calls = [c for c in mock_emit.call_args_list if c.kwargs.get("room") == "user:admin-1"]
+        assert len(owner_room_calls) == 1
+        assert "sid-admin-owner" in owner_room_calls[0].kwargs["skip_sid"]
+
+        # The non-admin owner's room emit must not skip their sid.
+        other_owner_calls = [c for c in mock_emit.call_args_list if c.kwargs.get("room") == "user:owner-456"]
+        assert len(other_owner_calls) == 1
+        assert "sid-owner-456" not in other_owner_calls[0].kwargs["skip_sid"]
+
+        admin_calls = [c for c in mock_emit.call_args_list if c.kwargs.get("room") == "admin"]
+        assert len(admin_calls) == 1
+
+    def test_unscoped_queue_cleared_still_broadcast(self, socketio: Any) -> None:
+        """An unscoped QueueClearedEvent (user_id=None — an admin or single-user clear that
+        deleted every user's items) should still be broadcast to all queue subscribers."""
         import asyncio
         from unittest.mock import AsyncMock
 
@@ -1815,5 +3065,324 @@ class TestWebSocketAuth:
 
         asyncio.run(socketio._handle_queue_event(("queue_cleared", event)))
 
-        rooms_emitted_to = [call.kwargs.get("room") for call in mock_emit.call_args_list]
-        assert "default" in rooms_emitted_to
+        assert len(mock_emit.call_args_list) == 1
+        assert mock_emit.call_args_list[0].kwargs.get("room") == "default"
+        assert mock_emit.call_args_list[0].kwargs.get("data")["user_id"] is None
+
+    def test_user_scoped_queue_cleared_routed_privately(self, socketio: Any) -> None:
+        """A user-scoped QueueClearedEvent only deleted that user's rows. The full event must
+        go to the owner + admin rooms; the rest of the queue room gets a sanitized companion
+        (user_id="redacted") so their queue lists refresh without treating the clear as their
+        own — otherwise another user's clear would abort their in-flight reconciliations and
+        mark their tracked items canceled."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import QueueClearedEvent
+
+        event = QueueClearedEvent.build(queue_id="default", user_id="owner-xyz")
+
+        socketio._socket_users["sid-owner"] = {"user_id": "owner-xyz", "is_admin": False}
+        socketio._socket_users["sid-admin"] = {"user_id": "admin-1", "is_admin": True}
+        socketio._socket_users["sid-other"] = {"user_id": "other-user", "is_admin": False}
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("queue_cleared", event)))
+
+        emits = [
+            (c.kwargs.get("room"), c.kwargs.get("data"), c.kwargs.get("skip_sid")) for c in mock_emit.call_args_list
+        ]
+
+        # Full event goes to owner + admin rooms in a single emit (room list deduplicates a
+        # socket that is in both rooms)
+        private_emits = [(p, s) for r, p, s in emits if r == ["user:owner-xyz", "admin"]]
+        assert len(private_emits) == 1
+        assert private_emits[0][0]["user_id"] == "owner-xyz"
+
+        # Sanitized companion goes to the queue room, skipping the owner's and admins' sids
+        queue_emits = [(p, s) for r, p, s in emits if r == "default"]
+        assert len(queue_emits) == 1, "expected exactly one sanitized emit to queue room"
+        sanitized_payload, skip_sid = queue_emits[0]
+        assert sanitized_payload["user_id"] == "redacted"
+        assert "sid-owner" in skip_sid
+        assert "sid-admin" in skip_sid
+        assert "sid-other" not in skip_sid
+
+    def test_recall_parameters_emitted_once_to_owner_and_admin_rooms(self, socketio: Any) -> None:
+        """RecallParametersUpdatedEvent must be delivered to the owner + admin rooms
+        in a SINGLE emit call (room list), not two separate emits.
+
+        A socket that is in both rooms — e.g. the system user in single-user mode,
+        who is also an admin — would otherwise receive the event twice. That is
+        harmless for the idempotent scalar recall fields but doubles every entry
+        for the append-mode reference-image recall, which pushes rather than
+        replaces. python-socketio deduplicates recipients across a room list, so
+        a single emit to [user_room, "admin"] delivers exactly once per socket.
+        """
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from invokeai.app.services.events.events_common import RecallParametersUpdatedEvent
+
+        event = RecallParametersUpdatedEvent.build(
+            queue_id="default",
+            user_id="owner-recall",
+            parameters={"reference_images": [{"image": {"image_name": "cat.png"}}], "append": True},
+        )
+
+        mock_emit = AsyncMock()
+        socketio._sio.emit = mock_emit
+
+        asyncio.run(socketio._handle_queue_event(("recall_parameters_updated", event)))
+
+        # Exactly one emit, targeting the union of the owner and admin rooms.
+        assert mock_emit.call_count == 1, (
+            "recall event must be emitted once to a room list, not once per room — "
+            "two emits double-deliver to a socket in both rooms"
+        )
+        room = mock_emit.call_args.kwargs.get("room")
+        assert isinstance(room, list)
+        assert set(room) == {"user:owner-recall", "admin"}
+        # And never to the shared queue room, which would leak to other users.
+        assert "default" not in room
+
+
+class TestCustomNodesAuthorization:
+    """Tests that custom_nodes endpoints enforce AdminUserOrDefault.
+
+    All four routes (list, install, uninstall, reload) should reject
+    unauthenticated callers and non-admin users in multiuser mode,
+    and succeed for admin callers.
+    """
+
+    # -- unauthenticated -------------------------------------------------------
+
+    def test_list_rejects_unauthenticated(self, client: TestClient, enable_multiuser: Any) -> None:
+        r = client.get("/api/v2/custom_nodes/")
+        assert r.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_install_rejects_unauthenticated(self, client: TestClient, enable_multiuser: Any) -> None:
+        r = client.post("/api/v2/custom_nodes/install", json={"source": "https://example.com/repo.git"})
+        assert r.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_uninstall_rejects_unauthenticated(self, client: TestClient, enable_multiuser: Any) -> None:
+        r = client.delete("/api/v2/custom_nodes/some_pack")
+        assert r.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_reload_rejects_unauthenticated(self, client: TestClient, enable_multiuser: Any) -> None:
+        r = client.post("/api/v2/custom_nodes/reload")
+        assert r.status_code == status.HTTP_401_UNAUTHORIZED
+
+    # -- non-admin user --------------------------------------------------------
+
+    def test_list_rejects_non_admin(self, client: TestClient, user1_token: str) -> None:
+        r = client.get("/api/v2/custom_nodes/", headers=_auth(user1_token))
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_install_rejects_non_admin(self, client: TestClient, user1_token: str) -> None:
+        r = client.post(
+            "/api/v2/custom_nodes/install",
+            json={"source": "https://example.com/repo.git"},
+            headers=_auth(user1_token),
+        )
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_uninstall_rejects_non_admin(self, client: TestClient, user1_token: str) -> None:
+        r = client.delete("/api/v2/custom_nodes/some_pack", headers=_auth(user1_token))
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_reload_rejects_non_admin(self, client: TestClient, user1_token: str) -> None:
+        r = client.post("/api/v2/custom_nodes/reload", headers=_auth(user1_token))
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    # -- admin caller succeeds -------------------------------------------------
+
+    def test_list_allows_admin(self, client: TestClient, admin_token: str) -> None:
+        r = client.get("/api/v2/custom_nodes/", headers=_auth(admin_token))
+        assert r.status_code == status.HTTP_200_OK
+
+    def test_reload_allows_admin(self, client: TestClient, admin_token: str, monkeypatch: Any) -> None:
+        # Stub load_custom_nodes so it doesn't actually scan the filesystem
+        monkeypatch.setattr(
+            "invokeai.app.api.routers.custom_nodes.load_custom_nodes", lambda *a, **kw: None, raising=False
+        )
+        r = client.post("/api/v2/custom_nodes/reload", headers=_auth(admin_token))
+        assert r.status_code == status.HTTP_200_OK
+
+    def test_install_allows_admin(self, client: TestClient, admin_token: str, monkeypatch: Any, tmp_path: Any) -> None:
+        """Admin caller can successfully install a node pack (filesystem/subprocess mocked)."""
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes._get_custom_nodes_path", lambda: tmp_path)
+
+        # Simulate a successful git clone by creating the target dir with __init__.py
+        def fake_git_clone(cmd: list[str], **kwargs: Any) -> MagicMock:
+            target_dir = tmp_path / "test-pack"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            (target_dir / "__init__.py").touch()
+            result = MagicMock()
+            result.returncode = 0
+            return result
+
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes.subprocess.run", fake_git_clone)
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes._load_node_pack", lambda *a, **kw: None)
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes._import_workflows_from_pack", lambda *a, **kw: [])
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes._write_pack_manifest", lambda *a, **kw: None)
+
+        r = client.post(
+            "/api/v2/custom_nodes/install",
+            json={"source": "https://example.com/test-pack.git"},
+            headers=_auth(admin_token),
+        )
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        assert data["success"] is True
+        assert data["name"] == "test-pack"
+
+    def test_uninstall_allows_admin(
+        self, client: TestClient, admin_token: str, monkeypatch: Any, tmp_path: Any
+    ) -> None:
+        """Admin caller can successfully uninstall a node pack (filesystem mocked)."""
+        # Create a fake installed pack directory
+        pack_dir = tmp_path / "test-pack"
+        pack_dir.mkdir()
+        (pack_dir / "__init__.py").touch()
+
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes._get_custom_nodes_path", lambda: tmp_path)
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes._read_pack_manifest", lambda *a, **kw: [])
+        monkeypatch.setattr(
+            "invokeai.app.api.routers.custom_nodes.InvocationRegistry.unregister_pack",
+            lambda *a, **kw: [],
+        )
+        monkeypatch.setattr("invokeai.app.api.routers.custom_nodes._remove_workflows_by_ids", lambda *a, **kw: 0)
+
+        r = client.delete("/api/v2/custom_nodes/test-pack", headers=_auth(admin_token))
+        assert r.status_code == status.HTTP_200_OK
+        data = r.json()
+        assert data["success"] is True
+        assert data["name"] == "test-pack"
+
+
+# ===========================================================================
+# Image list/names ownership isolation (omitted board_id)
+# ===========================================================================
+
+
+class TestImageListOwnershipIsolation:
+    """/api/v1/images/ and /api/v1/images/names must not leak other users' images
+    when board_id is omitted.
+
+    Without the omitted-board ownership predicate, a non-admin could enumerate every
+    user's image names, dimensions, timestamps, and board associations simply by
+    leaving off the board_id query parameter.
+    """
+
+    @pytest.fixture
+    def seeded_boards(
+        self, client: TestClient, mock_invoker: Invoker, user1_token: str, user2_token: str
+    ) -> dict[str, str]:
+        """user1: private board with one image + one uncategorized image + a shared board
+        with one image. user2: one uncategorized image."""
+        user1 = mock_invoker.services.users.get_by_email("user1@test.com")
+        user2 = mock_invoker.services.users.get_by_email("user2@test.com")
+        assert user1 is not None and user2 is not None
+
+        _save_image(mock_invoker, "u1-private-boarded", user1.user_id)
+        _save_image(mock_invoker, "u1-uncat", user1.user_id)
+        _save_image(mock_invoker, "u1-shared-boarded", user1.user_id)
+        _save_image(mock_invoker, "u2-uncat", user2.user_id)
+
+        private_board_id = _create_board(client, user1_token, "User1 Private List Board")
+        shared_board_id = _create_board(client, user1_token, "User1 Shared List Board")
+        _share_board(client, user1_token, shared_board_id)
+
+        # Associate via the record storage directly — the board_images *service* is
+        # replaced with a MagicMock by the enable_multiuser fixture.
+        mock_invoker.services.board_image_records.add_image_to_board(private_board_id, "u1-private-boarded")
+        mock_invoker.services.board_image_records.add_image_to_board(shared_board_id, "u1-shared-boarded")
+
+        # The DTO list route resolves URLs through the urls service, which is None in
+        # the test harness.
+        mock_urls = MagicMock()
+        mock_urls.get_image_url.return_value = "http://test/image.png"
+        mock_invoker.services.urls = mock_urls
+
+        return {"private_board_id": private_board_id, "shared_board_id": shared_board_id}
+
+    def _list_names(self, client: TestClient, token: str, **params: str) -> list[str]:
+        r = client.get("/api/v1/images/", params=params, headers=_auth(token))
+        assert r.status_code == status.HTTP_200_OK
+        return [item["image_name"] for item in r.json()["items"]]
+
+    def _image_names(self, client: TestClient, token: str, **params: str) -> list[str]:
+        r = client.get("/api/v1/images/names", params=params, headers=_auth(token))
+        assert r.status_code == status.HTTP_200_OK
+        return r.json()["image_names"]
+
+    def test_list_omitted_board_excludes_other_users(
+        self, client: TestClient, seeded_boards: dict[str, str], user2_token: str
+    ) -> None:
+        assert self._list_names(client, user2_token) == ["u2-uncat"]
+
+    def test_list_omitted_board_owner_sees_own_boarded_and_uncategorized(
+        self, client: TestClient, seeded_boards: dict[str, str], user1_token: str
+    ) -> None:
+        assert set(self._list_names(client, user1_token)) == {"u1-private-boarded", "u1-uncat", "u1-shared-boarded"}
+
+    def test_list_omitted_board_admin_sees_all(
+        self, client: TestClient, seeded_boards: dict[str, str], admin_token: str
+    ) -> None:
+        assert set(self._list_names(client, admin_token)) == {
+            "u1-private-boarded",
+            "u1-uncat",
+            "u1-shared-boarded",
+            "u2-uncat",
+        }
+
+    def test_list_none_board_scopes_to_owner(
+        self, client: TestClient, seeded_boards: dict[str, str], user1_token: str
+    ) -> None:
+        assert self._list_names(client, user1_token, board_id="none") == ["u1-uncat"]
+
+    def test_list_private_board_forbidden_for_non_owner(
+        self, client: TestClient, seeded_boards: dict[str, str], user2_token: str
+    ) -> None:
+        r = client.get(
+            "/api/v1/images/", params={"board_id": seeded_boards["private_board_id"]}, headers=_auth(user2_token)
+        )
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_list_shared_board_readable_by_non_owner(
+        self, client: TestClient, seeded_boards: dict[str, str], user2_token: str
+    ) -> None:
+        assert self._list_names(client, user2_token, board_id=seeded_boards["shared_board_id"]) == ["u1-shared-boarded"]
+
+    def test_names_omitted_board_excludes_other_users(
+        self, client: TestClient, seeded_boards: dict[str, str], user2_token: str
+    ) -> None:
+        assert self._image_names(client, user2_token) == ["u2-uncat"]
+
+    def test_names_omitted_board_admin_sees_all(
+        self, client: TestClient, seeded_boards: dict[str, str], admin_token: str
+    ) -> None:
+        assert set(self._image_names(client, admin_token)) == {
+            "u1-private-boarded",
+            "u1-uncat",
+            "u1-shared-boarded",
+            "u2-uncat",
+        }
+
+    def test_names_none_board_scopes_to_owner(
+        self, client: TestClient, seeded_boards: dict[str, str], user2_token: str
+    ) -> None:
+        assert self._image_names(client, user2_token, board_id="none") == ["u2-uncat"]
+
+    def test_names_private_board_forbidden_for_non_owner(
+        self, client: TestClient, seeded_boards: dict[str, str], user2_token: str
+    ) -> None:
+        r = client.get(
+            "/api/v1/images/names",
+            params={"board_id": seeded_boards["private_board_id"]},
+            headers=_auth(user2_token),
+        )
+        assert r.status_code == status.HTTP_403_FORBIDDEN
