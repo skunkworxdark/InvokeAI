@@ -30,7 +30,7 @@ from invokeai.app.services.session_queue.session_queue_common import SessionQueu
 def _services(multiuser: bool = True, users_by_id: dict | None = None) -> SimpleNamespace:
     users_by_id = users_by_id or {}
     return SimpleNamespace(
-        configuration=SimpleNamespace(multiuser=multiuser),
+        configuration=SimpleNamespace(multiuser=multiuser, clear_vram_after_session=False),
         users=SimpleNamespace(get=lambda user_id: users_by_id.get(user_id)),
         session_queue=MagicMock(),
         logger=MagicMock(),
@@ -594,10 +594,10 @@ class TestRunningQueueItemOwners:
         worker.queue_item = _queue_item()  # type: ignore[assignment]
         processor._workers = [worker]
 
-        stop_event, poll_now_event, resume_event = ThreadEvent(), ThreadEvent(), ThreadEvent()
+        stop_event, resume_event = ThreadEvent(), ThreadEvent()
         # `resume_event` is left clear, so the worker parks exactly where a paused
         # processor parks it: at the top of the loop, before any dequeue.
-        thread = Thread(target=processor._process, args=(worker, stop_event, poll_now_event, resume_event), daemon=True)
+        thread = Thread(target=processor._process, args=(worker, stop_event, resume_event), daemon=True)
         thread.start()
         try:
             deadline = time.monotonic() + 5
